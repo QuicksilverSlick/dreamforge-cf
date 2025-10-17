@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "vibesdk-production" generated at 2025-10-16T20:19:05.259Z.
