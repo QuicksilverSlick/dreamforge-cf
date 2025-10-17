@@ -70,8 +70,7 @@ const categorizeAgent = (agentKey: string): string => {
     // Planning - Project planning and setup
     'phaseGeneration': 'planning',
     'projectSetup': 'planning',
-    'planningConversation': 'planning',
-
+    
     // Coding - Development and implementation 
     'phaseImplementation': 'coding',        // Fix: was going to planning due to "phase"
     'firstPhaseImplementation': 'coding',   // Fix: was going to planning due to "phase"

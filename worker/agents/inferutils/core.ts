@@ -464,21 +464,8 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
         modelName = modelName.replace(/\[.*?\]/, '');
 
         const client = new OpenAI({ apiKey, baseURL: baseURL, defaultHeaders });
-
-        // Detect Google models - they don't support OpenAI's response_format parameter via /compat
-        const provider = modelName.split('/')[0];
-        const isGoogleModel = provider === 'google-ai-studio' || modelName.includes('gemini');
-
-        // Auto-enable prompt-based structured output for Google models
-        if (isGoogleModel && schema && schemaName && !format) {
-            console.warn(`[INFER] Google model detected with schema - auto-enabling prompt-based structured output (response_format not supported via /compat endpoint)`);
-            format = 'markdown';
-        }
-
-        // Only use response_format for models that support it (not Google)
-        // Google models use different parameters (response_mime_type, response_schema) which AI Gateway /compat doesn't translate
         const schemaObj =
-            schema && schemaName && !format && !isGoogleModel
+            schema && schemaName && !format
                 ? { response_format: zodResponseFormat(schema, schemaName) }
                 : {};
         const extraBody = modelName.includes('claude')? {
@@ -552,7 +539,6 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
         console.log(`Running inference with ${modelName} using structured output with ${format} format, reasoning effort: ${reasoning_effort}, max tokens: ${maxTokens}, temperature: ${temperature}, baseURL: ${baseURL}`);
 
         const toolsOpts = tools ? { tools, tool_choice: 'auto' as const } : {};
-
         let response: OpenAI.ChatCompletion | OpenAI.ChatCompletionChunk | Stream<OpenAI.ChatCompletionChunk>;
         try {
             // Call OpenAI API with proper structured output format
@@ -579,21 +565,6 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             console.log(`Inference response received`);
         } catch (error) {
             console.error(`Failed to get inference response from OpenAI: ${error}`);
-
-            // Log full error details for debugging
-            if (error && typeof error === 'object') {
-                console.error('DETAILED ERROR INFO:', {
-                    name: (error as any).name,
-                    message: (error as any).message,
-                    status: (error as any).status,
-                    code: (error as any).code,
-                    type: (error as any).type,
-                    error: (error as any).error,
-                    headers: (error as any).headers,
-                    stack: (error as any).stack?.split('\n').slice(0, 5).join('\n')
-                });
-            }
-
             if ((error instanceof Error && error.message.includes('429')) || (typeof error === 'string' && error.includes('429'))) {
                 throw new RateLimitExceededError('Rate limit exceeded in LLM calls, Please try again later', RateLimitType.LLM_CALLS);
             }

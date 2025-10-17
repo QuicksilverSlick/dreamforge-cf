@@ -469,4 +469,3 @@ Want to contribute to Cloudflare VibeSDK? Here's how:
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) for details.
-# Trigger deployment

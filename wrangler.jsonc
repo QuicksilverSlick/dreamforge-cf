@@ -12,7 +12,7 @@
         "binding": "CF_VERSION_METADATA"
     },
 	"assets": {
-		"directory": "dist/client",
+		"directory": "dist",
 		"not_found_handling": "single-page-application",
 		// "run_worker_first": ["!/src/*", "!/api/docs/*"],
         "run_worker_first": true,
@@ -48,13 +48,10 @@
 		"binding": "AI",
         "remote": true
 	},
-	"images": {
-		"binding": "IMAGES"
-	},
     "dispatch_namespaces": [
         {
             "binding": "DISPATCHER",
-            "namespace": "orange-build-default-namespace",
+            "namespace": "vibesdk-default-namespace",
             "remote": true
         }
     ],
@@ -64,9 +61,13 @@
 			"image": "./SandboxDockerfile",
             // "image": "registry.cloudflare.com/vibesdk-production-userappsandboxservice:cfe197fc",
             // Altering max_instances value will have no effect. Please use the MAX_SANDBOX_INSTANCES var instead.
-			"max_instances": 10,
+			"max_instances": 2900,
             // ATTENTION: Altering instance_type value will have no effect. Please use the SANDBOX_INSTANCE_TYPE var instead.
-            "instance_type": "standard-3",
+            "instance_type": {
+                "vcpu": 4,
+                "memory_mib": 4096,
+                "disk_mb": 6144
+            },
             "rollout_step_percentage": 100
 		}
 	],
@@ -74,7 +75,7 @@
 		{
 			"binding": "DB",
 			"database_name": "vibesdk-db",
-			"database_id": "0d8d35e2-91e1-4231-90b1-f49cc313876c",
+			"database_id": "c4721a2b-b96a-428a-8b2a-b3d255b307e9",
 			"migrations_dir": "migrations",
 			"remote": true
 		}
@@ -105,7 +106,7 @@
     "kv_namespaces": [
         {
             "binding": "VibecoderStore",
-            "id": "7fc3452e180a4a8997c52346f41685d1",
+            "id": "f066f3c2e4824981b48e8586c04db9c1",
             "remote": true
         }
     ],
@@ -127,40 +128,28 @@
             "tag": "v2"
         }
 	],
-	// "routes": [
-    //     {
-    //         "pattern": "build.cloudflare.dev",
-    //         "custom_domain": true
-    //     },
-    //     {
-    //         "pattern": "*build-preview.cloudflare.dev/*",
-    //         "custom_domain": false,
-    //         "zone_id": "db01fac4261b2604aacad8410443a3e2"
-    //     }
-    // ],
-	"vars": {
-        "TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
-        "ALLOWED_EMAIL": "",
-        "DISPATCH_NAMESPACE": "orange-build-default-namespace",
-        "ENABLE_READ_REPLICAS": "true",
-        "CUSTOM_DOMAIN": "app.getdreamforge.com",
-        "CUSTOM_PREVIEW_DOMAIN": "preview.getdreamforge.com",
-        "MAX_SANDBOX_INSTANCES": "10",
-        "SANDBOX_INSTANCE_TYPE": "standard-3",
-        "CLOUDFLARE_AI_GATEWAY": "vibesdk-gateway",
-        "USE_CLOUDFLARE_IMAGES": false
-    },
-	"workers_dev": true,
-    "preview_urls": false,
-    "routes": [
+	"routes": [
         {
-            "pattern": "app.getdreamforge.com",
+            "pattern": "build.cloudflare.dev",
             "custom_domain": true
         },
         {
-            "pattern": "*preview.getdreamforge.com/*",
+            "pattern": "*build-preview.cloudflare.dev/*",
             "custom_domain": false,
-            "zone_id": "157d05cb90f7190794c33e37bef447db"
+            "zone_id": "db01fac4261b2604aacad8410443a3e2"
         }
-    ]
+    ],
+	"vars": {
+        "TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
+        "ALLOWED_EMAIL": "",
+        "DISPATCH_NAMESPACE": "vibesdk-default-namespace",
+        "ENABLE_READ_REPLICAS": "true",
+        "CLOUDFLARE_AI_GATEWAY": "vibesdk-gateway",
+        "CUSTOM_DOMAIN": "",
+        "MAX_SANDBOX_INSTANCES": "10",
+        "SANDBOX_INSTANCE_TYPE": "standard-3",
+        "USE_CLOUDFLARE_IMAGES": false,
+    },
+	"workers_dev": false,
+	"preview_urls": false
 }

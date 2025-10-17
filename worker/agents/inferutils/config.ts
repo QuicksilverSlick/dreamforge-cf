@@ -131,13 +131,6 @@ export const AGENT_CONFIG: AgentConfig = {
         temperature: 0,
         fallbackModel: AIModels.GEMINI_2_5_PRO,
     },
-    planningConversation: {
-        name: AIModels.CLAUDE_4_5_SONNET,
-        reasoning_effort: 'medium',
-        max_tokens: 8000,
-        temperature: 0.7,
-        fallbackModel: AIModels.CLAUDE_4_SONNET,
-    },
     codeReview: {
         name: AIModels.GEMINI_2_5_PRO,
         reasoning_effort: 'medium',

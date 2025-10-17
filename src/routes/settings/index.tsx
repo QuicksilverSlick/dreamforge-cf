@@ -192,8 +192,6 @@ export default function SettingsPage() {
 					'Ultra-fast code fixes - Optimized for maximum speed with decent coding ability. No deep thinking or large context required, pure speed and basic bug fixing.',
 				conversationalResponse:
 					'User chat interactions - Handles natural conversation flow and user communication. Balanced capabilities for engaging dialogue and helpful responses.',
-				planningConversation:
-					'Interactive planning conversation - Facilitates requirement gathering through natural dialogue before code generation. Helps users clarify ideas and refine project scope through iterative discussion.',
 				userSuggestionProcessor:
 					'User feedback processing - Analyzes and implements user suggestions and feedback. Requires understanding user intent and translating to actionable changes.',
 				codeReview:

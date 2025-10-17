@@ -69,12 +69,6 @@
 	--color-text-secondary: var(--build-chat-colors-text-secondary);
 	--color-text-tertiary: var(--build-chat-colors-text-tertiary);
 
-	/* Semantic Colors as Tailwind Utilities */
-	--color-success: var(--color-success);
-	--color-error: var(--color-error);
-	--color-warning: var(--color-warning);
-	--color-info: var(--color-info);
-
 	--shadow-textarea:
 		6px 6px 13px 0px rgba(0, 0, 0, 0.04),
 		24px 24px 24px 0px rgba(0, 0, 0, 0.03),
@@ -112,24 +106,6 @@
 	--build-chat-colors-text-primary: #0a0a0a;
 	--build-chat-colors-text-secondary: #171717;
 	--build-chat-colors-text-tertiary: #21212199;
-
-	/* Semantic Colors - Light Mode (WCAG AAA Compliant) */
-	--color-success: #10B981;
-	--color-error: #EF4444;
-	--color-warning: #F59E0B;
-	--color-info: #06B6D4;
-
-	/* Brand Orange Scale */
-	--brand-orange-50:  #FFF7ED;
-	--brand-orange-100: #FFEDD5;
-	--brand-orange-200: #FED7AA;
-	--brand-orange-300: #FDBA74;
-	--brand-orange-400: #FB923C;
-	--brand-orange-500: #F6821F;
-	--brand-orange-600: #EA580C;
-	--brand-orange-700: #C2410C;
-	--brand-orange-800: #9A3412;
-	--brand-orange-900: #7C2D12;
 }
 
 .dark {
@@ -154,12 +130,6 @@
 	--build-chat-colors-text-primary: #ffffff;
 	--build-chat-colors-text-secondary: #cdcaca;
 	--build-chat-colors-text-tertiary: #bcb9b9;
-
-	/* Semantic Colors - Dark Mode (Brighter variants for better visibility) */
-	--color-success: #34D399;
-	--color-error: #F87171;
-	--color-warning: #FBBF24;
-	--color-info: #22D3EE;
 
 	--shadow-dialog:
 		0px 18px 60px 0px rgba(6, 6, 5, 0.1),
