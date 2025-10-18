@@ -131,7 +131,8 @@
 	"routes": [
         {
             "pattern": "build.cloudflare.dev",
-            "custom_domain": true
+            "custom_domain": true,
+            "override_existing_dns_record": true
         },
         {
             "pattern": "*build-preview.cloudflare.dev/*",
