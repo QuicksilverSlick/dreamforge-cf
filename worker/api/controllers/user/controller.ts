@@ -10,7 +10,7 @@ import { createLogger } from '../../../logger';
 const logger = createLogger('UserController');
 
 /**
- * User Management Controller for Orange
+ * User Management Controller for Dreamforge
  * Handles user dashboard, profile management, and app history
  */
 export class UserController extends BaseController {

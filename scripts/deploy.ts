@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * Cloudflare Orange Build - Automated Deployment Script
+ * Dreamforge - Automated Deployment Script
  *
  * This script handles the complete setup and deployment process for the
- * Cloudflare Orange Build platform, including:
+ * Dreamforge platform, including:
  * - Workers for Platforms dispatch namespace creation
  * - Templates repository deployment to R2
  * - Container configuration updates
@@ -252,7 +252,7 @@ class CloudflareDeploymentManager {
 				this.config.vars?.TEMPLATES_REPOSITORY!,
 			CLOUDFLARE_AI_GATEWAY:
 				process.env.CLOUDFLARE_AI_GATEWAY ||
-				this.config.vars?.CLOUDFLARE_AI_GATEWAY || "orange-build-gateway",
+				this.config.vars?.CLOUDFLARE_AI_GATEWAY || "dreamforge-gateway",
 			CLOUDFLARE_AI_GATEWAY_TOKEN: aiGatewayToken,
 		};
 	}
@@ -1381,8 +1381,8 @@ class CloudflareDeploymentManager {
 		// Environment variable takes priority over wrangler.jsonc vars
 		const dispatchNamespace =
 			process.env.DISPATCH_NAMESPACE ||
-			this.config.vars?.DISPATCH_NAMESPACE || 
-			"orange-build-default-namespace";
+			this.config.vars?.DISPATCH_NAMESPACE ||
+			"dreamforge-default-namespace";
 
 		const source = process.env.DISPATCH_NAMESPACE
 			? 'environment variable'
@@ -1715,7 +1715,7 @@ class CloudflareDeploymentManager {
 		];
 
 		const prodVarsContent: string[] = [
-			'# Production environment variables for Cloudflare Orange Build',
+			'# Production environment variables for Dreamforge',
 			'# Generated automatically during deployment',
 			'',
 			'# Essential Secrets:',
@@ -1873,7 +1873,7 @@ class CloudflareDeploymentManager {
 			// Look for the pattern and replace it with commented version
 			const commentedContent = content.replace(
 				/(\s*)"dispatch_namespaces": \[[\s\S]*?\]/,
-				'$1// "dispatch_namespaces": [\n$1//     {\n$1//         "binding": "DISPATCHER",\n$1//         "namespace": "orange-build-default-namespace",\n$1//         "experimental_remote": true\n$1//     }\n$1// ]'
+				'$1// "dispatch_namespaces": [\n$1//     {\n$1//         "binding": "DISPATCHER",\n$1//         "namespace": "dreamforge-default-namespace",\n$1//         "experimental_remote": true\n$1//     }\n$1// ]'
 			);
 
 			if (commentedContent !== content) {
@@ -1914,7 +1914,7 @@ class CloudflareDeploymentManager {
 	 */
 	public async deploy(): Promise<void> {
 		console.log(
-			'🧡 Cloudflare Orange Build - Automated Deployment Starting...\n',
+			'⚒️ Dreamforge - Automated Deployment Starting...\n',
 		);
 
 		const startTime = Date.now();
@@ -2030,7 +2030,7 @@ class CloudflareDeploymentManager {
 					`\n🎉 Complete deployment finished successfully in ${duration}s!`,
 				);
 				console.log(
-					`✅ Your Cloudflare Orange Build platform is now live at https://${customDomain}! 🚀`,
+					`✅ Your Dreamforge platform is now live at https://${customDomain}! 🚀`,
 				);
 				
 				// Restore ARM64 flags for continued local development

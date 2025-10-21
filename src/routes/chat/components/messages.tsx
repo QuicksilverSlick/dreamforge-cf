@@ -49,7 +49,7 @@ export function AIMessage({
 				<AIAvatar className="size-6 text-orange-500" />
 			</div>
 			<div className="flex flex-col gap-2 min-w-0">
-				<div className="font-mono font-medium text-text-50">Orange</div>
+				<div className="font-mono font-medium text-text-50">Dreamforge</div>
 				{toolEvents && toolEvents.length > 0 && (
 					<div className="mb-1.5 flex flex-col gap-1">
 						{toolEvents.map((ev) => (
