@@ -55,8 +55,8 @@ export function GlobalHeader() {
 								<DreamforgeIcon
 									className="flex-shrink-0 mx-auto transition-all duration-300"
 									style={{
-										width: '35px',
-										height: '35px',
+										width: '44px',
+										height: '44px',
 										marginLeft: '8px',
 									}}
 								/>

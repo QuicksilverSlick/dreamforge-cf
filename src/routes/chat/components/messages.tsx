@@ -45,8 +45,8 @@ export function AIMessage({
 	
 	return (
 		<div className="flex gap-3">
-			<div className="align-text-top pl-1">
-				<AIAvatar className="text-orange-500" style={{ width: '30px', height: '30px' }} />
+			<div className="flex items-center pl-1">
+				<AIAvatar className="text-orange-500" style={{ width: '38px', height: '38px' }} />
 			</div>
 			<div className="flex flex-col gap-2 min-w-0">
 				<div className="font-mono font-medium text-text-50">Dreamforge</div>
