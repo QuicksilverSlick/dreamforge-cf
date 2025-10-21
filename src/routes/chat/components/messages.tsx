@@ -44,12 +44,12 @@ export function AIMessage({
 	const sanitizedMessage = sanitizeMessageForDisplay(message);
 	
 	return (
-		<div className="flex gap-3 items-center">
+		<div className="flex gap-3">
 			<div className="pl-1">
 				<AIAvatar className="text-orange-500" style={{ width: '38px', height: '38px' }} />
 			</div>
 			<div className="flex flex-col gap-2 min-w-0">
-				<div className="font-mono font-medium text-text-50">Dreamforge</div>
+				<div className="font-mono font-medium text-text-50" style={{ marginTop: '11px' }}>Dreamforge</div>
 				{toolEvents && toolEvents.length > 0 && (
 					<div className="mb-1.5 flex flex-col gap-1">
 						{toolEvents.map((ev) => (
