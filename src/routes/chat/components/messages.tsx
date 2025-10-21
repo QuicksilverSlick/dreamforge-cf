@@ -44,8 +44,8 @@ export function AIMessage({
 	const sanitizedMessage = sanitizeMessageForDisplay(message);
 	
 	return (
-		<div className="flex gap-3">
-			<div className="flex items-center pl-1">
+		<div className="flex gap-3 items-center">
+			<div className="pl-1">
 				<AIAvatar className="text-orange-500" style={{ width: '38px', height: '38px' }} />
 			</div>
 			<div className="flex flex-col gap-2 min-w-0">
