@@ -67,21 +67,21 @@ jobs:
           CURRENT_COMMIT=$(git rev-parse main)
           COMPARE_URL="https://github.com/cloudflare/vibesdk/compare/${CURRENT_COMMIT}...${LATEST_COMMIT}"
 
-          # Build issue body using printf
-          printf "## 🔔 New Upstream Changes Detected\n\n" > /tmp/issue_body.md
-          printf "**%s new commit(s)** found in [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk)\n\n" "$COMMIT_COUNT" >> /tmp/issue_body.md
-          printf "### Latest Upstream Commit\n\`%s\`\n\n" "$LATEST_COMMIT" >> /tmp/issue_body.md
-          printf "### New Commits\n\n%s\n\n" "$COMMITS_DETAILED" >> /tmp/issue_body.md
-          printf "### What to Do Next\n\n" >> /tmp/issue_body.md
-          printf "1. **Review the commits** above to identify relevant changes\n" >> /tmp/issue_body.md
-          printf "2. **Check for conflicts** with Dreamforge branding\n" >> /tmp/issue_body.md
-          printf "3. **Selectively sync** changes that benefit Dreamforge\n" >> /tmp/issue_body.md
-          printf "4. **Preserve our customizations** (branding, logos, configs)\n\n" >> /tmp/issue_body.md
-          printf "### Compare Changes\n\n" >> /tmp/issue_body.md
-          printf "View full diff: [Compare on GitHub](%s)\n\n" "$COMPARE_URL" >> /tmp/issue_body.md
-          printf "---\n\n" >> /tmp/issue_body.md
-          printf "*This issue was automatically created by the upstream notifications workflow.*\n" >> /tmp/issue_body.md
-          printf "*Close this issue after reviewing and syncing the relevant changes.*\n" >> /tmp/issue_body.md
+          # Build issue body using printf (use -- to prevent option interpretation)
+          printf -- "## 🔔 New Upstream Changes Detected\n\n" > /tmp/issue_body.md
+          printf -- "**%s new commit(s)** found in [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk)\n\n" "$COMMIT_COUNT" >> /tmp/issue_body.md
+          printf -- "### Latest Upstream Commit\n\`%s\`\n\n" "$LATEST_COMMIT" >> /tmp/issue_body.md
+          printf -- "### New Commits\n\n%s\n\n" "$COMMITS_DETAILED" >> /tmp/issue_body.md
+          printf -- "### What to Do Next\n\n" >> /tmp/issue_body.md
+          printf -- "1. **Review the commits** above to identify relevant changes\n" >> /tmp/issue_body.md
+          printf -- "2. **Check for conflicts** with Dreamforge branding\n" >> /tmp/issue_body.md
+          printf -- "3. **Selectively sync** changes that benefit Dreamforge\n" >> /tmp/issue_body.md
+          printf -- "4. **Preserve our customizations** (branding, logos, configs)\n\n" >> /tmp/issue_body.md
+          printf -- "### Compare Changes\n\n" >> /tmp/issue_body.md
+          printf -- "View full diff: [Compare on GitHub](%s)\n\n" "$COMPARE_URL" >> /tmp/issue_body.md
+          printf -- "---\n\n" >> /tmp/issue_body.md
+          printf -- "*This issue was automatically created by the upstream notifications workflow.*\n" >> /tmp/issue_body.md
+          printf -- "*Close this issue after reviewing and syncing the relevant changes.*\n" >> /tmp/issue_body.md
 
           # Create the issue
           gh issue create \
