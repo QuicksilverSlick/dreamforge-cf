@@ -90,52 +90,52 @@ jobs:
 
           if [ "$MERGE_STATUS" = "success" ]; then
             PR_TITLE="sync: merge upstream vibesdk changes"
-            PR_BODY=$(cat <<EOF
+            cat > pr_body.md << 'END_OF_BODY'
 ## Upstream Sync
 
 This PR automatically syncs changes from [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk).
 
 **Status**: ✅ Clean merge - no conflicts detected
 
-**Upstream commit**: \`${UPSTREAM_COMMIT}\`
+**Upstream commit**: `UPSTREAM_COMMIT_PLACEHOLDER`
 
 ### Review Checklist
 - [ ] Verify branding changes are preserved (Dreamforge vs Orange)
 - [ ] Check that custom deployment configurations remain intact
-- [ ] Test build locally: \`bun run build\`
+- [ ] Test build locally: `bun run build`
 - [ ] Verify deployment works: check Cloudflare Pages logs
 
 ### Auto-generated
 This PR was created by the upstream sync workflow.
-EOF
-)
+END_OF_BODY
+            sed -i "s/UPSTREAM_COMMIT_PLACEHOLDER/${UPSTREAM_COMMIT}/" pr_body.md
           else
             PR_TITLE="sync: upstream vibesdk changes (may need manual review)"
-            PR_BODY=$(cat <<EOF
+            cat > pr_body.md << 'END_OF_BODY'
 ## Upstream Sync
 
 This PR syncs changes from [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk).
 
 **Status**: ⚠️ Merge conflicts detected - manual review required
 
-**Upstream commit**: \`${UPSTREAM_COMMIT}\`
+**Upstream commit**: `UPSTREAM_COMMIT_PLACEHOLDER`
 
 ### Manual Steps Required
 1. Review the changes in this PR
 2. Check for conflicts with Dreamforge branding
 3. Verify custom configurations are preserved
-4. Test build locally: \`bun run build\`
+4. Test build locally: `bun run build`
 5. Update as needed before merging
 
 ### Auto-generated
 This PR was created by the upstream sync workflow.
-EOF
-)
+END_OF_BODY
+            sed -i "s/UPSTREAM_COMMIT_PLACEHOLDER/${UPSTREAM_COMMIT}/" pr_body.md
           fi
 
           gh pr create \
             --title "$PR_TITLE" \
-            --body "$PR_BODY" \
+            --body-file pr_body.md \
             --base main \
             --head "$BRANCH_NAME" \
             --label "upstream-sync"
