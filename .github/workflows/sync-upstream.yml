@@ -131,8 +131,7 @@ jobs:
             --title "$PR_TITLE" \
             --body "$PR_BODY" \
             --base main \
-            --head "$BRANCH_NAME" \
-            --label "upstream-sync"
+            --head "$BRANCH_NAME"
 
       - name: Summary
         if: steps.check.outputs.has_changes == 'true'
