@@ -63,25 +63,27 @@ jobs:
           COMMIT_COUNT="${{ steps.check.outputs.commit_count }}"
           LATEST_COMMIT="${{ steps.check.outputs.latest_commit }}"
           COMMITS_DETAILED=$(cat /tmp/commits_detailed.txt)
+          CURRENT_COMMIT=$(git rev-parse main)
 
-          # Create issue body
-          ISSUE_BODY="## 🔔 New Upstream Changes Detected
+          # Create issue body file
+          cat > /tmp/issue_body.md << 'ISSUE_EOF'
+## 🔔 New Upstream Changes Detected
 
-**$COMMIT_COUNT new commit(s)** found in [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk)
+**COMMIT_COUNT_PLACEHOLDER new commit(s)** found in [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk)
 
 ### Latest Upstream Commit
-\`${LATEST_COMMIT}\`
+`LATEST_COMMIT_PLACEHOLDER`
 
 ### New Commits
 
-$COMMITS_DETAILED
+COMMITS_DETAILED_PLACEHOLDER
 
 ### What to Do Next
 
 1. **Review the commits** above to identify relevant changes
 2. **Check for conflicts** with Dreamforge branding
 3. **Selectively sync** changes that benefit Dreamforge:
-   \`\`\`bash
+   ```bash
    # Fetch upstream
    git remote add upstream https://github.com/cloudflare/vibesdk.git
    git fetch upstream main
@@ -91,7 +93,7 @@ $COMMITS_DETAILED
 
    # Apply specific file changes (example)
    git checkout upstream/main -- path/to/file
-   \`\`\`
+   ```
 
 4. **Preserve our customizations**:
    - Dreamforge branding (logos, names, colors)
@@ -100,21 +102,31 @@ $COMMITS_DETAILED
 
 ### Compare Changes
 
-View full diff: [Compare on GitHub](https://github.com/cloudflare/vibesdk/compare/$(git rev-parse main)...${LATEST_COMMIT})
+View full diff: [Compare on GitHub](https://github.com/cloudflare/vibesdk/compare/CURRENT_COMMIT_PLACEHOLDER...LATEST_COMMIT_PLACEHOLDER)
 
 ---
 
 *This issue was automatically created by the upstream notifications workflow.*
-*Close this issue after reviewing and syncing the relevant changes.*"
+*Close this issue after reviewing and syncing the relevant changes.*
+ISSUE_EOF
 
-          # Create the issue (try to add label, but don't fail if it doesn't exist)
+          # Replace placeholders
+          sed -i "s/COMMIT_COUNT_PLACEHOLDER/$COMMIT_COUNT/g" /tmp/issue_body.md
+          sed -i "s/LATEST_COMMIT_PLACEHOLDER/$LATEST_COMMIT/g" /tmp/issue_body.md
+          sed -i "s/CURRENT_COMMIT_PLACEHOLDER/$CURRENT_COMMIT/g" /tmp/issue_body.md
+
+          # Replace the commits detailed section (handle multiline)
+          # Using a temp file to handle the multiline replacement safely
+          awk -v commits="$COMMITS_DETAILED" '{gsub(/COMMITS_DETAILED_PLACEHOLDER/, commits)}1' /tmp/issue_body.md > /tmp/issue_body_final.md
+
+          # Create the issue (try with label first, fallback without label if it fails)
           gh issue create \
             --title "🔔 Upstream Updates Available ($COMMIT_COUNT new commits)" \
-            --body "$ISSUE_BODY" \
+            --body-file /tmp/issue_body_final.md \
             --label "upstream-notification" || \
           gh issue create \
             --title "🔔 Upstream Updates Available ($COMMIT_COUNT new commits)" \
-            --body "$ISSUE_BODY"
+            --body-file /tmp/issue_body_final.md
 
       - name: Summary
         run: |
