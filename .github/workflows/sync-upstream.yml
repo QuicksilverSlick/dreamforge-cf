@@ -84,58 +84,52 @@ jobs:
         if: steps.check.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          UPSTREAM_COMMIT: ${{ steps.check.outputs.upstream_commit }}
         run: |
           MERGE_STATUS="${{ steps.merge.outputs.merge_status }}"
+          UPSTREAM_COMMIT="${{ steps.check.outputs.upstream_commit }}"
 
           if [ "$MERGE_STATUS" = "success" ]; then
             PR_TITLE="sync: merge upstream vibesdk changes"
-            cat > pr_body.md << 'END_OF_BODY'
-## Upstream Sync
+            PR_BODY="## Upstream Sync
 
-This PR automatically syncs changes from [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk).
+          This PR automatically syncs changes from [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk).
 
-**Status**: ✅ Clean merge - no conflicts detected
+          **Status**: ✅ Clean merge - no conflicts detected
 
-**Upstream commit**: `UPSTREAM_COMMIT_PLACEHOLDER`
+          **Upstream commit**: \`${UPSTREAM_COMMIT}\`
 
-### Review Checklist
-- [ ] Verify branding changes are preserved (Dreamforge vs Orange)
-- [ ] Check that custom deployment configurations remain intact
-- [ ] Test build locally: `bun run build`
-- [ ] Verify deployment works: check Cloudflare Pages logs
+          ### Review Checklist
+          - [ ] Verify branding changes are preserved (Dreamforge vs Orange)
+          - [ ] Check that custom deployment configurations remain intact
+          - [ ] Test build locally: \`bun run build\`
+          - [ ] Verify deployment works: check Cloudflare Pages logs
 
-### Auto-generated
-This PR was created by the upstream sync workflow.
-END_OF_BODY
-            sed -i "s/UPSTREAM_COMMIT_PLACEHOLDER/${UPSTREAM_COMMIT}/" pr_body.md
+          ### Auto-generated
+          This PR was created by the upstream sync workflow."
           else
             PR_TITLE="sync: upstream vibesdk changes (may need manual review)"
-            cat > pr_body.md << 'END_OF_BODY'
-## Upstream Sync
+            PR_BODY="## Upstream Sync
 
-This PR syncs changes from [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk).
+          This PR syncs changes from [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk).
 
-**Status**: ⚠️ Merge conflicts detected - manual review required
+          **Status**: ⚠️ Merge conflicts detected - manual review required
 
-**Upstream commit**: `UPSTREAM_COMMIT_PLACEHOLDER`
+          **Upstream commit**: \`${UPSTREAM_COMMIT}\`
 
-### Manual Steps Required
-1. Review the changes in this PR
-2. Check for conflicts with Dreamforge branding
-3. Verify custom configurations are preserved
-4. Test build locally: `bun run build`
-5. Update as needed before merging
+          ### Manual Steps Required
+          1. Review the changes in this PR
+          2. Check for conflicts with Dreamforge branding
+          3. Verify custom configurations are preserved
+          4. Test build locally: \`bun run build\`
+          5. Update as needed before merging
 
-### Auto-generated
-This PR was created by the upstream sync workflow.
-END_OF_BODY
-            sed -i "s/UPSTREAM_COMMIT_PLACEHOLDER/${UPSTREAM_COMMIT}/" pr_body.md
+          ### Auto-generated
+          This PR was created by the upstream sync workflow."
           fi
 
           gh pr create \
             --title "$PR_TITLE" \
-            --body-file pr_body.md \
+            --body "$PR_BODY" \
             --base main \
             --head "$BRANCH_NAME" \
             --label "upstream-sync"
