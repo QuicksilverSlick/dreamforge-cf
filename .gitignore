@@ -48,3 +48,10 @@ debug-tools/*.json
 # Sentry Config File
 .env.sentry-build-plugin
 data-dump
+
+# Development artifacts (root directory only)
+/*.PNG
+/*.png
+screencapture-*.png
+SANDBOX_*.md
+deploy*.log
