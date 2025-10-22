@@ -64,69 +64,32 @@ jobs:
           LATEST_COMMIT="${{ steps.check.outputs.latest_commit }}"
           COMMITS_DETAILED=$(cat /tmp/commits_detailed.txt)
           CURRENT_COMMIT=$(git rev-parse main)
+          COMPARE_URL="https://github.com/cloudflare/vibesdk/compare/${CURRENT_COMMIT}...${LATEST_COMMIT}"
 
-          # Create issue body file
-          cat > /tmp/issue_body.md << 'ISSUE_EOF'
-## 🔔 New Upstream Changes Detected
+          # Build issue body using printf
+          printf "## 🔔 New Upstream Changes Detected\n\n" > /tmp/issue_body.md
+          printf "**%s new commit(s)** found in [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk)\n\n" "$COMMIT_COUNT" >> /tmp/issue_body.md
+          printf "### Latest Upstream Commit\n\`%s\`\n\n" "$LATEST_COMMIT" >> /tmp/issue_body.md
+          printf "### New Commits\n\n%s\n\n" "$COMMITS_DETAILED" >> /tmp/issue_body.md
+          printf "### What to Do Next\n\n" >> /tmp/issue_body.md
+          printf "1. **Review the commits** above to identify relevant changes\n" >> /tmp/issue_body.md
+          printf "2. **Check for conflicts** with Dreamforge branding\n" >> /tmp/issue_body.md
+          printf "3. **Selectively sync** changes that benefit Dreamforge\n" >> /tmp/issue_body.md
+          printf "4. **Preserve our customizations** (branding, logos, configs)\n\n" >> /tmp/issue_body.md
+          printf "### Compare Changes\n\n" >> /tmp/issue_body.md
+          printf "View full diff: [Compare on GitHub](%s)\n\n" "$COMPARE_URL" >> /tmp/issue_body.md
+          printf "---\n\n" >> /tmp/issue_body.md
+          printf "*This issue was automatically created by the upstream notifications workflow.*\n" >> /tmp/issue_body.md
+          printf "*Close this issue after reviewing and syncing the relevant changes.*\n" >> /tmp/issue_body.md
 
-**COMMIT_COUNT_PLACEHOLDER new commit(s)** found in [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk)
-
-### Latest Upstream Commit
-`LATEST_COMMIT_PLACEHOLDER`
-
-### New Commits
-
-COMMITS_DETAILED_PLACEHOLDER
-
-### What to Do Next
-
-1. **Review the commits** above to identify relevant changes
-2. **Check for conflicts** with Dreamforge branding
-3. **Selectively sync** changes that benefit Dreamforge:
-   ```bash
-   # Fetch upstream
-   git remote add upstream https://github.com/cloudflare/vibesdk.git
-   git fetch upstream main
-
-   # Review specific commit
-   git show <commit-hash>
-
-   # Apply specific file changes (example)
-   git checkout upstream/main -- path/to/file
-   ```
-
-4. **Preserve our customizations**:
-   - Dreamforge branding (logos, names, colors)
-   - Custom deployment configurations
-   - Custom features unique to Dreamforge
-
-### Compare Changes
-
-View full diff: [Compare on GitHub](https://github.com/cloudflare/vibesdk/compare/CURRENT_COMMIT_PLACEHOLDER...LATEST_COMMIT_PLACEHOLDER)
-
----
-
-*This issue was automatically created by the upstream notifications workflow.*
-*Close this issue after reviewing and syncing the relevant changes.*
-ISSUE_EOF
-
-          # Replace placeholders
-          sed -i "s/COMMIT_COUNT_PLACEHOLDER/$COMMIT_COUNT/g" /tmp/issue_body.md
-          sed -i "s/LATEST_COMMIT_PLACEHOLDER/$LATEST_COMMIT/g" /tmp/issue_body.md
-          sed -i "s/CURRENT_COMMIT_PLACEHOLDER/$CURRENT_COMMIT/g" /tmp/issue_body.md
-
-          # Replace the commits detailed section (handle multiline)
-          # Using a temp file to handle the multiline replacement safely
-          awk -v commits="$COMMITS_DETAILED" '{gsub(/COMMITS_DETAILED_PLACEHOLDER/, commits)}1' /tmp/issue_body.md > /tmp/issue_body_final.md
-
-          # Create the issue (try with label first, fallback without label if it fails)
+          # Create the issue
           gh issue create \
             --title "🔔 Upstream Updates Available ($COMMIT_COUNT new commits)" \
-            --body-file /tmp/issue_body_final.md \
+            --body-file /tmp/issue_body.md \
             --label "upstream-notification" || \
           gh issue create \
             --title "🔔 Upstream Updates Available ($COMMIT_COUNT new commits)" \
-            --body-file /tmp/issue_body_final.md
+            --body-file /tmp/issue_body.md
 
       - name: Summary
         run: |
