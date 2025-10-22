@@ -1,0 +1,125 @@
+name: Upstream Change Notifications
+
+on:
+  schedule:
+    # Run every Monday at 9:00 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    name: Check for upstream changes
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/cloudflare/vibesdk.git || true
+          git remote set-url upstream https://github.com/cloudflare/vibesdk.git
+
+      - name: Fetch upstream
+        run: git fetch upstream main
+
+      - name: Check for new commits
+        id: check
+        run: |
+          # Get commits that are in upstream but not in our main
+          UPSTREAM_COMMITS=$(git log --oneline main..upstream/main --no-merges)
+
+          if [ -z "$UPSTREAM_COMMITS" ]; then
+            echo "No new upstream commits"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Found new upstream commits"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+
+            # Count commits
+            COMMIT_COUNT=$(echo "$UPSTREAM_COMMITS" | wc -l)
+            echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+
+            # Get latest commit hash
+            LATEST_COMMIT=$(git rev-parse upstream/main)
+            echo "latest_commit=$LATEST_COMMIT" >> $GITHUB_OUTPUT
+
+            # Save commit details to file
+            echo "$UPSTREAM_COMMITS" > /tmp/commits.txt
+
+            # Get detailed commit information
+            git log main..upstream/main --no-merges --pretty=format:"- **%h** - %s (%an, %ar)" > /tmp/commits_detailed.txt
+
+      - name: Create GitHub Issue
+        if: steps.check.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COMMIT_COUNT="${{ steps.check.outputs.commit_count }}"
+          LATEST_COMMIT="${{ steps.check.outputs.latest_commit }}"
+          COMMITS_DETAILED=$(cat /tmp/commits_detailed.txt)
+
+          # Create issue body
+          ISSUE_BODY="## 🔔 New Upstream Changes Detected
+
+**$COMMIT_COUNT new commit(s)** found in [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk)
+
+### Latest Upstream Commit
+\`${LATEST_COMMIT}\`
+
+### New Commits
+
+$COMMITS_DETAILED
+
+### What to Do Next
+
+1. **Review the commits** above to identify relevant changes
+2. **Check for conflicts** with Dreamforge branding
+3. **Selectively sync** changes that benefit Dreamforge:
+   \`\`\`bash
+   # Fetch upstream
+   git remote add upstream https://github.com/cloudflare/vibesdk.git
+   git fetch upstream main
+
+   # Review specific commit
+   git show <commit-hash>
+
+   # Apply specific file changes (example)
+   git checkout upstream/main -- path/to/file
+   \`\`\`
+
+4. **Preserve our customizations**:
+   - Dreamforge branding (logos, names, colors)
+   - Custom deployment configurations
+   - Custom features unique to Dreamforge
+
+### Compare Changes
+
+View full diff: [Compare on GitHub](https://github.com/cloudflare/vibesdk/compare/$(git rev-parse main)...${LATEST_COMMIT})
+
+---
+
+*This issue was automatically created by the upstream notifications workflow.*
+*Close this issue after reviewing and syncing the relevant changes.*"
+
+          # Create the issue (try to add label, but don't fail if it doesn't exist)
+          gh issue create \
+            --title "🔔 Upstream Updates Available ($COMMIT_COUNT new commits)" \
+            --body "$ISSUE_BODY" \
+            --label "upstream-notification" || \
+          gh issue create \
+            --title "🔔 Upstream Updates Available ($COMMIT_COUNT new commits)" \
+            --body "$ISSUE_BODY"
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.check.outputs.has_changes }}" = "true" ]; then
+            echo "✅ Created notification issue for ${{ steps.check.outputs.commit_count }} new upstream commits"
+          else
+            echo "✅ No new upstream changes detected"
+          fi
