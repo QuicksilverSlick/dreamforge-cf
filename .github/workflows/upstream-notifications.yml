@@ -54,6 +54,7 @@ jobs:
 
             # Get detailed commit information
             git log main..upstream/main --no-merges --pretty=format:"- **%h** - %s (%an, %ar)" > /tmp/commits_detailed.txt
+          fi
 
       - name: Create GitHub Issue
         if: steps.check.outputs.has_changes == 'true'
