@@ -62,13 +62,13 @@ jobs:
         id: merge
         continue-on-error: true
         run: |
-          # Try to merge upstream/main
-          if git merge upstream/main --no-edit; then
+          # Try to merge upstream/main (allow unrelated histories for initial sync)
+          if git merge upstream/main --no-edit --allow-unrelated-histories; then
             echo "merge_status=success" >> $GITHUB_OUTPUT
           else
             echo "merge_status=conflict" >> $GITHUB_OUTPUT
             # Abort the conflicted merge
-            git merge --abort
+            git merge --abort || true
             # Instead, create commits for files that can be merged
             git checkout upstream/main -- .
             git add .
