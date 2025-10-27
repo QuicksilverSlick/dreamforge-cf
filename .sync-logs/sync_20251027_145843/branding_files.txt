@@ -1,0 +1,14 @@
+# Dreamforge Branding Files (DO NOT OVERWRITE)
+src/assets/icon.png
+src/assets/logo.png
+public/dreamforge-icon.png
+public/dreamforge-logo.png
+public/favicon.ico
+src/components/header.tsx
+src/components/layout/header.tsx
+README.md
+package.json
+wrangler.jsonc
+.github/workflows/deploy.yml
+.github/workflows/upstream-notifications.yml
+worker/api/controllers/auth/controller.ts
