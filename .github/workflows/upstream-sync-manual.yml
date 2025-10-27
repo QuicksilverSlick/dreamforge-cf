@@ -77,27 +77,27 @@ jobs:
           git log upstream/main -1 --pretty=format:"- **Hash:** %H%n- **Author:** %an <%ae>%n- **Date:** %ad%n- **Message:** %s%n" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "" >> "$SYNC_LOG_DIR/sync_log.md"
 
-          # Divergence stats
+          # Divergence stats (handle unrelated histories)
           echo "### Divergence Statistics" >> "$SYNC_LOG_DIR/sync_log.md"
-          COMMITS_BEHIND=$(git rev-list --count HEAD..upstream/main)
-          COMMITS_AHEAD=$(git rev-list --count upstream/main..HEAD)
+          COMMITS_BEHIND=$(git rev-list --count HEAD..upstream/main 2>/dev/null || echo "Unable to count (unrelated histories)")
+          COMMITS_AHEAD=$(git rev-list --count upstream/main..HEAD 2>/dev/null || echo "Unable to count (unrelated histories)")
           echo "- **Commits behind upstream:** $COMMITS_BEHIND" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "- **Dreamforge-specific commits:** $COMMITS_AHEAD" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "" >> "$SYNC_LOG_DIR/sync_log.md"
 
           # List new upstream commits
           echo "### New Upstream Commits (Latest 50)" >> "$SYNC_LOG_DIR/sync_log.md"
-          git log --oneline HEAD..upstream/main | head -50 >> "$SYNC_LOG_DIR/sync_log.md"
+          git log --oneline HEAD..upstream/main 2>/dev/null | head -50 >> "$SYNC_LOG_DIR/sync_log.md" || echo "Unable to list commits (unrelated histories)" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "" >> "$SYNC_LOG_DIR/sync_log.md"
 
           # Dreamforge-specific commits
           echo "### Dreamforge-Specific Commits" >> "$SYNC_LOG_DIR/sync_log.md"
-          git log --oneline upstream/main..HEAD >> "$SYNC_LOG_DIR/sync_log.md"
+          git log --oneline upstream/main..HEAD 2>/dev/null >> "$SYNC_LOG_DIR/sync_log.md" || echo "Unable to list commits (unrelated histories)" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "" >> "$SYNC_LOG_DIR/sync_log.md"
 
-          # File changes summary
+          # File changes summary (use two-dot syntax for unrelated histories)
           echo "### Files Changed in Upstream" >> "$SYNC_LOG_DIR/sync_log.md"
-          git diff --name-status HEAD...upstream/main > "$SYNC_LOG_DIR/files_changed.txt"
+          git diff --name-status HEAD upstream/main > "$SYNC_LOG_DIR/files_changed.txt" 2>/dev/null || echo "Unable to diff (will resolve during merge)" > "$SYNC_LOG_DIR/files_changed.txt"
           cat "$SYNC_LOG_DIR/files_changed.txt" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "" >> "$SYNC_LOG_DIR/sync_log.md"
 
@@ -144,11 +144,17 @@ jobs:
           echo "## Dry Run Results" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "### Merge Preview" >> "$SYNC_LOG_DIR/sync_log.md"
-          git merge-tree $(git merge-base HEAD upstream/main) HEAD upstream/main > "$SYNC_LOG_DIR/merge_preview.txt" || true
+
+          # Check if histories are related
+          if git merge-base HEAD upstream/main &>/dev/null; then
+            git merge-tree $(git merge-base HEAD upstream/main) HEAD upstream/main > "$SYNC_LOG_DIR/merge_preview.txt" 2>&1 || true
+          else
+            echo "Note: Repositories have unrelated histories. Will use --allow-unrelated-histories for merge." > "$SYNC_LOG_DIR/merge_preview.txt"
+          fi
 
           echo "\`\`\`" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "Files that would be modified:" >> "$SYNC_LOG_DIR/sync_log.md"
-          git diff --name-only HEAD upstream/main >> "$SYNC_LOG_DIR/sync_log.md"
+          git diff --name-only HEAD upstream/main 2>/dev/null >> "$SYNC_LOG_DIR/sync_log.md" || echo "Unable to determine (will resolve during merge)" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "\`\`\`" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "" >> "$SYNC_LOG_DIR/sync_log.md"
 
@@ -160,8 +166,8 @@ jobs:
           echo "## Sync Execution (All Files)" >> "$SYNC_LOG_DIR/sync_log.md"
           echo "" >> "$SYNC_LOG_DIR/sync_log.md"
 
-          # Attempt merge
-          if git merge upstream/main --no-commit --no-ff; then
+          # Attempt merge (allow unrelated histories)
+          if git merge upstream/main --no-commit --no-ff --allow-unrelated-histories; then
             echo "✅ Merge successful (no conflicts)" >> "$SYNC_LOG_DIR/sync_log.md"
             MERGE_STATUS="success"
           else
