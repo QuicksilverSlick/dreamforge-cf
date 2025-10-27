@@ -1,0 +1,339 @@
+name: Manual Upstream Sync with Logging
+
+on:
+  workflow_dispatch:
+    inputs:
+      sync_type:
+        description: 'Type of sync to perform'
+        required: true
+        type: choice
+        options:
+          - 'dry-run'
+          - 'sync-all'
+          - 'sync-selective'
+        default: 'dry-run'
+      create_backup_branch:
+        description: 'Create backup branch before sync'
+        required: true
+        type: boolean
+        default: true
+      preserve_branding:
+        description: 'Preserve Dreamforge branding'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  upstream-sync:
+    runs-on: ubuntu-latest
+    name: Sync with upstream vibesdk
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.ISSUE_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "Dreamforge Sync Bot"
+          git config user.email "sync-bot@dreamforge.dev"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/cloudflare/vibesdk.git || true
+          git remote set-url upstream https://github.com/cloudflare/vibesdk.git
+          git fetch upstream main
+
+      - name: Create sync log directory
+        run: |
+          mkdir -p .sync-logs
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          echo "SYNC_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+          echo "SYNC_LOG_DIR=.sync-logs/sync_${TIMESTAMP}" >> $GITHUB_ENV
+
+      - name: Generate pre-sync snapshot
+        run: |
+          mkdir -p "$SYNC_LOG_DIR"
+
+          echo "# Upstream Sync Log - $(date)" > "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "## Pre-Sync State" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # Current commit
+          echo "### Current Commit" >> "$SYNC_LOG_DIR/sync_log.md"
+          git log -1 --pretty=format:"- **Hash:** %H%n- **Author:** %an <%ae>%n- **Date:** %ad%n- **Message:** %s%n" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # Upstream latest commit
+          echo "### Upstream Latest Commit" >> "$SYNC_LOG_DIR/sync_log.md"
+          git log upstream/main -1 --pretty=format:"- **Hash:** %H%n- **Author:** %an <%ae>%n- **Date:** %ad%n- **Message:** %s%n" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # Divergence stats
+          echo "### Divergence Statistics" >> "$SYNC_LOG_DIR/sync_log.md"
+          COMMITS_BEHIND=$(git rev-list --count HEAD..upstream/main)
+          COMMITS_AHEAD=$(git rev-list --count upstream/main..HEAD)
+          echo "- **Commits behind upstream:** $COMMITS_BEHIND" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "- **Dreamforge-specific commits:** $COMMITS_AHEAD" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # List new upstream commits
+          echo "### New Upstream Commits (Latest 50)" >> "$SYNC_LOG_DIR/sync_log.md"
+          git log --oneline HEAD..upstream/main | head -50 >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # Dreamforge-specific commits
+          echo "### Dreamforge-Specific Commits" >> "$SYNC_LOG_DIR/sync_log.md"
+          git log --oneline upstream/main..HEAD >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # File changes summary
+          echo "### Files Changed in Upstream" >> "$SYNC_LOG_DIR/sync_log.md"
+          git diff --name-status HEAD...upstream/main > "$SYNC_LOG_DIR/files_changed.txt"
+          cat "$SYNC_LOG_DIR/files_changed.txt" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+      - name: Identify branding files
+        if: inputs.preserve_branding == true
+        run: |
+          cat > "$SYNC_LOG_DIR/branding_files.txt" << 'EOF'
+          # Dreamforge Branding Files (DO NOT OVERWRITE)
+          src/assets/icon.png
+          src/assets/logo.png
+          public/dreamforge-icon.png
+          public/dreamforge-logo.png
+          public/favicon.ico
+          src/components/header.tsx
+          src/components/layout/header.tsx
+          README.md
+          package.json
+          wrangler.jsonc
+          .github/workflows/deploy.yml
+          .github/workflows/upstream-notifications.yml
+          worker/api/controllers/auth/controller.ts
+          EOF
+
+          echo "## Branding Files to Preserve" >> "$SYNC_LOG_DIR/sync_log.md"
+          cat "$SYNC_LOG_DIR/branding_files.txt" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+      - name: Create backup branch
+        if: inputs.create_backup_branch == true
+        run: |
+          BACKUP_BRANCH="backup/pre-sync-${SYNC_TIMESTAMP}"
+          git branch "$BACKUP_BRANCH"
+          git push origin "$BACKUP_BRANCH"
+          echo "BACKUP_BRANCH=$BACKUP_BRANCH" >> $GITHUB_ENV
+
+          echo "## Backup Information" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "- **Backup Branch:** \`$BACKUP_BRANCH\`" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "- **Restore Command:** \`git checkout $BACKUP_BRANCH\`" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+      - name: Dry Run - Show what would be synced
+        if: inputs.sync_type == 'dry-run'
+        run: |
+          echo "## Dry Run Results" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "### Merge Preview" >> "$SYNC_LOG_DIR/sync_log.md"
+          git merge-tree $(git merge-base HEAD upstream/main) HEAD upstream/main > "$SYNC_LOG_DIR/merge_preview.txt" || true
+
+          echo "\`\`\`" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "Files that would be modified:" >> "$SYNC_LOG_DIR/sync_log.md"
+          git diff --name-only HEAD upstream/main >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "\`\`\`" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          echo "### ⚠️ No changes were made (dry-run mode)" >> "$SYNC_LOG_DIR/sync_log.md"
+
+      - name: Execute Sync - All Files
+        if: inputs.sync_type == 'sync-all'
+        run: |
+          echo "## Sync Execution (All Files)" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # Attempt merge
+          if git merge upstream/main --no-commit --no-ff; then
+            echo "✅ Merge successful (no conflicts)" >> "$SYNC_LOG_DIR/sync_log.md"
+            MERGE_STATUS="success"
+          else
+            echo "⚠️ Merge conflicts detected" >> "$SYNC_LOG_DIR/sync_log.md"
+            git status --short > "$SYNC_LOG_DIR/conflicts.txt"
+            cat "$SYNC_LOG_DIR/conflicts.txt" >> "$SYNC_LOG_DIR/sync_log.md"
+            MERGE_STATUS="conflicts"
+          fi
+
+          echo "MERGE_STATUS=$MERGE_STATUS" >> $GITHUB_ENV
+
+      - name: Restore Branding Files
+        if: inputs.sync_type == 'sync-all' && inputs.preserve_branding == true
+        run: |
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "### Restoring Dreamforge Branding" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # Restore branding files from HEAD
+          while IFS= read -r file; do
+            [[ "$file" =~ ^#.*$ ]] && continue  # Skip comments
+            [[ -z "$file" ]] && continue  # Skip empty lines
+
+            if [ -f "$file" ]; then
+              echo "Restoring: $file" >> "$SYNC_LOG_DIR/sync_log.md"
+              git checkout HEAD -- "$file" || echo "Could not restore: $file" >> "$SYNC_LOG_DIR/sync_log.md"
+            fi
+          done < "$SYNC_LOG_DIR/branding_files.txt"
+
+      - name: Execute Sync - Selective Files
+        if: inputs.sync_type == 'sync-selective'
+        run: |
+          echo "## Sync Execution (Selective)" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "### Strategy: Cherry-pick non-branding changes" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # Get list of changed files excluding branding
+          git diff --name-only HEAD upstream/main > "$SYNC_LOG_DIR/all_changes.txt"
+
+          # Filter out branding files
+          while IFS= read -r file; do
+            [[ "$file" =~ ^#.*$ ]] && continue
+            [[ -z "$file" ]] && continue
+            grep -qxF "$file" "$SYNC_LOG_DIR/branding_files.txt" && continue
+
+            echo "Syncing: $file" >> "$SYNC_LOG_DIR/sync_log.md"
+            git checkout upstream/main -- "$file" 2>&1 | tee -a "$SYNC_LOG_DIR/sync_log.md" || true
+          done < "$SYNC_LOG_DIR/all_changes.txt"
+
+      - name: Generate post-sync summary
+        if: inputs.sync_type != 'dry-run'
+        run: |
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "## Post-Sync Summary" >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # List modified files
+          echo "### Files Modified" >> "$SYNC_LOG_DIR/sync_log.md"
+          git status --short >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # Generate diff summary
+          echo "### Changes Summary" >> "$SYNC_LOG_DIR/sync_log.md"
+          git diff --stat >> "$SYNC_LOG_DIR/sync_log.md"
+          echo "" >> "$SYNC_LOG_DIR/sync_log.md"
+
+          # Full diff
+          git diff > "$SYNC_LOG_DIR/full_diff.patch"
+          echo "Full diff saved to \`full_diff.patch\`" >> "$SYNC_LOG_DIR/sync_log.md"
+
+      - name: Commit sync logs
+        run: |
+          # Add sync logs to git
+          git add .sync-logs/
+          git commit -m "chore: upstream sync log - $SYNC_TIMESTAMP" || echo "No log changes to commit"
+
+          # Push logs even if sync wasn't committed
+          git push origin main || echo "Could not push logs"
+
+      - name: Commit sync changes
+        if: inputs.sync_type != 'dry-run' && env.MERGE_STATUS != 'conflicts'
+        run: |
+          git add .
+          git commit -m "feat: sync with upstream vibesdk - $SYNC_TIMESTAMP
+
+          Synced with upstream/main
+          Type: ${{ inputs.sync_type }}
+          Preserve branding: ${{ inputs.preserve_branding }}
+          Backup branch: ${{ env.BACKUP_BRANCH }}
+
+          See .sync-logs/sync_${SYNC_TIMESTAMP}/sync_log.md for details"
+
+          git push origin main
+
+      - name: Create rollback instructions issue
+        if: inputs.sync_type != 'dry-run'
+        env:
+          GH_TOKEN: ${{ secrets.ISSUE_TOKEN }}
+        run: |
+          ISSUE_BODY="## 🔄 Upstream Sync Completed
+
+          **Timestamp:** $SYNC_TIMESTAMP
+          **Type:** ${{ inputs.sync_type }}
+          **Backup Branch:** \`${{ env.BACKUP_BRANCH }}\`
+
+          ### Sync Log
+          View detailed log: [\`.sync-logs/sync_${SYNC_TIMESTAMP}/sync_log.md\`](.sync-logs/sync_${SYNC_TIMESTAMP}/sync_log.md)
+
+          ### Rollback Instructions
+          If you need to rollback this sync:
+
+          \`\`\`bash
+          # Option 1: Reset to backup branch
+          git fetch origin
+          git reset --hard origin/${{ env.BACKUP_BRANCH }}
+          git push origin main --force
+
+          # Option 2: Revert the sync commit
+          git revert HEAD
+          git push origin main
+
+          # Option 3: Cherry-pick specific fixes
+          git cherry-pick <commit-hash>
+          \`\`\`
+
+          ### Testing Checklist
+          - [ ] Run \`npm run build\` - verify build succeeds
+          - [ ] Run \`npm run deploy\` - verify deployment works
+          - [ ] Test Google OAuth login
+          - [ ] Test email/password registration
+          - [ ] Test email/password login
+          - [ ] Verify Dreamforge branding intact
+          - [ ] Test code generation functionality
+          - [ ] Check for any console errors
+
+          ---
+          *This issue was automatically created by the upstream sync workflow.*"
+
+          echo "$ISSUE_BODY" > /tmp/issue_body.md
+
+          gh issue create \
+            --title "🔄 Upstream Sync - $SYNC_TIMESTAMP" \
+            --body-file /tmp/issue_body.md \
+            --label "upstream-sync" || \
+          gh issue create \
+            --title "🔄 Upstream Sync - $SYNC_TIMESTAMP" \
+            --body-file /tmp/issue_body.md
+
+      - name: Upload sync logs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-logs-${{ env.SYNC_TIMESTAMP }}
+          path: .sync-logs/sync_${{ env.SYNC_TIMESTAMP }}/
+          retention-days: 90
+
+      - name: Summary
+        run: |
+          echo "## 🎯 Upstream Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Type:** ${{ inputs.sync_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp:** $SYNC_TIMESTAMP" >> $GITHUB_STEP_SUMMARY
+          echo "**Backup Branch:** \`${{ env.BACKUP_BRANCH }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### View Logs" >> $GITHUB_STEP_SUMMARY
+          echo "- Sync log: \`.sync-logs/sync_${SYNC_TIMESTAMP}/sync_log.md\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Download artifact: Check 'Artifacts' section above" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ inputs.sync_type }}" = "dry-run" ]; then
+            echo "⚠️ **Dry run completed** - No changes were made" >> $GITHUB_STEP_SUMMARY
+          elif [ "$MERGE_STATUS" = "conflicts" ]; then
+            echo "⚠️ **Merge conflicts detected** - Manual resolution required" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **Sync completed successfully**" >> $GITHUB_STEP_SUMMARY
+          fi
