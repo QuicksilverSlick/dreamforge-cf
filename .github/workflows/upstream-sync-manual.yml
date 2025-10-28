@@ -130,8 +130,8 @@ jobs:
           .sync-logs/.gitkeep
           .sync-logs/README.md
           UPSTREAM_SYNC.md
-          # Custom authentication
-          worker/api/controllers/auth/controller.ts
+          # Custom authentication - REMOVED to receive upstream security updates
+          # worker/api/controllers/auth/controller.ts (manually re-apply multi-auth changes after syncs)
           # Claude Code custom agents (preserve entire directory)
           .claude/README.md
           .claude/agents/codebase-hygiene.md
