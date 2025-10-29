@@ -140,6 +140,16 @@
     "preview_urls": false,
     "routes": [
         {
+            "pattern": "getdreamforge.com/*",
+            "custom_domain": true,
+            "zone_id": "157d05cb90f7190794c33e37bef447db"
+        },
+        {
+            "pattern": "www.getdreamforge.com/*",
+            "custom_domain": true,
+            "zone_id": "157d05cb90f7190794c33e37bef447db"
+        },
+        {
             "pattern": "app.getdreamforge.com",
             "custom_domain": true
         },
