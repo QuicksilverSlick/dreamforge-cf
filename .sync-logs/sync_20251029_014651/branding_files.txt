@@ -1,0 +1,41 @@
+# Dreamforge Branding Files (DO NOT OVERWRITE)
+# Branding assets
+src/assets/icon.png
+src/assets/logo.png
+public/dreamforge-icon.png
+public/dreamforge-logo.png
+public/dreamforge-icon.svg
+public/dreamforge-logo.svg
+public/favicon.ico
+Dreamforge Cloud icon.png
+# UI Components with branding
+src/components/header.tsx
+src/components/layout/header.tsx
+# Configuration files
+README.md
+package.json
+wrangler.jsonc
+bun.lockb
+# Custom workflows and sync infrastructure
+.github/workflows/deploy.yml
+.github/workflows/upstream-notifications.yml
+.github/workflows/upstream-sync-manual.yml
+.sync-logs/.gitkeep
+.sync-logs/README.md
+UPSTREAM_SYNC.md
+# Custom authentication - REMOVED to receive upstream security updates
+# worker/api/controllers/auth/controller.ts (manually re-apply multi-auth changes after syncs)
+# Claude Code custom agents (preserve entire directory)
+.claude/README.md
+.claude/agents/codebase-hygiene.md
+.claude/agents/design-reviewer.md
+.claude/agents/dreamforge-code-reviewer.md
+.claude/agents/dreamforge-database-architect.md
+.claude/agents/dreamforge-devops-sre-specialist.md
+.claude/agents/dreamforge-documentation-specialist.md
+.claude/agents/dreamforge-frontend-ux-specialist.md
+.claude/agents/dreamforge-meta-engineer.md
+.claude/agents/dreamforge-rest-api-specialist.md
+.claude/agents/dreamforge-security-specialist.md
+.claude/agents/dreamforge-test-engineer.md
+.claude/agents/dreamforge-workflow-engineer.md
