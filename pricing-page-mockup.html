@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dreamforge Pricing - Build Production Apps in Hours</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Hero Section */
+        .pricing-hero {
+            text-align: center;
+            padding: 60px 20px 40px;
+            color: white;
+        }
+
+        .pricing-hero h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .pricing-hero .subheadline {
+            font-size: 1.3rem;
+            opacity: 0.95;
+            margin-bottom: 30px;
+        }
+
+        /* Beta Banner */
+        .beta-banner {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin: 30px auto;
+            max-width: 600px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .beta-banner .badge {
+            background: white;
+            color: #f5576c;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+
+        .beta-banner p {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .countdown {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            font-size: 2rem;
+            font-weight: 800;
+        }
+
+        .countdown .time {
+            background: rgba(255,255,255,0.2);
+            padding: 10px 20px;
+            border-radius: 8px;
+        }
+
+        /* Pricing Section */
+        .pricing-section {
+            background: white;
+            border-radius: 20px;
+            padding: 60px 40px;
+            margin: 40px 0;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .section-subtitle {
+            text-align: center;
+            font-size: 1.2rem;
+            color: #666;
+            margin-bottom: 50px;
+        }
+
+        /* Billing Toggle */
+        .billing-toggle-container {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .billing-toggle {
+            display: inline-flex;
+            background: #f0f0f0;
+            border-radius: 50px;
+            padding: 5px;
+            gap: 10px;
+        }
+
+        .billing-toggle label {
+            padding: 10px 30px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .billing-toggle input[type="radio"] {
+            display: none;
+        }
+
+        .billing-toggle input[type="radio"]:checked + span {
+            background: #667eea;
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .billing-toggle .save-badge {
+            background: #10b981;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            margin-left: 5px;
+            font-weight: 700;
+        }
+
+        /* Pricing Cards */
+        .pricing-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 60px;
+        }
+
+        .pricing-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 16px;
+            padding: 40px 30px;
+            background: white;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        .pricing-card.featured {
+            border-color: #667eea;
+            border-width: 3px;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
+            transform: scale(1.05);
+        }
+
+        .most-popular-badge {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 24px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .tier-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .price {
+            margin-bottom: 30px;
+        }
+
+        .price .amount {
+            font-size: 3.5rem;
+            font-weight: 800;
+            color: #667eea;
+        }
+
+        .price .period {
+            font-size: 1.2rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .price .original {
+            text-decoration: line-through;
+            color: #999;
+            font-size: 1rem;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .price .savings {
+            font-size: 0.9rem;
+            color: #10b981;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        .features {
+            list-style: none;
+            margin-bottom: 30px;
+        }
+
+        .features li {
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 0.95rem;
+        }
+
+        .features li:last-child {
+            border-bottom: none;
+        }
+
+        .features li.limited {
+            color: #f59e0b;
+        }
+
+        .features strong {
+            color: #667eea;
+        }
+
+        /* Buttons */
+        .cta-primary, .cta-secondary {
+            width: 100%;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+        }
+
+        .cta-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .cta-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .cta-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .cta-secondary:hover {
+            background: #f8f9ff;
+        }
+
+        .guarantee {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        /* Business Pricing */
+        .business-pricing {
+            margin-top: 80px;
+        }
+
+        .pricing-calculator {
+            background: linear-gradient(135deg, #f8f9ff 0%, #fff 100%);
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+
+        .slider-section {
+            margin-bottom: 30px;
+        }
+
+        .slider-section label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .slider-section input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #e0e0e0;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider-section input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
+        }
+
+        .team-count {
+            display: block;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-top: 10px;
+        }
+
+        .price-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .monthly-price, .annual-price {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            border: 2px solid #e0e0e0;
+        }
+
+        .annual-price.recommended {
+            border-color: #10b981;
+            position: relative;
+        }
+
+        .annual-price .badge {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #10b981;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .billing-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .price-display .amount {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #333;
+        }
+
+        .price-display .period {
+            font-size: 1rem;
+            color: #666;
+        }
+
+        .per-seat {
+            font-size: 0.9rem;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .price-display .savings {
+            color: #10b981;
+            font-weight: 600;
+            margin-top: 10px;
+            font-size: 0.95rem;
+        }
+
+        .volume-message {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        /* Comparison Table */
+        .business-tiers {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 40px 0;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+
+        .business-tiers thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .business-tiers th {
+            padding: 20px;
+            text-align: left;
+            font-weight: 700;
+        }
+
+        .business-tiers td {
+            padding: 20px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .business-tiers tr:last-child td {
+            border-bottom: none;
+        }
+
+        .business-tiers tr.highlight {
+            background: #f8f9ff;
+        }
+
+        .business-tiers tr.popular {
+            background: linear-gradient(135deg, #f8f9ff 0%, #fff 100%);
+            border-left: 4px solid #667eea;
+        }
+
+        .business-tiers tr.enterprise {
+            background: #f9fafb;
+        }
+
+        .business-tiers .badge {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            margin-right: 8px;
+        }
+
+        .save-badge {
+            background: #10b981;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+
+        /* Value Props */
+        .value-props {
+            margin: 60px 0;
+        }
+
+        .value-props h3 {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 40px;
+        }
+
+        .value-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .value-item {
+            text-align: center;
+            padding: 30px;
+            background: linear-gradient(135deg, #f8f9ff 0%, #fff 100%);
+            border-radius: 12px;
+        }
+
+        .value-item .stat {
+            font-size: 3rem;
+            font-weight: 800;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .value-item p {
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .value-item .comparison {
+            color: #10b981;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        /* Guarantee Section */
+        .guarantee-section {
+            background: linear-gradient(135deg, #f8f9ff 0%, #fff 100%);
+            border-radius: 16px;
+            padding: 60px 40px;
+            margin: 60px 0;
+            text-align: center;
+        }
+
+        .guarantee-section h3 {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 40px;
+        }
+
+        .guarantee-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .guarantee-item {
+            text-align: center;
+        }
+
+        .guarantee-item .icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .guarantee-item h4 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .guarantee-item p {
+            color: #666;
+        }
+
+        .trust-badge {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px solid #10b981;
+            margin-top: 30px;
+        }
+
+        .trust-badge strong {
+            color: #10b981;
+        }
+
+        /* FAQ */
+        .faq-pricing {
+            margin: 60px 0;
+        }
+
+        .faq-pricing h3 {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .faq-item {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .faq-item h4 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .faq-item p {
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .faq-item ul {
+            margin-left: 20px;
+            color: #666;
+        }
+
+        .faq-item li {
+            margin: 8px 0;
+        }
+
+        .faq-item strong {
+            color: #667eea;
+        }
+
+        @media (max-width: 768px) {
+            .pricing-hero h1 {
+                font-size: 2rem;
+            }
+
+            .pricing-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .pricing-card.featured {
+                transform: scale(1);
+            }
+
+            .price-display {
+                grid-template-columns: 1fr;
+            }
+
+            .value-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .guarantee-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Hero Section -->
+        <div class="pricing-hero">
+            <h1>Build Production Apps in Hours, Not Weeks</h1>
+            <p class="subheadline">Join 10,000+ developers using AI-powered development</p>
+
+            <!-- Beta Banner -->
+            <div class="beta-banner">
+                <span class="badge">BETA PRICING</span>
+                <p>Lock in 40% off forever — Prices increase February 1, 2025</p>
+                <div class="countdown">
+                    <span class="time">93<br><small style="font-size: 0.4em;">days</small></span>
+                    <span class="time">14<br><small style="font-size: 0.4em;">hours</small></span>
+                    <span class="time">32<br><small style="font-size: 0.4em;">mins</small></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Individual Pricing Section -->
+        <div class="pricing-section">
+            <h2 class="section-title">Individual Developer Pricing</h2>
+            <p class="section-subtitle">For indie developers, freelancers, and solo builders</p>
+
+            <!-- Billing Toggle -->
+            <div class="billing-toggle-container">
+                <div class="billing-toggle">
+                    <label>
+                        <input type="radio" name="billing" value="monthly" checked>
+                        <span>Monthly</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="billing" value="annual">
+                        <span>Annual <span class="save-badge">SAVE 16.7%</span></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Pricing Cards -->
+            <div class="pricing-cards">
+                <!-- Free Tier -->
+                <div class="pricing-card tier-free">
+                    <div class="tier-name">Starter</div>
+                    <div class="price">
+                        <span class="amount">$0</span>
+                        <span class="period">/month</span>
+                    </div>
+
+                    <ul class="features">
+                        <li>✓ 5 projects per month</li>
+                        <li>✓ Basic AI models</li>
+                        <li>✓ Community support</li>
+                        <li>✓ Public deployments</li>
+                        <li class="limited">⚠ Dreamforge watermark</li>
+                    </ul>
+
+                    <button class="cta-secondary">Start Free</button>
+                    <p class="guarantee">No credit card required</p>
+                </div>
+
+                <!-- Pro Tier (Featured) -->
+                <div class="pricing-card tier-pro featured">
+                    <div class="most-popular-badge">MOST POPULAR</div>
+
+                    <div class="tier-name">Pro</div>
+
+                    <div class="price" data-billing="monthly">
+                        <span class="amount">$27</span>
+                        <span class="period">/month</span>
+                    </div>
+
+                    <ul class="features">
+                        <li>✓ <strong>Unlimited projects</strong></li>
+                        <li>✓ Advanced AI models (Claude 4, GPT-4)</li>
+                        <li>✓ Private deployments</li>
+                        <li>✓ Remove watermark</li>
+                        <li>✓ Custom domains</li>
+                        <li>✓ <strong>10 training hours/month</strong></li>
+                        <li>✓ Priority email support</li>
+                    </ul>
+
+                    <button class="cta-primary">Start 14-Day Free Trial</button>
+                    <p class="guarantee">30-day money-back guarantee • Cancel anytime</p>
+                </div>
+
+                <!-- Ultimate Tier -->
+                <div class="pricing-card tier-ultimate">
+                    <div class="tier-name">Ultimate</div>
+
+                    <div class="price" data-billing="monthly">
+                        <span class="amount">$47</span>
+                        <span class="period">/month</span>
+                    </div>
+
+                    <ul class="features">
+                        <li>✓ <strong>Everything in Pro</strong></li>
+                        <li>✓ Team collaboration (up to 3 seats)</li>
+                        <li>✓ API access for integrations</li>
+                        <li>✓ White-label deployments</li>
+                        <li>✓ <strong>20 training hours/month</strong></li>
+                        <li>✓ Advanced analytics dashboard</li>
+                        <li>✓ Early access to new features</li>
+                    </ul>
+
+                    <button class="cta-secondary">Start 14-Day Free Trial</button>
+                    <p class="guarantee">30-day money-back guarantee • Cancel anytime</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Business Pricing Section -->
+        <div class="pricing-section business-pricing">
+            <h2 class="section-title">Business & Enterprise Training</h2>
+            <p class="section-subtitle">Train your team to build with AI — Custom programs for growing teams</p>
+
+            <!-- Pricing Calculator -->
+            <div class="pricing-calculator">
+                <div class="slider-section">
+                    <label for="team-size">How many team members?</label>
+                    <input type="range" min="1" max="25" value="1" id="team-size">
+                    <span class="team-count">1 seat</span>
+                </div>
+
+                <div class="price-display">
+                    <div class="monthly-price">
+                        <div class="billing-label">Monthly</div>
+                        <div class="amount">$297<span class="period">/month</span></div>
+                        <div class="per-seat">$297 per seat/month</div>
+                    </div>
+
+                    <div class="annual-price recommended">
+                        <div class="badge">SAVE 2 MONTHS</div>
+                        <div class="billing-label">Annual (16.7% off)</div>
+                        <div class="amount">$247<span class="period">/month</span></div>
+                        <div class="per-seat">$247 per seat/month</div>
+                        <div class="savings">Save $600/year!</div>
+                    </div>
+                </div>
+
+                <div class="volume-message">
+                    <p id="volume-text">Add just 1 more seat to save 39% per seat!</p>
+                </div>
+            </div>
+
+            <!-- Comparison Table -->
+            <table class="business-tiers">
+                <thead>
+                    <tr>
+                        <th>Team Size</th>
+                        <th>Monthly Total</th>
+                        <th>Per Seat/Mo</th>
+                        <th>You Save</th>
+                        <th>Annual (2 Mo Free)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1 seat</td>
+                        <td>$297/mo</td>
+                        <td>$297</td>
+                        <td>—</td>
+                        <td>$247/mo</td>
+                    </tr>
+                    <tr class="highlight">
+                        <td>2 seats</td>
+                        <td>$547/mo</td>
+                        <td>$182</td>
+                        <td><span class="save-badge">39% per seat</span></td>
+                        <td>$455/mo</td>
+                    </tr>
+                    <tr>
+                        <td>5 seats</td>
+                        <td>$997/mo</td>
+                        <td>$199</td>
+                        <td><span class="save-badge">33% per seat</span></td>
+                        <td>$830/mo</td>
+                    </tr>
+                    <tr class="popular">
+                        <td><span class="badge">POPULAR</span> 10 seats</td>
+                        <td>$1,747/mo</td>
+                        <td>$175</td>
+                        <td><span class="save-badge">41% per seat</span></td>
+                        <td>$1,455/mo</td>
+                    </tr>
+                    <tr class="enterprise">
+                        <td>20+ seats</td>
+                        <td>Custom</td>
+                        <td>~$79-89</td>
+                        <td><span class="save-badge">73% per seat</span></td>
+                        <td>Contact sales</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div style="text-align: center; margin-top: 40px;">
+                <button class="cta-primary" style="max-width: 400px;">Schedule Team Training Demo</button>
+                <p class="guarantee">
+                    ✓ 30-day money-back guarantee<br>
+                    ✓ Dedicated success manager for 10+ seats<br>
+                    ✓ Custom training programs available
+                </p>
+            </div>
+        </div>
+
+        <!-- Value Props -->
+        <div class="pricing-section value-props">
+            <h3>Why Dreamforge is Worth Every Dollar</h3>
+
+            <div class="value-grid">
+                <div class="value-item">
+                    <div class="stat">$50,000+</div>
+                    <p>Average cost of hiring a developer for 3 months</p>
+                    <p class="comparison">With Dreamforge: <strong>$297/month</strong></p>
+                </div>
+
+                <div class="value-item">
+                    <div class="stat">4-6 weeks</div>
+                    <p>Typical time to build an MVP traditionally</p>
+                    <p class="comparison">With Dreamforge: <strong>4-6 hours</strong></p>
+                </div>
+
+                <div class="value-item">
+                    <div class="stat">95%</div>
+                    <p>Of our customers launch their app within 7 days</p>
+                    <p class="comparison"><strong>Try free for 14 days</strong></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Guarantee Section -->
+        <div class="guarantee-section">
+            <h3>100% Risk-Free for 30 Days</h3>
+
+            <div class="guarantee-grid">
+                <div class="guarantee-item">
+                    <div class="icon">✓</div>
+                    <h4>30-Day Money-Back Guarantee</h4>
+                    <p>Try Dreamforge completely risk-free. If you're not satisfied within 30 days, get a full refund—no questions asked.</p>
+                </div>
+
+                <div class="guarantee-item">
+                    <div class="icon">⚡</div>
+                    <h4>14-Day Free Trial (Pro & Ultimate)</h4>
+                    <p>Full access to all features. No credit card required to start. Only pay if you love it.</p>
+                </div>
+
+                <div class="guarantee-item">
+                    <div class="icon">🔒</div>
+                    <h4>Cancel Anytime</h4>
+                    <p>No long-term contracts. No cancellation fees. Keep all the apps you've built, even if you cancel.</p>
+                </div>
+            </div>
+
+            <div class="trust-badge">
+                <strong>Our Promise:</strong> If Dreamforge doesn't save you 10+ hours in the first month, we'll refund you and send you a $50 Amazon gift card for wasting your time.
+            </div>
+        </div>
+
+        <!-- FAQ Section -->
+        <div class="pricing-section faq-pricing">
+            <h3>Pricing Questions</h3>
+
+            <div class="faq-item">
+                <h4>Why is Dreamforge more expensive than Bolt.new or v0?</h4>
+                <p>Great question! While Bolt.new ($20) and v0 ($20) focus on basic code generation, Dreamforge includes:</p>
+                <ul>
+                    <li><strong>Live training hours</strong> — 1-on-1 coaching with AI experts (worth $100+/hour alone)</li>
+                    <li><strong>Advanced AI models</strong> — Claude 4 Sonnet, GPT-4, specialized for production apps</li>
+                    <li><strong>Phase-wise generation</strong> — Built for complex, real-world applications</li>
+                    <li><strong>Production-ready code</strong> — Not just prototypes</li>
+                </ul>
+                <p>Think of it as Bolt.new + $150/month in training = $170 value for just $27.</p>
+            </div>
+
+            <div class="faq-item">
+                <h4>What happens if I exceed my training hours?</h4>
+                <p>Pro includes 10 hours/month, Ultimate includes 20 hours. If you need more:</p>
+                <ul>
+                    <li>Additional hours: $15/hour (cheaper than upgrading tiers)</li>
+                    <li>OR upgrade to Ultimate for better per-hour value</li>
+                    <li>Unused hours don't roll over (use it or lose it)</li>
+                </ul>
+            </div>
+
+            <div class="faq-item">
+                <h4>Can I switch plans later?</h4>
+                <p>Yes! Upgrade anytime and pay the difference. Downgrade at next billing cycle. Annual plans can be upgraded mid-year (you'll be credited the difference).</p>
+            </div>
+
+            <div class="faq-item">
+                <h4>Do you offer student or nonprofit discounts?</h4>
+                <p>Yes! Students and nonprofits get 50% off Pro and Ultimate plans. Email sales@dreamforge.dev with proof of status (.edu email or 501(c)(3) documentation).</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Team size calculator
+        const slider = document.getElementById('team-size');
+        const teamCount = document.querySelector('.team-count');
+        const volumeText = document.getElementById('volume-text');
+
+        const pricingData = {
+            1: { monthly: 297, annual: 247, perSeat: 297, message: "Add just 1 more seat to save 39% per seat!" },
+            2: { monthly: 547, annual: 455, perSeat: 182, message: "Add 3 more seats to get even better pricing!" },
+            3: { monthly: 547, annual: 455, perSeat: 182, message: "Add 2 more seats to unlock 5-seat tier pricing!" },
+            4: { monthly: 547, annual: 455, perSeat: 182, message: "Add 1 more seat to unlock 5-seat tier pricing!" },
+            5: { monthly: 997, annual: 830, perSeat: 199, message: "Add 5 more seats to unlock 10-seat tier!" },
+            10: { monthly: 1747, annual: 1455, perSeat: 175, message: "Most popular tier! Scale to 20+ for enterprise pricing." },
+            20: { monthly: 'Custom', annual: 'Custom', perSeat: 79, message: "Enterprise pricing unlocked! Contact sales for custom quote." }
+        };
+
+        function updatePricing(seats) {
+            let tier = pricingData[1];
+
+            if (seats >= 20) tier = pricingData[20];
+            else if (seats >= 10) tier = pricingData[10];
+            else if (seats >= 5) tier = pricingData[5];
+            else if (seats >= 2) tier = pricingData[2];
+            else tier = pricingData[1];
+
+            const monthlyAmount = document.querySelector('.monthly-price .amount');
+            const annualAmount = document.querySelector('.annual-price .amount');
+            const monthlyPerSeat = document.querySelector('.monthly-price .per-seat');
+            const annualPerSeat = document.querySelector('.annual-price .per-seat');
+            const savings = document.querySelector('.price-display .savings');
+
+            monthlyAmount.innerHTML = `$${tier.monthly}<span class="period">/month</span>`;
+            annualAmount.innerHTML = `$${tier.annual}<span class="period">/month</span>`;
+            monthlyPerSeat.textContent = `$${tier.perSeat} per seat/month`;
+            annualPerSeat.textContent = `$${Math.round(tier.annual / (seats || 1))} per seat/month`;
+
+            const yearlySavings = (tier.monthly * 12) - (tier.annual * 12);
+            if (tier.monthly !== 'Custom') {
+                savings.textContent = `Save $${yearlySavings}/year!`;
+            }
+
+            volumeText.textContent = tier.message;
+        }
+
+        slider.addEventListener('input', (e) => {
+            const seats = parseInt(e.target.value);
+            teamCount.textContent = seats === 1 ? '1 seat' : `${seats} seats`;
+            updatePricing(seats);
+        });
+    </script>
+</body>
+</html>
