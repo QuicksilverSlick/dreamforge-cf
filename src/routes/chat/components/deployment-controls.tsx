@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '../../../components/primitives/button';
-import { Loader, ExternalLink, Zap, Check, Globe, Lock, Share2, PartyPopper, XCircle } from 'lucide-react';
+import { Loader, ExternalLink, Zap, Check, Globe, Lock, Share2, PartyPopper } from 'lucide-react';
 import clsx from 'clsx';
 import { apiClient } from '../../../lib/api-client';
 import { toast } from 'sonner';

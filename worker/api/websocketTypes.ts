@@ -16,6 +16,11 @@ type StateMessage = {
 	state: CodeGenState;
 };
 
+type MCPServersMessage = {
+	type: 'cf_agent_mcp_servers';
+	servers?: unknown;
+};
+
 type AgentConnectedMessage = {
     type: 'agent_connected';
     state: CodeGenState;
@@ -415,6 +420,7 @@ type ServerLogMessage = {
 
 export type WebSocketMessage =
 	| StateMessage
+	| MCPServersMessage
 	| AgentConnectedMessage
 	| ConversationStateMessage
 	| GenerationStartedMessage

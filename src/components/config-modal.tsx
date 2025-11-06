@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { Settings, Play, RotateCcw, Info, Key, Lightbulb, Building2, ClipboardList, Flag, Zap, Rocket, MessageCircle, Search, FileEdit, Eye, Wrench } from 'lucide-react';
+import { Settings, Play, RotateCcw, Info, Key } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

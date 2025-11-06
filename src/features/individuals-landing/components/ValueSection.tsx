@@ -11,7 +11,7 @@
 
 import { motion, useInView } from 'framer-motion';
 import { useRef } from 'react';
-import { Shield, Zap, Server, GitBranch, Box, DollarSign, Check, X, AlertTriangle } from 'lucide-react';
+import { Shield, Zap, Server, GitBranch, Box, DollarSign, Check } from 'lucide-react';
 
 export default function ValueSection() {
   const ref = useRef(null);
