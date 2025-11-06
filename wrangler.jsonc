@@ -61,16 +61,11 @@
 	"containers": [
 		{
 			"class_name": "UserAppSandboxService",
-			"image": "./SandboxDockerfile",
-            // "image": "registry.cloudflare.com/vibesdk-production-userappsandboxservice:cfe197fc",
+            "image": "registry.cloudflare.com/00354a4cf3fd5ff6f93e809b915f0f58/dreamforge-cf-userappsandboxservice:b56606b7",
             // Altering max_instances value will have no effect. Please use the MAX_SANDBOX_INSTANCES var instead.
-			"max_instances": 1400,
+			"max_instances": 10,
             // ATTENTION: Altering instance_type value will have no effect. Please use the SANDBOX_INSTANCE_TYPE var instead.
-            "instance_type": {
-                "vcpu": 4,
-                "memory_mib": 8192,
-                "disk_mb": 10240
-            },
+            "instance_type": "standard-3",
             "rollout_step_percentage": 100
 		}
 	],
@@ -148,12 +143,12 @@
     "routes": [
         {
             "pattern": "getdreamforge.com/*",
-            "custom_domain": true,
+            "custom_domain": false,
             "zone_id": "157d05cb90f7190794c33e37bef447db"
         },
         {
             "pattern": "www.getdreamforge.com/*",
-            "custom_domain": true,
+            "custom_domain": false,
             "zone_id": "157d05cb90f7190794c33e37bef447db"
         },
         {
