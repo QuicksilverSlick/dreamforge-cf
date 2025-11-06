@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * Dreamforge - Automated Undeployment Script
- *
- * This script safely removes all Cloudflare resources associated with
- * the Dreamforge platform, including:
+ * Cloudflare Orange Build - Automated Undeployment Script
+ * 
+ * This script safely removes all Cloudflare resources associated with 
+ * the Orange Build platform, including:
  * - Worker
  * - Containers 
  * - KV namespaces
@@ -537,14 +537,14 @@ class CloudflareUndeploymentManager {
     console.log('\n💡 To completely remove all resources, use:');
     console.log('   bun scripts/undeploy.ts all --force');
     
-    console.log('\n⚒️ Dreamforge cleanup completed!');
+    console.log('\n🧡 Orange Build cleanup completed!');
   }
 
   /**
    * Main undeployment orchestration method
    */
   public async undeploy(): Promise<void> {
-    console.log('⚒️ Dreamforge - Automated Undeployment Starting...\n');
+    console.log('🧡 Cloudflare Orange Build - Automated Undeployment Starting...\n');
     
     const startTime = Date.now();
 

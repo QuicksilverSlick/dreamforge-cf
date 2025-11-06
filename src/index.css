@@ -3,8 +3,7 @@
 
 @font-face{
   font-family: "departureMono";
-  src:  url('./assets/fonts/DepartureMono-Regular.woff');
-  font-display: swap;
+  src:  url('./assets/fonts/DepartureMono-Regular.woff') 
 }
 
 /* Subtle chat edge throb effect */
@@ -30,23 +29,57 @@
   .chat-edge-throb { animation: none; }
 }
 
-/* Gradient animation for landing page */
-@keyframes gradient {
+/* Debug mode pulsing effect - red edges */
+@keyframes debug-pulse {
   0%, 100% {
-    background-position: 0% 50%;
+    box-shadow:
+      inset 4px 0 12px rgba(239, 68, 68, 0.1),
+      inset -4px 0 12px rgba(239, 68, 68, 0.1);
   }
   50% {
-    background-position: 100% 50%;
+    box-shadow:
+      inset 4px 0 20px rgba(239, 68, 68, 0.2),
+      inset -4px 0 20px rgba(239, 68, 68, 0.2);
   }
 }
 
-.animate-gradient {
-  background-size: 200% 200%;
-  animation: gradient 8s ease infinite;
+.animate-debug-pulse {
+  animation: debug-pulse 2s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-gradient { animation: none; }
+  .animate-debug-pulse { animation: none; }
+}
+
+/* Custom scrollbar for debug bubble */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(239, 68, 68, 0.3);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(239, 68, 68, 0.5);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(239, 68, 68, 0.4);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(239, 68, 68, 0.6);
 }
 
 @custom-variant dark (&:is(.dark *));
@@ -140,7 +173,7 @@
 	--build-chat-colors-bg-2: #1f2020;
 	--build-chat-colors-bg-3: #292929;
 	--build-chat-colors-bg-4: #3c3c3c;
-	--build-chat-colors-border-primary: #4a4a4a;
+	--build-chat-colors-border-primary: #393939;
 	--build-chat-colors-border-secondary: #454746;
 	--build-chat-colors-border-tertiary: #454746;
 	--build-chat-colors-brand-heavy: #f6821f;
@@ -149,7 +182,7 @@
 	--build-chat-colors-text-inverted: #000000;
 	--build-chat-colors-text-primary: #ffffff;
 	--build-chat-colors-text-secondary: #cdcaca;
-	--build-chat-colors-text-tertiary: #c8c5c5;
+	--build-chat-colors-text-tertiary: #bcb9b9;
 
 	--shadow-dialog:
 		0px 18px 60px 0px rgba(6, 6, 5, 0.1),

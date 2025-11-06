@@ -1,6 +1,5 @@
 import { createLogger } from './logger';
 import { SmartCodeGeneratorAgent } from './agents/core/smartGeneratorAgent';
-import { proxyToSandbox } from '@cloudflare/sandbox';
 import { isDispatcherAvailable } from './utils/dispatcherUtils';
 import { createApp } from './app';
 // import * as Sentry from '@sentry/cloudflare';
@@ -9,6 +8,8 @@ import { DORateLimitStore as BaseDORateLimitStore } from './services/rate-limit/
 import { getPreviewDomain } from './utils/urls';
 import { proxyToAiGateway } from './services/aigateway-proxy/controller';
 import { isOriginAllowed } from './config/security';
+import { proxyToSandbox } from './services/sandbox/request-handler';
+import { handleGitProtocolRequest, isGitProtocolRequest } from './api/handlers/git-protocol';
 
 // Durable Object and Service exports
 export { UserAppSandboxService, DeployerService } from './services/sandbox/sandboxSdkClient';
@@ -50,6 +51,11 @@ async function handleUserAppRequest(request: Request, env: Env): Promise<Respons
 	const sandboxResponse = await proxyToSandbox(request, env);
 	if (sandboxResponse) {
 		logger.info(`Serving response from sandbox for: ${hostname}`);
+        // If it was a websocket upgrade, we need to return the response as is
+        if (sandboxResponse.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
+            logger.info(`Serving websocket response from sandbox for: ${hostname}`);
+            return sandboxResponse;
+        }
 		
 		// Add headers to identify this as a sandbox response
 		let headers = new Headers(sandboxResponse.headers);
@@ -110,7 +116,7 @@ async function handleUserAppRequest(request: Request, env: Env): Promise<Respons
  */
 const worker = {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-        logger.info(`Received request: ${request.method} ${request.url}`);
+        // logger.info(`Received request: ${request.method} ${request.url}`);
 		// --- Pre-flight Checks ---
 
 		// 1. Critical configuration check: Ensure custom domain is set.
@@ -132,55 +138,20 @@ const worker = {
 		// --- Domain-based Routing ---
 
 		// Normalize hostnames for both local development (localhost) and production.
-		const isMarketingDomain =
-			hostname === 'getdreamforge.com' ||
-			hostname === 'www.getdreamforge.com' ||
-			(hostname === 'localhost' && pathname.startsWith('/marketing'));
-
-		const isAppDomain =
-			hostname === 'app.getdreamforge.com' ||
-			hostname === env.CUSTOM_DOMAIN ||
-			(hostname === 'localhost' && !pathname.startsWith('/marketing'));
-
+		const isMainDomainRequest =
+			hostname === env.CUSTOM_DOMAIN || hostname === 'localhost';
 		const isSubdomainRequest =
 			hostname.endsWith(`.${previewDomain}`) ||
 			(hostname.endsWith('.localhost') && hostname !== 'localhost');
 
-		// Route 1: Marketing Website (e.g., getdreamforge.com)
-		if (isMarketingDomain) {
-			// Serve landing pages from /marketing/ in ASSETS
-			if (!pathname.startsWith('/api/')) {
-				// Rewrite URL to point to marketing directory
-				let marketingPath: string;
-
-				if (pathname.startsWith('/dream-builder')) {
-					// Enterprise landing page
-					marketingPath = pathname.replace(
-						'/dream-builder',
-						'/marketing/dream-builder'
-					);
-				} else {
-					// Individual landing page (root)
-					if (pathname === '/' || pathname === '') {
-						marketingPath = '/marketing/index.html';
-					} else {
-						marketingPath = `/marketing${pathname}`;
-					}
-				}
-
-				// Create a new request with the rewritten URL
-				const marketingUrl = new URL(marketingPath, url.origin);
-				const marketingRequest = new Request(marketingUrl, request);
-
-				logger.info(`Serving marketing page: ${marketingPath}`);
-				return env.ASSETS.fetch(marketingRequest);
+		// Route 1: Main Platform Request (e.g., build.cloudflare.dev or localhost)
+		if (isMainDomainRequest) {
+			// Handle Git protocol endpoints directly
+			// Route: /apps/:id.git/info/refs or /apps/:id.git/git-upload-pack
+			if (isGitProtocolRequest(pathname)) {
+				return handleGitProtocolRequest(request, env, ctx);
 			}
-			// Marketing domain shouldn't access APIs
-			return new Response('Not Found', { status: 404 });
-		}
-
-		// Route 2: Main Application (e.g., app.getdreamforge.com or localhost)
-		if (isAppDomain) {
+			
 			// Serve static assets for all non-API routes from the ASSETS binding.
 			if (!pathname.startsWith('/api/')) {
 				return env.ASSETS.fetch(request);

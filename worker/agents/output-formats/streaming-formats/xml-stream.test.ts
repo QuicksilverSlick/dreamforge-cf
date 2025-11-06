@@ -3,19 +3,20 @@
  * Tests streaming parsing, error handling, fallback logic, and edge cases
  */
 
+import { describe, test, beforeEach, expect, vi } from 'vitest';
 import { XmlStreamFormat, XmlStreamingCallbacks } from './xml-stream';
 
 describe('XmlStreamFormat', () => {
     let parser: XmlStreamFormat;
-    let mockCallbacks: jest.Mocked<XmlStreamingCallbacks>;
+    let mockCallbacks: XmlStreamingCallbacks;
     
     beforeEach(() => {
         parser = new XmlStreamFormat();
         mockCallbacks = {
-            onElementStart: jest.fn(),
-            onElementContent: jest.fn(),
-            onElementComplete: jest.fn(),
-            onParsingError: jest.fn(),
+            onElementStart: vi.fn(),
+            onElementContent: vi.fn(),
+            onElementComplete: vi.fn(),
+            onParsingError: vi.fn(),
         };
     });
 
@@ -219,30 +220,20 @@ describe('XmlStreamFormat', () => {
     });
 
     describe('Configuration Options', () => {
-        test('should respect case sensitivity setting', () => {
+        test('should be case-insensitive (always)', () => {
             const xml = '<USER_RESPONSE>Content</USER_RESPONSE>';
             
-            // Case insensitive (default)
-            const insensitiveConfig = { 
-                targetElements: ['user_response'],
-                caseSensitive: false 
+            // Parsing is always case-insensitive
+            const config = { 
+                targetElements: ['user_response']
             };
-            let state1 = parser.initializeXmlState(insensitiveConfig);
-            state1 = parser.parseXmlStream(xml, state1, mockCallbacks, insensitiveConfig);
-            const elements1 = parser.finalizeXmlParsing(state1);
+            let state = parser.initializeXmlState(config);
+            state = parser.parseXmlStream(xml, state, mockCallbacks, config);
+            const elements = parser.finalizeXmlParsing(state);
             
-            expect(elements1.get('user_response')).toBeDefined();
-            
-            // Case sensitive
-            const sensitiveConfig = { 
-                targetElements: ['user_response'],
-                caseSensitive: true 
-            };
-            let state2 = parser.initializeXmlState(sensitiveConfig);
-            state2 = parser.parseXmlStream(xml, state2, mockCallbacks, sensitiveConfig);
-            const elements2 = parser.finalizeXmlParsing(state2);
-            
-            expect(elements2.get('user_response')).toBeUndefined();
+            // Should match regardless of case
+            expect(elements.get('user_response')).toBeDefined();
+            expect(elements.get('user_response')![0].content).toBe('Content');
         });
 
         test('should only extract target elements when specified', () => {
