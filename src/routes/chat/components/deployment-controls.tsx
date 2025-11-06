@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '../../../components/primitives/button';
-import { Loader, ExternalLink, Zap, Check, Globe, Lock, Share2 } from 'lucide-react';
+import { Loader, ExternalLink, Zap, Check, Globe, Lock, Share2, PartyPopper, XCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { apiClient } from '../../../lib/api-client';
 import { toast } from 'sonner';
@@ -128,7 +128,7 @@ export function DeploymentControls({
 				onVisibilityUpdate?.(newVisibility);
 				
 				if (newVisibility === 'public') {
-					toast.success('🎉 Your app is now public! Share the link with anyone.');
+					toast.success('Your app is now public! Share the link with anyone.');
 				} else {
 					toast.success('App is now private');
 				}
@@ -209,7 +209,7 @@ export function DeploymentControls({
 					icon: <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>,
 					titleColor: "text-red-900 dark:text-red-100",
 					subtitleColor: "text-red-600 dark:text-red-300",
-					title: "❌ Deployment Failed",
+					title: "Deployment Failed",
 					subtitle: "Error in deployment, please try again",
 					buttonDisabled: !isPhase1Complete,
 					buttonVariant: "primary" as const,
@@ -301,8 +301,9 @@ export function DeploymentControls({
 						
 						{/* Success Header */}
 						<div className="flex-1">
-							<div className="text-sm font-semibold text-green-900 dark:text-green-100">
-								🎉 Successfully Deployed!
+							<div className="text-sm font-semibold text-green-900 dark:text-green-100 flex items-center gap-2">
+								<PartyPopper className="w-4 h-4" aria-hidden="true" />
+								Successfully Deployed!
 							</div>
 							<div className="text-xs text-green-700 dark:text-green-300 mt-0.5">
 								Your application is now live on Cloudflare Workers

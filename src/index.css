@@ -3,7 +3,8 @@
 
 @font-face{
   font-family: "departureMono";
-  src:  url('./assets/fonts/DepartureMono-Regular.woff') 
+  src:  url('./assets/fonts/DepartureMono-Regular.woff');
+  font-display: swap;
 }
 
 /* Subtle chat edge throb effect */
@@ -27,6 +28,25 @@
 
 @media (prefers-reduced-motion: reduce) {
   .chat-edge-throb { animation: none; }
+}
+
+/* Gradient animation for landing page */
+@keyframes gradient {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient 8s ease infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-gradient { animation: none; }
 }
 
 @custom-variant dark (&:is(.dark *));
@@ -120,7 +140,7 @@
 	--build-chat-colors-bg-2: #1f2020;
 	--build-chat-colors-bg-3: #292929;
 	--build-chat-colors-bg-4: #3c3c3c;
-	--build-chat-colors-border-primary: #393939;
+	--build-chat-colors-border-primary: #4a4a4a;
 	--build-chat-colors-border-secondary: #454746;
 	--build-chat-colors-border-tertiary: #454746;
 	--build-chat-colors-brand-heavy: #f6821f;
@@ -129,7 +149,7 @@
 	--build-chat-colors-text-inverted: #000000;
 	--build-chat-colors-text-primary: #ffffff;
 	--build-chat-colors-text-secondary: #cdcaca;
-	--build-chat-colors-text-tertiary: #bcb9b9;
+	--build-chat-colors-text-tertiary: #c8c5c5;
 
 	--shadow-dialog:
 		0px 18px 60px 0px rgba(6, 6, 5, 0.1),

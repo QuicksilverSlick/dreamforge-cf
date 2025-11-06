@@ -204,7 +204,7 @@ export function ModelSelector({
       {/* System default display */}
       {systemDefault && (
         <p className="text-xs text-text-tertiary">
-          🔧 System default: {getModelDisplayName(systemDefault)}
+          System default: {getModelDisplayName(systemDefault)}
         </p>
       )}
     </div>

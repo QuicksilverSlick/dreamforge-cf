@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, Component } from 'react';
-import { Bug, X, Download, Mail, Maximize2, Minimize2, Clock, BookmarkPlus, Bookmark, Activity, BarChart3 } from 'lucide-react';
+import { Bug, X, Download, Mail, Maximize2, Minimize2, Clock, BookmarkPlus, Bookmark, Activity, BarChart3, Rocket, FileText, Zap, Timer, BarChart, RefreshCw, Cloud, Settings } from 'lucide-react';
 import { Button } from '../../../components/primitives/button';
 import { captureDebugScreenshot } from '../../../utils/screenshot';
 
@@ -746,14 +746,20 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                   
                   {/* Enhanced Operation-Specific Metrics */}
                   <div className="space-y-6">
-                    <h4 className="font-medium text-text-primary text-lg">🚀 Operation Performance Metrics</h4>
+                    <h4 className="font-medium text-text-primary text-lg flex items-center gap-2">
+                      <Rocket className="w-5 h-5" aria-hidden="true" />
+                      Operation Performance Metrics
+                    </h4>
                     
                     {/* File Generation - Special Enhanced Display */}
                     {analyticsData.operations.fileGeneration.duration.count > 0 && (
                       <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-6">
                         <div className="flex items-center gap-3 mb-4">
                           <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                          <h5 className="font-bold text-purple-900 text-lg">📝 File Generation Performance</h5>
+                          <h5 className="font-bold text-purple-900 text-lg flex items-center gap-2">
+                            <FileText className="w-5 h-5" aria-hidden="true" />
+                            File Generation Performance
+                          </h5>
                         </div>
                         
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -785,7 +791,10 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                         
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="bg-bg-4/70 dark:bg-bg-4/50 rounded-lg p-4">
-                            <h6 className="font-medium text-text-primary mb-2">⚡ Generation Speed</h6>
+                            <h6 className="font-medium text-text-primary mb-2 flex items-center gap-2">
+                              <Zap className="w-4 h-4" aria-hidden="true" />
+                              Generation Speed
+                            </h6>
                             <div className="space-y-1 text-sm">
                               <div>Avg: <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.linesPerSecond.avg.toFixed(1)} lines/s</span></div>
                               <div>Median: <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.linesPerSecond.median.toFixed(1)} lines/s</span></div>
@@ -793,7 +802,10 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                             </div>
                           </div>
                           <div className="bg-bg-4/70 dark:bg-bg-4/50 rounded-lg p-4">
-                            <h6 className="font-medium text-text-primary mb-2">⏱️ Duration Stats</h6>
+                            <h6 className="font-medium text-text-primary mb-2 flex items-center gap-2">
+                              <Timer className="w-4 h-4" aria-hidden="true" />
+                              Duration Stats
+                            </h6>
                             <div className="space-y-1 text-sm">
                               <div>Avg: <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.duration.avg > 1000 ? `${(analyticsData.operations.fileGeneration.duration.avg/1000).toFixed(1)}s` : `${analyticsData.operations.fileGeneration.duration.avg.toFixed(0)}ms`}</span></div>
                               <div>Median: <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.duration.median > 1000 ? `${(analyticsData.operations.fileGeneration.duration.median/1000).toFixed(1)}s` : `${analyticsData.operations.fileGeneration.duration.median.toFixed(0)}ms`}</span></div>
@@ -801,7 +813,10 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                             </div>
                           </div>
                           <div className="bg-bg-4/70 dark:bg-bg-4/50 rounded-lg p-4">
-                            <h6 className="font-medium text-text-primary mb-2">📊 Content Volume</h6>
+                            <h6 className="font-medium text-text-primary mb-2 flex items-center gap-2">
+                              <BarChart className="w-4 h-4" aria-hidden="true" />
+                              Content Volume
+                            </h6>
                             <div className="space-y-1 text-sm">
                               <div>Total Characters: <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.totalChars.toLocaleString()}</span></div>
                               <div>Avg File Size: <span className="font-mono font-medium">{Math.round(analyticsData.operations.fileGeneration.totalChars / analyticsData.operations.fileGeneration.duration.count).toLocaleString()} chars</span></div>
@@ -819,15 +834,17 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                         .map(([operation, stats]) => {
                           const simpleStats = stats as { avg: number; median: number; p99: number; count: number };
                           const operationConfig = {
-                            phaseGeneration: { icon: '🔄', color: 'green', label: 'Phase Generation' },
-                            cfDeployment: { icon: '☁️', color: 'orange', label: 'CF Deployment' },
-                            runnerDeployment: { icon: '🚀', color: 'blue', label: 'Runner Deployment' }
-                          }[operation] || { icon: '⚙️', color: 'gray', label: operation };
-                          
+                            phaseGeneration: { IconComponent: RefreshCw, color: 'green', label: 'Phase Generation' },
+                            cfDeployment: { IconComponent: Cloud, color: 'orange', label: 'CF Deployment' },
+                            runnerDeployment: { IconComponent: Rocket, color: 'blue', label: 'Runner Deployment' }
+                          }[operation as 'phaseGeneration' | 'cfDeployment' | 'runnerDeployment'] || { IconComponent: Settings, color: 'gray', label: operation };
+
+                          const OperationIcon = operationConfig.IconComponent;
+
                           return (
                             <div key={operation} className={`bg-${operationConfig.color}-50 border border-${operationConfig.color}-200 rounded-lg p-4`}>
                               <div className="flex items-center gap-2 mb-3">
-                                <span className="text-lg">{operationConfig.icon}</span>
+                                <OperationIcon className="w-5 h-5" aria-hidden="true" />
                                 <h5 className="font-medium text-text-primary">{operationConfig.label}</h5>
                               </div>
                               {simpleStats.count > 0 ? (

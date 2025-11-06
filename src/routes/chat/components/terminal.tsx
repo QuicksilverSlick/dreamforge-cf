@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Zap } from 'lucide-react';
+import { Zap, XCircle, Ban, AlertTriangle, Info, Bug } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import clsx from 'clsx';
@@ -169,19 +169,19 @@ export function Terminal({
 												<span className="text-[#f6821f] font-semibold mr-1">$</span>
 											)}
 											{log.type === 'stderr' && (
-												<span className="text-red-500 dark:text-red-400 mr-1">❌</span>
+												<XCircle className="w-4 h-4 text-red-500 dark:text-red-400 inline-block mr-1" aria-hidden="true" />
 											)}
 											{log.type === 'error' && (
-												<span className="text-red-500 dark:text-red-400 mr-1">🚫</span>
+												<Ban className="w-4 h-4 text-red-500 dark:text-red-400 inline-block mr-1" aria-hidden="true" />
 											)}
 											{log.type === 'warn' && (
-												<span className="text-amber-500 dark:text-yellow-400 mr-1">⚠️</span>
+												<AlertTriangle className="w-4 h-4 text-amber-500 dark:text-yellow-400 inline-block mr-1" aria-hidden="true" />
 											)}
 											{log.type === 'info' && (
-												<span className="text-blue-500 dark:text-blue-400 mr-1">ℹ️</span>
+												<Info className="w-4 h-4 text-blue-500 dark:text-blue-400 inline-block mr-1" aria-hidden="true" />
 											)}
 											{log.type === 'debug' && (
-												<span className="text-gray-500 dark:text-gray-400 mr-1">🐛</span>
+												<Bug className="w-4 h-4 text-gray-500 dark:text-gray-400 inline-block mr-1" aria-hidden="true" />
 											)}
 											{log.content}
 										</div>

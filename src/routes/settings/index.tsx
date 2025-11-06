@@ -9,6 +9,9 @@ import {
 	Key,
 	Lock,
     Settings,
+	CreditCard,
+	Database,
+	Triangle,
 } from 'lucide-react';
 import { ModelConfigTabs } from '@/components/model-config-tabs';
 import type {
@@ -470,16 +473,16 @@ export default function SettingsPage() {
 			return <LogoComponent className={className} />;
 		}
 
-		// Fallback to emoji for unknown providers
-		const emojiMap: Record<string, string> = {
-			stripe: '💳',
-			github: '🐙',
-			vercel: '▲',
-			supabase: '🗄️',
-			custom: '🔑',
+		// Fallback to icons for unknown providers
+		const iconMap: Record<string, React.ReactNode> = {
+			stripe: <CreditCard className={className} />,
+			github: <Github className={className} />,
+			vercel: <Triangle className={className} />,
+			supabase: <Database className={className} />,
+			custom: <Key className={className} />,
 		};
 
-		return <span className="text-lg">{emojiMap[provider] || '🔑'}</span>;
+		return iconMap[provider] || <Key className={className} />;
 	};
 
 	// Load agent configurations dynamically from API
@@ -1265,9 +1268,7 @@ export default function SettingsPage() {
 														}
 													>
 														<div className="flex items-center gap-3">
-															<span className="text-lg">
-																🔑
-															</span>
+															<Key className="w-5 h-5" aria-hidden="true" />
 															<div className="text-left">
 																<div className="font-medium">
 																	Custom
@@ -1691,9 +1692,11 @@ export default function SettingsPage() {
 								<div className="flex items-center justify-between">
 									<div className="flex items-center gap-3">
 										<div className="h-5 w-5 rounded-full bg-bg-3 flex items-center justify-center">
-											{user?.provider === 'google'
-												? '🇬'
-												: '🐙'}
+											{user?.provider === 'google' ? (
+												<span className="text-xs">G</span>
+											) : (
+												<Github className="w-3 h-3" aria-hidden="true" />
+											)}
 										</div>
 										<div>
 											<p className="text-sm font-medium capitalize">

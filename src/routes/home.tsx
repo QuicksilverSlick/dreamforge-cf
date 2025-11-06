@@ -16,8 +16,21 @@ import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ImageUploadButton } from '@/components/image-upload-button';
 import { ImageAttachmentPreview } from '@/components/image-attachment-preview';
 import { SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
+import { LandingPage } from '@/features/landing/LandingPage';
 
 export default function Home() {
+	const { isAuthenticated, isLoading } = useAuth();
+
+	// Show landing page for non-authenticated users
+	if (!isLoading && !isAuthenticated) {
+		return <LandingPage />;
+	}
+
+	// Show prompt interface for authenticated users
+	return <AuthenticatedHome />;
+}
+
+function AuthenticatedHome() {
 	const navigate = useNavigate();
 	const { requireAuth } = useAuthGuard();
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
