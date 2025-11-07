@@ -1,17 +1,16 @@
-# 🧡 Cloudflare Vibe SDK
+# ⚒️ Dreamforge
 
-> **An open source full-stack AI webapp generator** – Deploy your own instance of Cloudflare VibeSDK, an AI vibe coding platform that you can run and customize yourself.
+> **AI-Powered Application Development Platform** – Build production-ready applications from idea to deployment with intelligent AI assistance.
 
 <div align="center">
 
-
 ## 🚀 Live Demo
 
-**[build.cloudflare.dev](https://build.cloudflare.dev)**
+**[getdreamforge.com](https://getdreamforge.com)**
 
-*Explore VibeSDK Build before deploying your own stack.*
+*Experience Dreamforge before deploying your own instance.*
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/vibesdk)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/QuicksilverSlick/dreamforge-cf)
 
 **👆 Click to deploy your own instance!**
 
@@ -21,44 +20,44 @@
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=cloudflare/vibesdk&type=Date)](https://www.star-history.com/#cloudflare/vibesdk&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=QuicksilverSlick/dreamforge-cf&type=Date)](https://www.star-history.com/#QuicksilverSlick/dreamforge-cf&Date)
 
 ---
 
-## ✨ What is Cloudflare VibeSDK?
+## ✨ What is Dreamforge?
 
-Cloudflare VibeSDK is an open source AI vibe coding platform built on Cloudflare's developer platform. If you're building an AI-powered platform for building applications, this is a great example that you can deploy and customize to build the whole platform yourself. Once the platform is deployed, users can say what they want to build in natural language, and the AI agent will create and deploy the application. 
+Dreamforge is an AI-powered development platform built on Cloudflare's infrastructure. It enables developers and teams to build applications through natural language conversation with AI agents. Once deployed, users can describe what they want to build, and Dreamforge's AI agents will create and deploy the application.
 
-**🌐 [Experience it live at build.cloudflare.dev](https://build.cloudflare.dev)** – Try it out before deploying your own instance!
+**🌐 [Experience it live at getdreamforge.com](https://getdreamforge.com)** – Try it out before deploying your own instance!
 
 ## 🎯 Perfect For
 
 ### Companies building AI-powered platforms
-Run your own solution that allows users to build applications in natural language. Customize the AI behavior, control the generated code patterns, integrate your own component libraries, and keep all customer data within your infrastructure. Perfect for startups wanting to enter the AI development space or established companies adding AI capabilities to their existing developer tools.  
+Run your own solution that allows users to build applications in natural language. Customize the AI behavior, control the generated code patterns, integrate your own component libraries, and keep all customer data within your infrastructure. Perfect for startups wanting to enter the AI development space or established companies adding AI capabilities to their existing developer tools.
 
 ### Internal development
-Enable non-technical teams to create the tools they need without waiting for engineering resources. Marketing can build landing pages, sales can create custom dashboards, and operations can automate workflows, all by describing what they want. 
+Enable non-technical teams to create the tools they need without waiting for engineering resources. Marketing can build landing pages, sales can create custom dashboards, and operations can automate workflows, all by describing what they want.
 
-### SaaS platforms 
-Let your customers extend your product's functionality without learning your API or writing code. They can describe custom integrations, build specialized workflows, or create tailored interfaces specific to their business needs. 
+### SaaS platforms
+Let your customers extend your product's functionality without learning your API or writing code. They can describe custom integrations, build specialized workflows, or create tailored interfaces specific to their business needs.
 
 ---
 
 ### 🎯 Key Features
 
-🤖 **AI Code Generation** – Phase-wise development with intelligent error correction  
-⚡ **Live Previews** – App previews running in sandboxed containers  
-💬 **Interactive Chat** – Guide development through natural conversation  
-📱 **Modern Stack** – Generates React + TypeScript + Tailwind apps  
-🚀 **One-Click Deploy** – Deploy generated apps to Workers for Platforms  
-📦 **GitHub Integration** – Export code directly to your repositories  
+🤖 **AI Code Generation** – Phase-wise development with intelligent error correction
+⚡ **Live Previews** – App previews running in sandboxed containers
+💬 **Interactive Chat** – Guide development through natural conversation
+📱 **Modern Stack** – Generates React + TypeScript + Tailwind apps
+🚀 **One-Click Deploy** – Deploy generated apps to Workers for Platforms
+📦 **GitHub Integration** – Export code directly to your repositories
 
 ### 🏗️ Built on Cloudflare's Platform
 
-Cloudflare VibeSDK Build utilizes the full Cloudflare developer ecosystem:
+Dreamforge utilizes the full Cloudflare developer ecosystem:
 
 - **Frontend**: React + Vite with modern UI components
-- **Backend**: Workers with Durable Objects for AI agents  
+- **Backend**: Workers with Durable Objects for AI agents
 - **Database**: D1 (SQLite) with Drizzle ORM
 - **AI**: Multiple LLM providers via AI Gateway
 - **Containers**: Sandboxed app previews and execution
@@ -77,9 +76,9 @@ Before clicking "Deploy to Cloudflare", have these ready:
 ### 🔑 Required API Key
 - **Google Gemini API Key** - Get from [ai.google.dev](https://ai.google.dev)
 
-Once you click "Deploy to Cloudflare", you'll be taken to your Cloudflare dashboard where you can configure your VibeSDK deployment with these variables. 
+Once you click "Deploy to Cloudflare", you'll be taken to your Cloudflare dashboard where you can configure your Dreamforge deployment with these variables.
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/vibesdk)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/QuicksilverSlick/dreamforge-cf)
 
 ### 🔑 What you'll configure
 
@@ -104,7 +103,7 @@ Adjust the placeholder `abc`/`xyz` parts to match your domain. DNS propagation c
 
 ### 🏗️ Sandbox Instance Configuration (Optional)
 
-VibeSDK uses Cloudflare Containers to run generated applications in isolated environments. You can configure the container performance tier based on your needs and Cloudflare plan.
+Dreamforge uses Cloudflare Containers to run generated applications in isolated environments. You can configure the container performance tier based on your needs and Cloudflare plan.
 
 #### Available Instance Types
 
@@ -155,14 +154,14 @@ The `SANDBOX_INSTANCE_TYPE` controls:
 OAuth configuration is **not** shown on the initial deploy page. If you want user login features, you'll need to set this up after deployment:
 
 **How to Add OAuth After Deployment:**
-1. **Find your repository** in your GitHub/GitLab account (created by "Deploy to Cloudflare" flow) 
+1. **Find your repository** in your GitHub/GitLab account (created by "Deploy to Cloudflare" flow)
 2. **Clone locally** and run `bun install`
 3. **Create `.dev.vars` and `.prod.vars` files** (see below for OAuth configuration)
 4. **Run `bun run deploy`** to update your deployment
 
 **Google OAuth Setup:**
 1. [Google Cloud Console](https://console.cloud.google.com) → Create Project
-2. Enable **Google+ API** 
+2. Enable **Google+ API**
 3. Create **OAuth 2.0 Client ID**
 4. Add authorized origins: `https://your-custom-domain.`
 5. Add redirect URI: `https://your-worker-name.workers.dev/api/auth/callback/google`
@@ -175,7 +174,7 @@ OAuth configuration is **not** shown on the initial deploy page. If you want use
 **GitHub OAuth Setup:**
 1. GitHub → **Settings** → **Developer settings** → **OAuth Apps**
 2. Click **New OAuth App**
-3. Application name: `Cloudflare VibeSDK`
+3. Application name: `Dreamforge`
 4. Homepage URL: `https://your-worker-name.workers.dev`
 5. Authorization callback URL: `https://your-worker-name.workers.dev/api/auth/callback/github`
 6. Add to **both** `.dev.vars` (for local development) and `.prod.vars` (for deployment):
@@ -185,7 +184,7 @@ OAuth configuration is **not** shown on the initial deploy page. If you want use
    ```
 
 **GitHub Export OAuth Setup:**
-1. Create a separate GitHub OAuth app (e.g., `VibeSDK Export`)—do not reuse the login app above.
+1. Create a separate GitHub OAuth app (e.g., `Dreamforge Export`)—do not reuse the login app above.
 2. Authorization callback URL: `https://your-worker-name.workers.dev/api/github-exporter/callback` (or your custom domain equivalent).
 3. Add to **both** `.dev.vars` and `.prod.vars`:
    ```bash
@@ -221,7 +220,7 @@ graph TD
 
 ## 💡 Try These Example Prompts
 
-Want to see these prompts in action? **[Visit the live demo at build.cloudflare.dev](https://build.cloudflare.dev)** first, then try them on your own instance once deployed:
+Want to see these prompts in action? **[Visit the live demo at getdreamforge.com](https://getdreamforge.com)** first, then try them on your own instance once deployed:
 
 **🎮 Fun Apps**
 > "Create a todo list with drag and drop and dark mode"
@@ -230,7 +229,7 @@ Want to see these prompts in action? **[Visit the live demo at build.cloudflare.
 
 > "Make a memory card game with emojis"
 
-**📊 Productivity Apps**  
+**📊 Productivity Apps**
 > "Create an expense tracker with charts and categories"
 
 > "Build a pomodoro timer with task management"
@@ -240,7 +239,7 @@ Want to see these prompts in action? **[Visit the live demo at build.cloudflare.
 **🎨 Creative Tools**
 > "Build a color palette generator from images"
 
-> "Create a markdown editor with live preview"  
+> "Create a markdown editor with live preview"
 
 > "Make a meme generator with text overlays"
 
@@ -279,10 +278,10 @@ export default {
 ```
 
 ### Iteration-based Code Generation
-Cloudflare VibeSDK generates apps in intelligent phases:
+Dreamforge generates apps in intelligent phases:
 
 1. **Planning Phase**: Analyzes requirements, creates file structure
-2. **Foundation Phase**: Generates package.json, basic setup files  
+2. **Foundation Phase**: Generates package.json, basic setup files
 3. **Core Phase**: Creates main components and logic
 4. **Styling Phase**: Adds CSS and visual design
 5. **Integration Phase**: Connects APIs and external services
@@ -304,12 +303,12 @@ DNS updates made during setup, including the wildcard CNAME record described abo
 
 ### Quick Setup
 
-You can run VibeSDK locally by following these steps:
+You can run Dreamforge locally by following these steps:
 
 ```bash
 # Clone the repository
-git clone https://github.com/cloudflare/vibesdk.git
-cd vibesdk
+git clone https://github.com/QuicksilverSlick/dreamforge-cf.git
+cd dreamforge-cf
 
 # Install dependencies
 npm install  # or: bun install, yarn install, pnpm install
@@ -336,7 +335,7 @@ After setup, start the development server:
 bun run dev
 ```
 
-Visit `http://localhost:5173` to access VibSDK locally.
+Visit `http://localhost:5173` to access Dreamforge locally.
 
 ### Production Deployment
 
@@ -377,7 +376,7 @@ Example: If `MAX_SANDBOX_INSTANCES` is set both as an environment variable (`exp
 
 ## 🔒 Security & Privacy
 
-Cloudflare VibeSDK implements enterprise-grade security:
+Dreamforge implements enterprise-grade security:
 
 - 🔐 **Encrypted Secrets**: All API keys stored with Cloudflare encryption
 - 🏰 **Sandboxed Execution**: Generated apps run in completely isolated containers
@@ -397,7 +396,7 @@ Cloudflare VibeSDK implements enterprise-grade security:
 - If you see this error, try redeploying - permissions are auto-granted
 - Contact Cloudflare support if the issue persists
 
-**🤖 "AI Gateway Authentication Failed"**  
+**🤖 "AI Gateway Authentication Failed"**
 - Confirm AI Gateway is set to **Authenticated** mode
 - Verify the authentication token has **Run** permissions
 - Check that gateway URL format is correct
@@ -417,7 +416,7 @@ Cloudflare VibeSDK implements enterprise-grade security:
 - **With AI Gateway Token**: The deployment script should automatically create the gateway. Check that your token has Read, Edit, and **Run** permissions.
 - **Without AI Gateway Token**: You must manually create an AI Gateway before deployment:
   1. Go to [AI Gateway Dashboard](https://dash.cloudflare.com/ai/ai-gateway)
-  2. Create gateway named `vibesdk-gateway` (or your custom name)
+  2. Create gateway named `dreamforge-gateway` (or your custom name)
   3. Enable authentication and create a token with **Run** permissions
 
 **🏗️ "Container Instance Type Issues"**
@@ -430,16 +429,16 @@ Cloudflare VibeSDK implements enterprise-grade security:
 
 - 📖 Check [Cloudflare Workers Docs](https://developers.cloudflare.com/workers/)
 - 💬 Join [Cloudflare Discord](https://discord.gg/cloudflaredev)
-- 🐛 Report issues on [GitHub](https://github.com/your-org/cloudflare-vibecoding-starter-kit/issues)
+- 🐛 Report issues on [GitHub](https://github.com/QuicksilverSlick/dreamforge-cf/issues)
 
 ---
 
 ## 🤝 Contributing
 
-Want to contribute to Cloudflare VibeSDK? Here's how:
+Want to contribute to Dreamforge? Here's how:
 
 1. **🍴 Fork** via the Deploy button (creates your own instance!)
-2. **💻 Develop** new features or improvements  
+2. **💻 Develop** new features or improvements
 3. **✅ Test** thoroughly with `bun run test`
 4. **📤 Submit** Pull Request to the main repository
 
@@ -454,10 +453,10 @@ Want to contribute to Cloudflare VibeSDK? Here's how:
 - [R2](https://developers.cloudflare.com/r2/) - Object storage without egress fees
 - [AI Gateway](https://developers.cloudflare.com/ai-gateway/) - Unified AI API gateway
 
-### 💬 **Community**  
+### 💬 **Community**
 - [Discord](https://discord.gg/cloudflaredev) - Real-time chat and support
 - [Community Forum](https://community.cloudflare.com/) - Technical discussions
-- [GitHub Discussions](https://github.com/your-org/cloudflare-vibecoding-starter-kit/discussions) - Feature requests and ideas
+- [GitHub Discussions](https://github.com/QuicksilverSlick/dreamforge-cf/discussions) - Feature requests and ideas
 
 ### 🎓 **Learning Resources**
 - [Workers Learning Path](https://developers.cloudflare.com/learning-paths/workers/) - Master Workers development
@@ -469,3 +468,11 @@ Want to contribute to Cloudflare VibeSDK? Here's how:
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+## 🔗 Links
+
+- **Live Demo**: [getdreamforge.com](https://getdreamforge.com)
+- **GitHub**: [QuicksilverSlick/dreamforge-cf](https://github.com/QuicksilverSlick/dreamforge-cf)
+- **Built on**: [Cloudflare VibeSDK](https://github.com/cloudflare/vibesdk) (upstream)
