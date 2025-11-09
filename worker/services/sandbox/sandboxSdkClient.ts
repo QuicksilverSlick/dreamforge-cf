@@ -439,17 +439,17 @@ export class SandboxSdkClient extends BaseSandboxService {
     }
 
     async downloadTemplate(templateName: string, downloadDir?: string) : Promise<ArrayBuffer> {
-        // Fetch the zip file from R2
+        // Fetch the zip file from R2 (matching upstream - no versioning)
         const downloadUrl = downloadDir ? `${downloadDir}/${templateName}.zip` : `${templateName}.zip`;
         this.logger.info(`Fetching object: ${downloadUrl} from R2 bucket`);
         const r2Object = await env.TEMPLATES_BUCKET.get(downloadUrl);
-          
+
         if (!r2Object) {
             throw new Error(`Object '${downloadUrl}' not found in bucket`);
         }
-    
+
         const zipData = await r2Object.arrayBuffer();
-    
+
         this.logger.info(`Downloaded zip file (${zipData.byteLength} bytes)`);
         return zipData;
     }
@@ -898,6 +898,93 @@ export class SandboxSdkClient extends BaseSandboxService {
         }
     }
 
+    /**
+     * Migration: Patch vite.config.ts to support PORT environment variable
+     * This ensures existing apps can use dynamic ports in containers
+     */
+    private async patchViteConfigForPort(instanceId: string): Promise<void> {
+        try {
+            const session = await this.getInstanceSession(instanceId);
+
+            // Check if vite.config.ts exists
+            const checkResult = await session.exec(`test -f vite.config.ts && echo "exists" || echo "not found"`);
+            if (!checkResult.stdout.includes('exists')) {
+                this.logger.info('No vite.config.ts found, skipping port patch', { instanceId });
+                return;
+            }
+
+            // Read current config
+            const readResult = await session.readFile(`/workspace/${instanceId}/vite.config.ts`);
+            if (!readResult.success) {
+                this.logger.warn('Failed to read vite.config.ts for patching', { instanceId });
+                return;
+            }
+
+            let content = readResult.content;
+
+            // Check if already patched (has PORT environment variable reference)
+            if (/process\.env\.PORT/.test(content)) {
+                this.logger.info('vite.config.ts already has PORT configuration', { instanceId });
+                return;
+            }
+
+            this.logger.info('Patching vite.config.ts to support PORT environment variable', { instanceId });
+
+            // Apply the same transformation as customizeViteConfig
+            const hasServerConfig = /server\s*:\s*{/.test(content);
+
+            if (hasServerConfig) {
+                // Check if port configuration exists
+                const hasPortConfig = /port\s*:/.test(content);
+
+                if (!hasPortConfig) {
+                    // Add port configuration to existing server block
+                    content = content.replace(
+                        /(server\s*:\s*{)/,
+                        `$1\n\t\tport: parseInt(process.env.PORT || '5173', 10),\n\t\thost: '0.0.0.0',`
+                    );
+                } else {
+                    // Replace existing port configuration
+                    content = content.replace(
+                        /port\s*:\s*[^,\n}]+/,
+                        `port: parseInt(process.env.PORT || '5173', 10)`
+                    );
+                    // Add host if missing
+                    if (!/host\s*:/.test(content)) {
+                        content = content.replace(
+                            /(server\s*:\s*{)/,
+                            `$1\n\t\thost: '0.0.0.0',`
+                        );
+                    }
+                }
+            } else {
+                // Add entire server configuration block
+                if (/plugins\s*:\s*\[/.test(content)) {
+                    content = content.replace(
+                        /(plugins\s*:\s*\[)/,
+                        `server: {\n\t\tport: parseInt(process.env.PORT || '5173', 10),\n\t\thost: '0.0.0.0',\n\t\tallowedHosts: true,\n\t},\n\n\t$1`
+                    );
+                } else {
+                    content = content.replace(
+                        /(\n\}\);?\s*$)/,
+                        `\n\tserver: {\n\t\tport: parseInt(process.env.PORT || '5173', 10),\n\t\thost: '0.0.0.0',\n\t\tallowedHosts: true,\n\t},$1`
+                    );
+                }
+            }
+
+            // Write patched config back
+            const writeResult = await session.writeFile(`/workspace/${instanceId}/vite.config.ts`, content);
+            if (writeResult.success) {
+                this.logger.info('Successfully patched vite.config.ts for PORT support', { instanceId });
+            } else {
+                this.logger.warn('Failed to write patched vite.config.ts', { instanceId });
+            }
+        } catch (error) {
+            // Non-blocking - log and continue
+            this.logger.warn('Error patching vite.config.ts', { instanceId, error: error instanceof Error ? error.message : 'Unknown error' });
+        }
+    }
+
     private async setupInstance(instanceId: string, projectName: string, localEnvVars?: Record<string, string>): Promise<{previewURL: string, tunnelURL: string, processId: string, allocatedPort: number} | undefined> {
         try {
             const sandbox = this.getSandbox();
@@ -948,6 +1035,10 @@ export class SandboxSdkClient extends BaseSandboxService {
                     if (localEnvVars) {
                         await this.setLocalEnvVars(instanceId, localEnvVars);
                     }
+
+                    // Migration: Patch vite.config.ts to support PORT environment variable
+                    await this.patchViteConfigForPort(instanceId);
+
                     // Start dev server on allocated port
                     const processId = await this.startDevServer(instanceId, allocatedPort);
                     this.logger.info('Instance created successfully', { instanceId, processId, port: allocatedPort });
