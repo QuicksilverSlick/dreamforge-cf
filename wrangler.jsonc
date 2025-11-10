@@ -12,7 +12,7 @@
         "binding": "CF_VERSION_METADATA"
     },
 	"dev": {
-		"enable_containers": false
+		"enable_containers": true
 	},
 	"assets": {
 		"directory": "dist",
@@ -61,11 +61,15 @@
 	"containers": [
 		{
 			"class_name": "UserAppSandboxService",
-            "image": "registry.cloudflare.com/00354a4cf3fd5ff6f93e809b915f0f58/dreamforge-cf-userappsandboxservice:b56606b7",
+            "image": "./SandboxDockerfile",
             // Altering max_instances value will have no effect. Please use the MAX_SANDBOX_INSTANCES var instead.
 			"max_instances": 10,
             // ATTENTION: Altering instance_type value will have no effect. Please use the SANDBOX_INSTANCE_TYPE var instead.
-            "instance_type": "standard-3",
+            "instance_type": {
+                "vcpu": 4,
+                "memory_mib": 8192,
+                "disk_mb": 10240
+            },
             "rollout_step_percentage": 100
 		}
 	],
@@ -141,16 +145,6 @@
 	"workers_dev": false,
     "preview_urls": false,
     "routes": [
-        {
-            "pattern": "getdreamforge.com/*",
-            "custom_domain": false,
-            "zone_id": "157d05cb90f7190794c33e37bef447db"
-        },
-        {
-            "pattern": "www.getdreamforge.com/*",
-            "custom_domain": false,
-            "zone_id": "157d05cb90f7190794c33e37bef447db"
-        },
         {
             "pattern": "app.getdreamforge.com",
             "custom_domain": true

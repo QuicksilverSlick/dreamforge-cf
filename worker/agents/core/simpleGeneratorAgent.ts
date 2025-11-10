@@ -349,17 +349,15 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
         // Fill the template cache
         await this.ensureTemplateDetails();
 
-        // Ensure sandbox instance exists for older apps
-        if (!this.state.sandboxInstanceId) {
-            this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} has no sandbox instance, creating one`);
-            try {
-                await this.deployToSandbox();
-                this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} sandbox instance created successfully`);
-            } catch (error) {
-                this.logger().error(`Agent ${this.getAgentId()} session: ${this.state.sessionId} failed to create sandbox instance:`, error);
-            }
-        } else {
-            this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} sandbox instance already exists: ${this.state.sandboxInstanceId}`);
+        // Ensure sandbox instance exists and is healthy
+        // deployToSandbox() with redeploy=false will health-check existing instances
+        // and create new ones only if needed (via DeploymentManager.ensureInstance)
+        this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} ensuring sandbox instance (health check + create if needed)`);
+        try {
+            await this.deployToSandbox([], false); // redeploy=false triggers health check logic
+            this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} sandbox instance verified/created successfully`);
+        } catch (error) {
+            this.logger().error(`Agent ${this.getAgentId()} session: ${this.state.sessionId} failed to ensure sandbox instance:`, error);
         }
 
         this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} onStart processed successfully`);
