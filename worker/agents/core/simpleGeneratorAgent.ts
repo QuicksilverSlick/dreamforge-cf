@@ -348,6 +348,20 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
         this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} onStart being processed, template name: ${this.state.templateName}`);
         // Fill the template cache
         await this.ensureTemplateDetails();
+
+        // Ensure sandbox instance exists for older apps
+        if (!this.state.sandboxInstanceId) {
+            this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} has no sandbox instance, creating one`);
+            try {
+                await this.deployToSandbox();
+                this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} sandbox instance created successfully`);
+            } catch (error) {
+                this.logger().error(`Agent ${this.getAgentId()} session: ${this.state.sessionId} failed to create sandbox instance:`, error);
+            }
+        } else {
+            this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} sandbox instance already exists: ${this.state.sandboxInstanceId}`);
+        }
+
         this.logger().info(`Agent ${this.getAgentId()} session: ${this.state.sessionId} onStart processed successfully`);
     }
 
