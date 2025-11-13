@@ -10,6 +10,7 @@ import { setupGitHubExporterRoutes } from './githubExporterRoutes';
 import { setupCodegenRoutes } from './codegenRoutes';
 import { setupScreenshotRoutes } from './imagesRoutes';
 import { setupSentryRoutes } from './sentryRoutes';
+import { setupBYOPRoutes } from './byopRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
 import { setupStatusRoutes } from './statusRoutes';
@@ -55,6 +56,9 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // GitHub Exporter routes
     setupGitHubExporterRoutes(app);
+
+    // BYOP (Bring Your Own Project) routes
+    setupBYOPRoutes(app);
 
     // Screenshot serving routes (public)
     setupScreenshotRoutes(app);

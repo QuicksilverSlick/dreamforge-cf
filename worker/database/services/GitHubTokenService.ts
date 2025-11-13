@@ -112,7 +112,7 @@ export class GitHubTokenService extends BaseService {
                 userId,
                 encryptedAccessToken,
                 tokenType: 'bearer',
-                scopes: JSON.stringify(scopes),
+                scopes,
                 expiresAt: null,
                 lastUsed: null,
                 isActive: true,
@@ -175,11 +175,10 @@ export class GitHubTokenService extends BaseService {
                 .where(eq(schema.githubTokens.id, tokenRecord.id));
 
             const decryptedToken = await this.decryptToken(tokenRecord.encryptedAccessToken);
-            const scopes = JSON.parse(tokenRecord.scopes as string) as string[];
 
             return {
                 token: decryptedToken,
-                scopes
+                scopes: tokenRecord.scopes
             };
         } catch (error) {
             this.logger.error('Failed to get GitHub token', error);

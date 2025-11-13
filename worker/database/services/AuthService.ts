@@ -425,7 +425,8 @@ export class AuthService extends BaseService {
             if (provider === 'github') {
                 try {
                     const githubTokenService = new GitHubTokenService(this.env);
-                    const scopes = tokens.scope?.split(' ') || [];
+                    // GitHub scopes are defined in GitHubOAuthProvider.scopes
+                    const scopes = ['read:user', 'user:email', 'repo'];
                     await githubTokenService.storeToken(user.id, tokens.accessToken, scopes);
                     logger.info('GitHub access token stored for BYOP', { userId: user.id, scopes: scopes.join(',') });
                 } catch (error) {

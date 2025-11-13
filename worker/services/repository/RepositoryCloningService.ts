@@ -4,7 +4,7 @@
  */
 
 import { createLogger } from '../../logger';
-import type { SandboxSDKClient } from '../sandbox/sandboxSdkClient';
+import type { SandboxSdkClient } from '../sandbox/sandboxSdkClient';
 
 const logger = createLogger('RepositoryCloningService');
 
@@ -32,7 +32,7 @@ export class RepositoryCloningService {
      * Clone a GitHub repository into a sandbox container
      */
     static async cloneRepository(
-        sandboxClient: SandboxSDKClient,
+        sandboxClient: SandboxSdkClient,
         options: CloneRepositoryOptions
     ): Promise<CloneResult> {
         try {
@@ -196,7 +196,7 @@ export class RepositoryCloningService {
      * Count files in cloned repository (excluding .git directory)
      */
     private static async countRepositoryFiles(
-        sandboxClient: SandboxSDKClient,
+        sandboxClient: SandboxSdkClient,
         repositoryPath: string
     ): Promise<number> {
         try {
@@ -221,7 +221,7 @@ export class RepositoryCloningService {
      * List files in cloned repository
      */
     static async listRepositoryFiles(
-        sandboxClient: SandboxSDKClient,
+        sandboxClient: SandboxSdkClient,
         repositoryPath: string,
         maxDepth: number = 3
     ): Promise<string[]> {
@@ -234,8 +234,8 @@ export class RepositoryCloningService {
             if (listResult.exitCode === 0) {
                 return listResult.stdout
                     .split('\n')
-                    .filter(line => line.trim().length > 0)
-                    .map(path => path.replace(repositoryPath + '/', ''));
+                    .filter((line: string) => line.trim().length > 0)
+                    .map((path: string) => path.replace(repositoryPath + '/', ''));
             }
 
             return [];
@@ -249,7 +249,7 @@ export class RepositoryCloningService {
      * Read file content from cloned repository
      */
     static async readRepositoryFile(
-        sandboxClient: SandboxSDKClient,
+        sandboxClient: SandboxSdkClient,
         filePath: string
     ): Promise<string | null> {
         try {
@@ -278,7 +278,7 @@ export class RepositoryCloningService {
      * Delete cloned repository from container
      */
     static async deleteRepository(
-        sandboxClient: SandboxSDKClient,
+        sandboxClient: SandboxSdkClient,
         repositoryPath: string
     ): Promise<boolean> {
         try {

@@ -2343,21 +2343,62 @@ echo "password=${accessToken}"
         return sanitized;
     }
 
+
     /**
-     * Create authenticated GitHub URL with access token
-     * @deprecated Use GIT_ASKPASS credential helper instead for security
+     * Read a file as a string
      */
-    private createAuthenticatedGitUrl(url: string, accessToken: string): string {
-        if (url.startsWith('git@github.com:')) {
-            url = url.replace('git@github.com:', 'https://github.com/');
+    async readFileAsString(filePath: string): Promise<string | null> {
+        try {
+            const session = await this.getDefaultSession();
+            const result = await session.readFile(filePath);
+
+            if (!result.success) {
+                return null;
+            }
+
+            return result.content;
+        } catch (error) {
+            this.logger.warn('Failed to read file as string', { filePath, error });
+            return null;
         }
+    }
 
-        if (!url.startsWith('https://')) {
-            url = 'https://github.com/' + url;
+    /**
+     * List files in a directory with optional pattern matching
+     */
+    async listRepositoryFiles(options: {
+        repositoryPath: string;
+        patterns?: string[];
+        maxFiles?: number;
+    }): Promise<string[]> {
+        const { repositoryPath, patterns = ['*.ts', '*.tsx', '*.js', '*.jsx', '*.json', '*.md'], maxFiles = 1000 } = options;
+
+        try {
+            const session = await this.getDefaultSession();
+
+            // Build find command to list files matching patterns
+            const patternArgs = patterns.map(p => `-name "${p}"`).join(' -o ');
+            const findCommand = `find "${repositoryPath}" -type f \\( ${patternArgs} \\) ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*/dist/*" ! -path "*/build/*" | head -n ${maxFiles}`;
+
+            const result = await session.exec(findCommand, { timeout: 30000 });
+
+            if (result.exitCode !== 0) {
+                this.logger.warn('Failed to list repository files', {
+                    repositoryPath,
+                    stderr: result.stderr
+                });
+                return [];
+            }
+
+            const files = result.stdout
+                .trim()
+                .split('\n')
+                .filter(f => f.length > 0);
+
+            return files;
+        } catch (error) {
+            this.logger.error('Error listing repository files', { error });
+            return [];
         }
-
-        url = url.replace(/\.git$/, '');
-
-        return url.replace('https://github.com/', `https://${accessToken}@github.com/`);
     }
 }

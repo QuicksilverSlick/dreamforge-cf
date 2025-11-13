@@ -131,8 +131,8 @@ export class BlueprintGenerationService {
 
             const prompt = this.buildAnalysisPrompt(context);
 
-            // Use Gemini 2.5 Pro with thinking mode for deep analysis
-            const response = await ai.run('@cf/google/gemini-2.0-flash-thinking-exp-1219', {
+            // Use Gemini 2.0 Flash Thinking for deep analysis
+            const response = await ai.run('@cf/google/gemini-2.0-flash-thinking-exp-1219' as any, {
                 prompt,
                 max_tokens: 8000,
                 temperature: 0.7

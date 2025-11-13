@@ -6,7 +6,6 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { createLogger } from '../../logger';
-import type { Env } from '../../types/worker-types';
 import { CodeAnalysisService } from '../../services/analysis/CodeAnalysisService';
 import { BlueprintGenerationService, type CodebaseContext, type GeneratedBlueprint } from '../../services/blueprint/BlueprintGenerationService';
 
@@ -187,7 +186,7 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
      */
     async getState(): Promise<AnalysisState | null> {
         if (!this.state) {
-            this.state = await this.ctx.storage.get<AnalysisState>('state');
+            this.state = await this.ctx.storage.get<AnalysisState>('state') ?? null;
         }
         return this.state;
     }
@@ -436,6 +435,8 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
                     repositoryUrl: string;
                     repositoryName: string;
                     clonePath: string;
+                    fileContents: Record<string, string>;
+                    packageJson?: Record<string, unknown>;
                 };
 
                 const result = await this.startAnalysis(body);

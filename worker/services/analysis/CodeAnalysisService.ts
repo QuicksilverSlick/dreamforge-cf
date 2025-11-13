@@ -330,7 +330,7 @@ export class CodeAnalysisService {
         });
 
         // Named exports
-        sourceFile.getExportedDeclarations().forEach((declarations, name) => {
+        sourceFile.getExportedDeclarations().forEach((_declarations, name) => {
             exports.push(name);
         });
 
