@@ -2132,4 +2132,137 @@ export class SandboxSdkClient extends BaseSandboxService {
         }
         return 'https';
     }
+
+    // ==========================================
+    // REPOSITORY CLONING (BYOP FEATURE)
+    // ==========================================
+
+    /**
+     * Clone a GitHub repository into the sandbox container
+     */
+    async cloneGitHubRepository(options: {
+        repositoryUrl: string;
+        accessToken: string;
+        targetPath?: string;
+        branch?: string;
+    }): Promise<{
+        success: boolean;
+        clonePath: string;
+        error?: string;
+        repositoryName?: string;
+        filesCount?: number;
+    }> {
+        try {
+            const {
+                repositoryUrl,
+                accessToken,
+                targetPath = '/app/imported-repo',
+                branch
+            } = options;
+
+            const session = await this.getDefaultSession();
+
+            const repoName = this.extractRepositoryName(repositoryUrl);
+            if (!repoName) {
+                return {
+                    success: false,
+                    clonePath: targetPath,
+                    error: 'Invalid repository URL'
+                };
+            }
+
+            const authenticatedUrl = this.createAuthenticatedGitUrl(repositoryUrl, accessToken);
+
+            let cloneCommand = `git clone --depth=1 --single-branch`;
+            if (branch) {
+                cloneCommand += ` --branch ${branch}`;
+            }
+            cloneCommand += ` "${authenticatedUrl}" "${targetPath}"`;
+
+            this.logger.info('Cloning repository', {
+                repository: repoName,
+                targetPath,
+                branch: branch || 'default'
+            });
+
+            const cloneResult = await session.exec(cloneCommand, { timeout: 120000 });
+
+            if (cloneResult.exitCode !== 0) {
+                const errorMessage = cloneResult.stderr || 'Clone failed';
+                this.logger.error('Repository clone failed', {
+                    repository: repoName,
+                    exitCode: cloneResult.exitCode,
+                    stderr: errorMessage
+                });
+
+                return {
+                    success: false,
+                    clonePath: targetPath,
+                    error: errorMessage
+                };
+            }
+
+            const countResult = await session.exec(
+                `find "${targetPath}" -type f ! -path "*/.git/*" | wc -l`,
+                { timeout: 30000 }
+            );
+            const filesCount = countResult.exitCode === 0
+                ? parseInt(countResult.stdout.trim(), 10) || 0
+                : 0;
+
+            this.logger.info('Repository cloned successfully', {
+                repository: repoName,
+                clonePath: targetPath,
+                filesCount
+            });
+
+            return {
+                success: true,
+                clonePath: targetPath,
+                filesCount,
+                repositoryName: repoName
+            };
+
+        } catch (error) {
+            this.logger.error('Error cloning repository', error);
+            return {
+                success: false,
+                clonePath: options.targetPath || '/app/imported-repo',
+                error: error instanceof Error ? error.message : 'Unknown error'
+            };
+        }
+    }
+
+    /**
+     * Extract repository name from GitHub URL
+     */
+    private extractRepositoryName(url: string): string | null {
+        try {
+            const httpsMatch = url.match(/github\.com[/:]([\w-]+\/[\w-]+?)(\.git)?$/);
+            if (httpsMatch) {
+                return httpsMatch[1];
+            }
+            return null;
+        } catch (error) {
+            this.logger.error('Failed to extract repository name', error);
+            return null;
+        }
+    }
+
+    /**
+     * Create authenticated GitHub URL with access token
+     */
+    private createAuthenticatedGitUrl(url: string, accessToken: string): string {
+        if (url.startsWith('git@github.com:')) {
+            url = url.replace('git@github.com:', 'https://github.com/');
+        }
+
+        if (!url.startsWith('https://')) {
+            url = 'https://github.com/' + url;
+        }
+
+        url = url.replace(/\.git$/, '');
+
+        return url.replace('https://github.com/', `https://${accessToken}@github.com/`);
+    }
 }
