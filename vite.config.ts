@@ -10,7 +10,13 @@ import tailwindcss from '@tailwindcss/vite';
 // https://vite.dev/config/
 export default defineConfig({
 	optimizeDeps: {
-		exclude: ['format', 'editor.all'],
+		exclude: [
+			'format',
+			'editor.all',
+			'ts-morph',
+			'@ts-morph/common',
+			'@ts-morph/bootstrap',
+		],
 		include: ['monaco-editor/esm/vs/editor/editor.api'],
 		force: true,
 	},
@@ -44,6 +50,12 @@ export default defineConfig({
 			'shared': path.resolve(__dirname, './shared'),
 			'worker': path.resolve(__dirname, './worker'),
 		},
+	},
+
+	ssr: {
+		// Prevent worker code from being processed for the client
+		noExternal: [],
+		external: ['ts-morph', '@ts-morph/common', '@ts-morph/bootstrap'],
 	},
 
 	// Configure for Prisma + Cloudflare Workers compatibility

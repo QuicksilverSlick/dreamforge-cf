@@ -6,7 +6,7 @@
 	"scripts": {
 		"setup": "tsx scripts/setup.ts",
 		"prepare": "husky",
-		"dev": "DEV_MODE=true vite",
+		"dev": "DEV_MODE=true vite --force",
 		"build": "tsc -b --incremental && vite build && tsx scripts/copy-landing-pages.ts",
 		"typecheck": "tsc -b --incremental --noEmit",
 		"lint": "eslint .",
