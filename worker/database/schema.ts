@@ -360,6 +360,38 @@ export const githubTokens = sqliteTable('github_tokens', {
 }));
 
 /**
+ * Blueprint Cache table - Cache completed BYOP blueprints for faster retrieval
+ */
+export const blueprintCache = sqliteTable('blueprint_cache', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+    // Repository Information
+    repositoryUrl: text('repository_url').notNull(),
+    repositoryName: text('repository_name').notNull(),
+    branch: text('branch').notNull(),
+
+    // Blueprint Data
+    blueprint: text('blueprint', { mode: 'json' }).notNull(),
+    completenessPercentage: integer('completeness_percentage').notNull(),
+
+    // Metadata
+    fileCount: integer('file_count'),
+    totalLinesOfCode: integer('total_lines_of_code'),
+    framework: text('framework'),
+
+    // Cache Management
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    accessCount: integer('access_count').default(0),
+    lastAccessedAt: integer('last_accessed_at', { mode: 'timestamp' }),
+}, (table) => ({
+    userIdx: index('blueprint_cache_user_idx').on(table.userId),
+    repositoryIdx: index('blueprint_cache_repository_idx').on(table.repositoryUrl, table.branch),
+    expiresAtIdx: index('blueprint_cache_expires_at_idx').on(table.expiresAt),
+}));
+
+/**
  * OAuthStates table - Manage OAuth flow states securely
  */
 export const oauthStates = sqliteTable('oauth_states', {
@@ -624,6 +656,9 @@ export type NewOAuthState = typeof oauthStates.$inferInsert;
 
 export type GitHubToken = typeof githubTokens.$inferSelect;
 export type NewGitHubToken = typeof githubTokens.$inferInsert;
+
+export type BlueprintCache = typeof blueprintCache.$inferSelect;
+export type NewBlueprintCache = typeof blueprintCache.$inferInsert;
 
 export type SystemSetting = typeof systemSettings.$inferSelect;
 export type NewSystemSetting = typeof systemSettings.$inferInsert;

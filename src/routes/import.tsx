@@ -17,7 +17,7 @@ export default function ImportPage() {
     const [showBlueprint, setShowBlueprint] = useState(false);
 
     const { repositories, loading: loadingRepos, error: reposError, refetch: refetchRepos } = useGitHubRepositories();
-    const { importRepository, loading: importing, error: importError } = useImportRepository();
+    const { importRepository, loading: importing, error: importError, retryCount } = useImportRepository();
     const { status: analysisStatus } = useAnalysisStatus(analysisId);
     const { blueprint, error: blueprintError } = useBlueprint(
         analysisStatus?.status === 'completed' ? analysisId : null
@@ -100,6 +100,15 @@ export default function ImportPage() {
                             importing={importing}
                             onRefresh={refetchRepos}
                         />
+                    )}
+
+                    {/* Retry Status */}
+                    {retryCount > 0 && importing && (
+                        <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                            <p className="text-yellow-400 text-sm">
+                                Connection issue detected. Retrying... (Attempt {retryCount}/3)
+                            </p>
+                        </div>
                     )}
 
                     {/* Error Messages */}

@@ -7,8 +7,10 @@ import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
 import { GitHubTokenService } from '../../../database/services/GitHubTokenService';
+import { BlueprintCacheService } from '../../../database/services/BlueprintCacheService';
 import { Octokit } from '@octokit/rest';
 import { SandboxSdkClient } from '../../../services/sandbox/sandboxSdkClient';
+import type { GeneratedBlueprint } from '../../../services/blueprint/BlueprintGenerationService';
 
 const logger = createLogger('BYOPController');
 
@@ -131,6 +133,31 @@ export class BYOPController extends BaseController {
                 repositoryUrl,
                 branch: branch || 'default'
             });
+
+            // Check cache first
+            const cacheService = new BlueprintCacheService(env.DB);
+            const effectiveBranch = branch || 'main';
+            const cached = await cacheService.get(user.id, repositoryUrl, effectiveBranch);
+
+            if (cached) {
+                logger.info('Cache hit - returning cached blueprint immediately', {
+                    userId: user.id,
+                    repositoryUrl,
+                    cacheId: cached.id,
+                    completeness: cached.completenessPercentage
+                });
+
+                // Return cached result with a special flag
+                return this.createSuccessResponse({
+                    success: true,
+                    fromCache: true,
+                    analysisId: cached.id,
+                    repositoryName: cached.repositoryName,
+                    filesCount: cached.fileCount,
+                    blueprint: JSON.parse(cached.blueprint),
+                    message: 'Blueprint retrieved from cache'
+                });
+            }
 
             // Step 1: Get sandbox instance
             const sandboxInstanceId = await this.getOrCreateSandboxInstance(user.id);
@@ -290,6 +317,30 @@ export class BYOPController extends BaseController {
             if (!state.analysisResult?.blueprint) {
                 return this.createErrorResponse('Blueprint not available', 404);
             }
+
+            // Cache the blueprint for future use
+            const cacheService = new BlueprintCacheService(env.DB);
+            const blueprint = state.analysisResult.blueprint as GeneratedBlueprint;
+            const repositoryUrl = (state as { repositoryUrl?: string }).repositoryUrl || 'unknown';
+            const repositoryName = (state as { repositoryName?: string }).repositoryName || 'unknown';
+
+            // Save to cache (fire and forget - don't block response)
+            cacheService.set({
+                userId: user.id,
+                repositoryUrl,
+                repositoryName,
+                branch: 'main', // Default branch - in production you'd track this
+                blueprint,
+                fileCount: state.analysisResult.sourceFiles?.length,
+                totalLinesOfCode: state.analysisResult.sourceFiles?.reduce(
+                    (sum: number, file: { linesOfCode?: number }) => sum + (file.linesOfCode || 0),
+                    0
+                ),
+                framework: state.analysisResult.framework as string | undefined,
+                ttlDays: 7
+            }).catch((error) => {
+                logger.error('Failed to cache blueprint (non-blocking)', { error });
+            });
 
             return this.createSuccessResponse({
                 blueprint: state.analysisResult.blueprint

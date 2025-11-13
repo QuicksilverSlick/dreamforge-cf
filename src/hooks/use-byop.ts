@@ -59,16 +59,20 @@ export function useGitHubRepositories() {
 }
 
 /**
- * Import a GitHub repository for analysis
+ * Import a GitHub repository for analysis with automatic retry logic
  */
 export function useImportRepository() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [retryCount, setRetryCount] = useState(0);
 
-    const importRepository = useCallback(async (request: ImportRepositoryRequest): Promise<ImportRepositoryResponse | null> => {
-        setLoading(true);
-        setError(null);
+    const MAX_RETRIES = 3;
+    const INITIAL_RETRY_DELAY = 1000; // 1 second
 
+    const attemptImport = useCallback(async (
+        request: ImportRepositoryRequest,
+        attempt: number
+    ): Promise<ImportRepositoryResponse | null> => {
         try {
             const response = await fetch(`${API_BASE}/import`, {
                 method: 'POST',
@@ -81,11 +85,51 @@ export function useImportRepository() {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ error: 'Failed to import repository' }));
-                throw new Error(errorData.error || 'Failed to import repository');
+                const errorMessage = errorData.error || 'Failed to import repository';
+
+                // Retry on network errors or 5xx server errors
+                if (response.status >= 500 || response.status === 0) {
+                    if (attempt < MAX_RETRIES) {
+                        const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
+                        console.log(`Import failed with ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+                        setRetryCount(attempt + 1);
+
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        return attemptImport(request, attempt + 1);
+                    }
+                }
+
+                throw new Error(errorMessage);
             }
 
             const data = await response.json();
+            setRetryCount(0);
             return data.data;
+        } catch (err) {
+            // Retry on network errors (like connection timeout, DNS failure)
+            const isNetworkError = err instanceof TypeError || (err instanceof Error && err.message.includes('fetch'));
+
+            if (isNetworkError && attempt < MAX_RETRIES) {
+                const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
+                console.log(`Network error, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+                setRetryCount(attempt + 1);
+
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return attemptImport(request, attempt + 1);
+            }
+
+            throw err;
+        }
+    }, []);
+
+    const importRepository = useCallback(async (request: ImportRepositoryRequest): Promise<ImportRepositoryResponse | null> => {
+        setLoading(true);
+        setError(null);
+        setRetryCount(0);
+
+        try {
+            const result = await attemptImport(request, 0);
+            return result;
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Unknown error';
             setError(errorMessage);
@@ -93,12 +137,13 @@ export function useImportRepository() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [attemptImport]);
 
     return {
         importRepository,
         loading,
         error,
+        retryCount,
     };
 }
 
