@@ -20,46 +20,153 @@ export class CodeAnalysisService {
         fileContents: Map<string, string>
     ): Promise<SourceFileAnalysis[]> {
         try {
-            const project = new Project({
-                useInMemoryFileSystem: true,
-                compilerOptions: {
-                    target: 99, // ESNext
-                    module: 99, // ESNext
-                    allowJs: true,
-                    checkJs: false,
-                    jsx: 2, // React
-                    strict: false
-                }
-            });
+            // Try ts-morph analysis first
+            return await this.analyzeWithTsMorph(fileContents);
+        } catch (error) {
+            logger.warn('ts-morph analysis failed, falling back to basic analysis', error);
 
-            const analyses: SourceFileAnalysis[] = [];
+            // Fallback to basic regex-based analysis
+            return this.analyzeWithRegex(fileContents);
+        }
+    }
 
-            for (const [filePath, content] of fileContents.entries()) {
-                // Only analyze TypeScript/JavaScript files
-                if (!this.isAnalyzableFile(filePath)) {
-                    continue;
-                }
+    /**
+     * Analyze using ts-morph (full AST parsing)
+     */
+    private static async analyzeWithTsMorph(
+        fileContents: Map<string, string>
+    ): Promise<SourceFileAnalysis[]> {
+        const project = new Project({
+            useInMemoryFileSystem: true,
+            compilerOptions: {
+                target: 99, // ESNext
+                module: 99, // ESNext
+                allowJs: true,
+                checkJs: false,
+                jsx: 2, // React
+                strict: false
+            }
+        });
 
-                try {
-                    const sourceFile = project.createSourceFile(filePath, content, {
-                        overwrite: true
-                    });
+        const analyses: SourceFileAnalysis[] = [];
 
-                    const analysis = this.analyzeSourceFile(sourceFile, filePath);
-                    analyses.push(analysis);
-
-                } catch (error) {
-                    logger.warn(`Failed to analyze file: ${filePath}`, error);
-                }
+        for (const [filePath, content] of fileContents.entries()) {
+            if (!this.isAnalyzableFile(filePath)) {
+                continue;
             }
 
-            logger.info(`Analyzed ${analyses.length} source files`);
-            return analyses;
+            try {
+                const sourceFile = project.createSourceFile(filePath, content, {
+                    overwrite: true
+                });
 
-        } catch (error) {
-            logger.error('Source file analysis failed', error);
-            return [];
+                const analysis = this.analyzeSourceFile(sourceFile, filePath);
+                analyses.push(analysis);
+
+            } catch (error) {
+                logger.warn(`Failed to analyze file: ${filePath}`, error);
+            }
         }
+
+        logger.info(`Analyzed ${analyses.length} source files with ts-morph`);
+        return analyses;
+    }
+
+    /**
+     * Fallback: Basic regex-based analysis when ts-morph is unavailable
+     */
+    private static analyzeWithRegex(
+        fileContents: Map<string, string>
+    ): SourceFileAnalysis[] {
+        const analyses: SourceFileAnalysis[] = [];
+
+        for (const [filePath, content] of fileContents.entries()) {
+            if (!this.isAnalyzableFile(filePath)) {
+                continue;
+            }
+
+            const lines = content.split('\n');
+            const language = this.detectLanguage(filePath);
+
+            // Extract functions using regex
+            const functionPattern = /(?:function|const|let|var)\s+(\w+)\s*(?:=\s*)?(?:async\s+)?(?:\([^)]*\)|\(.*?\))\s*(?:=>|{)/g;
+            const functions: FunctionInfo[] = [];
+            let match;
+            while ((match = functionPattern.exec(content)) !== null) {
+                functions.push({
+                    name: match[1],
+                    parameters: [],
+                    isAsync: content.substring(Math.max(0, match.index - 10), match.index).includes('async'),
+                    isExported: content.substring(Math.max(0, match.index - 20), match.index).includes('export'),
+                    hasDocumentation: false
+                });
+            }
+
+            // Extract classes using regex
+            const classPattern = /class\s+(\w+)(?:\s+extends\s+(\w+))?/g;
+            const classes: ClassInfo[] = [];
+            while ((match = classPattern.exec(content)) !== null) {
+                classes.push({
+                    name: match[1],
+                    extends: match[2],
+                    methods: [],
+                    properties: [],
+                    isExported: content.substring(Math.max(0, match.index - 20), match.index).includes('export')
+                });
+            }
+
+            // Extract imports
+            const importPattern = /import\s+.*?from\s+['"]([^'"]+)['"]/g;
+            const imports: string[] = [];
+            while ((match = importPattern.exec(content)) !== null) {
+                imports.push(match[1]);
+            }
+
+            // Extract TODO/FIXME comments
+            const todos = this.extractCommentsFromText(content, filePath, /TODO:?\s*(.+)/i);
+            const fixmes = this.extractCommentsFromText(content, filePath, /FIXME:?\s*(.+)/i);
+
+            analyses.push({
+                path: filePath,
+                language,
+                linesOfCode: lines.length,
+                functions,
+                classes,
+                imports,
+                exports: [],
+                hasTests: this.detectTestFile(filePath),
+                todos,
+                fixmes
+            });
+        }
+
+        logger.info(`Analyzed ${analyses.length} source files with regex fallback`);
+        return analyses;
+    }
+
+    /**
+     * Extract comments using regex
+     */
+    private static extractCommentsFromText(
+        content: string,
+        filePath: string,
+        pattern: RegExp
+    ): Array<{ file: string; line: number; text: string }> {
+        const results: Array<{ file: string; line: number; text: string }> = [];
+        const lines = content.split('\n');
+
+        lines.forEach((line, index) => {
+            const match = line.match(pattern);
+            if (match) {
+                results.push({
+                    file: filePath,
+                    line: index + 1,
+                    text: match[1].trim()
+                });
+            }
+        });
+
+        return results;
     }
 
     /**

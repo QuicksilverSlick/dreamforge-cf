@@ -81,9 +81,20 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
         clonePath: string;
         fileContents: Record<string, string>;
         packageJson?: Record<string, unknown>;
-    }): Promise<{ success: boolean; analysisId: string }> {
+    }): Promise<{ success: boolean; analysisId: string; error?: string }> {
         try {
             const analysisId = this.ctx.id.toString();
+
+            // Validate input size limits
+            const validation = this.validateInput(options.fileContents);
+            if (!validation.valid) {
+                logger.error('Input validation failed', validation);
+                return {
+                    success: false,
+                    analysisId: '',
+                    error: validation.error
+                };
+            }
 
             this.state = {
                 repositoryUrl: options.repositoryUrl,
@@ -102,7 +113,8 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
             logger.info('Analysis initialized', {
                 analysisId,
                 repository: options.repositoryName,
-                fileCount: this.state.fileCount
+                fileCount: this.state.fileCount,
+                totalSize: validation.totalSize
             });
 
             this.executeAnalysis().catch((error) => {
@@ -117,9 +129,57 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
             logger.error('Failed to start analysis', error);
             return {
                 success: false,
-                analysisId: ''
+                analysisId: '',
+                error: error instanceof Error ? error.message : 'Unknown error'
             };
         }
+    }
+
+    /**
+     * Validate input file contents for size limits
+     */
+    private validateInput(fileContents: Record<string, string>): {
+        valid: boolean;
+        error?: string;
+        totalSize?: number;
+    } {
+        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per file
+        const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB total
+        const MAX_FILES = 1000; // Maximum number of files
+
+        const fileCount = Object.keys(fileContents).length;
+        if (fileCount > MAX_FILES) {
+            return {
+                valid: false,
+                error: `Too many files (${fileCount}). Maximum allowed: ${MAX_FILES}`
+            };
+        }
+
+        let totalSize = 0;
+        for (const [path, content] of Object.entries(fileContents)) {
+            const fileSize = new Blob([content]).size;
+
+            if (fileSize > MAX_FILE_SIZE) {
+                return {
+                    valid: false,
+                    error: `File too large: ${path} (${(fileSize / 1024 / 1024).toFixed(2)}MB). Maximum: 5MB`
+                };
+            }
+
+            totalSize += fileSize;
+        }
+
+        if (totalSize > MAX_TOTAL_SIZE) {
+            return {
+                valid: false,
+                error: `Total size too large (${(totalSize / 1024 / 1024).toFixed(2)}MB). Maximum: 50MB`
+            };
+        }
+
+        return {
+            valid: true,
+            totalSize
+        };
     }
 
     /**
@@ -136,6 +196,8 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
      * Execute the codebase analysis (runs asynchronously)
      */
     private async executeAnalysis(): Promise<void> {
+        const ANALYSIS_TIMEOUT = 300000; // 5 minutes
+
         try {
             if (!this.state) {
                 throw new Error('Analysis state not initialized');
@@ -152,7 +214,15 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
                 progress: 30
             });
 
-            const analysisResult = await this.performAnalysis();
+            // Execute analysis with timeout
+            const timeoutPromise = new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('Analysis timeout after 5 minutes')), ANALYSIS_TIMEOUT)
+            );
+
+            const analysisResult = await Promise.race([
+                this.performAnalysis(),
+                timeoutPromise
+            ]);
 
             await this.updateState({
                 status: 'completed',

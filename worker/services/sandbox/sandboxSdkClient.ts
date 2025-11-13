@@ -2171,13 +2171,49 @@ export class SandboxSdkClient extends BaseSandboxService {
                 };
             }
 
-            const authenticatedUrl = this.createAuthenticatedGitUrl(repositoryUrl, accessToken);
+            // Validate repository URL to prevent injection attacks
+            if (!this.validateRepositoryUrl(repositoryUrl)) {
+                return {
+                    success: false,
+                    clonePath: targetPath,
+                    error: 'Invalid repository URL format'
+                };
+            }
 
-            let cloneCommand = `git clone --depth=1 --single-branch`;
+            // Create credential helper script to avoid token exposure in command line
+            const credHelperPath = '/tmp/git-credential-helper.sh';
+            const credHelperScript = `#!/bin/sh
+echo "username=oauth2"
+echo "password=${accessToken}"
+`;
+
+            // Write credential helper script
+            const writeResult = await session.exec(
+                `cat > ${credHelperPath} << 'CREDENTIAL_EOF'\n${credHelperScript}CREDENTIAL_EOF`,
+                { timeout: 5000 }
+            );
+
+            if (writeResult.exitCode !== 0) {
+                this.logger.error('Failed to create credential helper', { stderr: writeResult.stderr });
+                return {
+                    success: false,
+                    clonePath: targetPath,
+                    error: 'Failed to setup authentication'
+                };
+            }
+
+            // Make script executable
+            await session.exec(`chmod +x ${credHelperPath}`, { timeout: 5000 });
+
+            // Normalize repository URL (no token embedded)
+            const cleanUrl = this.normalizeRepositoryUrl(repositoryUrl);
+
+            // Build clone command with credential helper
+            let cloneCommand = `GIT_ASKPASS=${credHelperPath} git clone --depth=1 --single-branch`;
             if (branch) {
                 cloneCommand += ` --branch ${branch}`;
             }
-            cloneCommand += ` "${authenticatedUrl}" "${targetPath}"`;
+            cloneCommand += ` "${cleanUrl}" "${targetPath}"`;
 
             this.logger.info('Cloning repository', {
                 repository: repoName,
@@ -2187,8 +2223,12 @@ export class SandboxSdkClient extends BaseSandboxService {
 
             const cloneResult = await session.exec(cloneCommand, { timeout: 120000 });
 
+            // Clean up credential helper immediately
+            await session.exec(`rm -f ${credHelperPath}`, { timeout: 5000 });
+
             if (cloneResult.exitCode !== 0) {
-                const errorMessage = cloneResult.stderr || 'Clone failed';
+                // Sanitize error message to remove any potential token leaks
+                const errorMessage = this.sanitizeGitError(cloneResult.stderr || 'Clone failed');
                 this.logger.error('Repository clone failed', {
                     repository: repoName,
                     exitCode: cloneResult.exitCode,
@@ -2250,7 +2290,62 @@ export class SandboxSdkClient extends BaseSandboxService {
     }
 
     /**
+     * Validate repository URL to prevent injection attacks
+     */
+    private validateRepositoryUrl(url: string): boolean {
+        try {
+            // Allow github.com URLs only
+            const pattern = /^(https:\/\/github\.com\/|git@github\.com:)[\w-]+\/[\w.-]+(\.git)?$/;
+            return pattern.test(url);
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Normalize repository URL (remove credentials, standardize format)
+     */
+    private normalizeRepositoryUrl(url: string): string {
+        // Convert SSH to HTTPS
+        if (url.startsWith('git@github.com:')) {
+            url = url.replace('git@github.com:', 'https://github.com/');
+        }
+
+        // Ensure HTTPS protocol
+        if (!url.startsWith('https://')) {
+            url = 'https://github.com/' + url;
+        }
+
+        // Remove any embedded credentials
+        url = url.replace(/\/\/[^@]+@/, '//');
+
+        // Ensure .git suffix
+        if (!url.endsWith('.git')) {
+            url = url + '.git';
+        }
+
+        return url;
+    }
+
+    /**
+     * Sanitize git error messages to remove potential token leaks
+     */
+    private sanitizeGitError(errorMessage: string): string {
+        // Remove any URLs that might contain tokens
+        let sanitized = errorMessage.replace(/https:\/\/[^@]*@github\.com/g, 'https://github.com');
+
+        // Remove any base64-looking strings that might be tokens
+        sanitized = sanitized.replace(/[A-Za-z0-9+\/=]{30,}/g, '[REDACTED]');
+
+        // Remove anything that looks like an OAuth token
+        sanitized = sanitized.replace(/gh[ps]_[A-Za-z0-9]{30,}/g, '[REDACTED]');
+
+        return sanitized;
+    }
+
+    /**
      * Create authenticated GitHub URL with access token
+     * @deprecated Use GIT_ASKPASS credential helper instead for security
      */
     private createAuthenticatedGitUrl(url: string, accessToken: string): string {
         if (url.startsWith('git@github.com:')) {
