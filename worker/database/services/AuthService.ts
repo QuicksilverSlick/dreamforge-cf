@@ -8,6 +8,7 @@ import { eq, and, sql, or, lt, isNull } from 'drizzle-orm';
 import { JWTUtils } from '../../utils/jwtUtils';
 import { generateSecureToken } from '../../utils/cryptoUtils';
 import { SessionService } from './SessionService';
+import { GitHubTokenService } from './GitHubTokenService';
 import { PasswordService } from '../../utils/passwordService';
 import { GoogleOAuthProvider } from '../../services/oauth/google';
 import { GitHubOAuthProvider } from '../../services/oauth/github';
@@ -419,7 +420,19 @@ export class AuthService extends BaseService {
                 user.id,
                 request
             );
-            
+
+            // Store GitHub access token for BYOP feature
+            if (provider === 'github') {
+                try {
+                    const githubTokenService = new GitHubTokenService(this.env);
+                    const scopes = tokens.scope?.split(' ') || [];
+                    await githubTokenService.storeToken(user.id, tokens.accessToken, scopes);
+                    logger.info('GitHub access token stored for BYOP', { userId: user.id, scopes: scopes.join(',') });
+                } catch (error) {
+                    logger.error('Failed to store GitHub access token', { userId: user.id, error });
+                }
+            }
+
             // Log auth attempt
             await this.logAuthAttempt(user.email, `oauth_${provider}`, true, request);
             

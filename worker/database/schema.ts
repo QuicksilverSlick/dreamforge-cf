@@ -325,6 +325,41 @@ export const appViews = sqliteTable('app_views', {
 // ========================================
 
 /**
+ * GitHub Tokens table - Store GitHub OAuth access tokens for repository access
+ * Used for BYOP (Bring Your Own Project) feature to clone and analyze user repositories
+ */
+export const githubTokens = sqliteTable('github_tokens', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+    // Encrypted Token Data
+    encryptedAccessToken: text('encrypted_access_token').notNull(),
+    tokenType: text('token_type').notNull().default('bearer'),
+
+    // Scope Management
+    scopes: text('scopes', { mode: 'json' }).notNull().$type<string[]>(),
+
+    // Token Metadata
+    expiresAt: integer('expires_at', { mode: 'timestamp' }), // GitHub tokens typically don't expire but field reserved
+
+    // Usage Tracking
+    lastUsed: integer('last_used', { mode: 'timestamp' }),
+
+    // Status
+    isActive: integer('is_active', { mode: 'boolean' }).default(true),
+    isRevoked: integer('is_revoked', { mode: 'boolean' }).default(false),
+    revokedAt: integer('revoked_at', { mode: 'timestamp' }),
+
+    // Metadata
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    userIdx: index('github_tokens_user_idx').on(table.userId),
+    isActiveIdx: index('github_tokens_is_active_idx').on(table.isActive),
+    lastUsedIdx: index('github_tokens_last_used_idx').on(table.lastUsed),
+}));
+
+/**
  * OAuthStates table - Manage OAuth flow states securely
  */
 export const oauthStates = sqliteTable('oauth_states', {
@@ -586,6 +621,9 @@ export type NewAppView = typeof appViews.$inferInsert;
 
 export type OAuthState = typeof oauthStates.$inferSelect;
 export type NewOAuthState = typeof oauthStates.$inferInsert;
+
+export type GitHubToken = typeof githubTokens.$inferSelect;
+export type NewGitHubToken = typeof githubTokens.$inferInsert;
 
 export type SystemSetting = typeof systemSettings.$inferSelect;
 export type NewSystemSetting = typeof systemSettings.$inferInsert;

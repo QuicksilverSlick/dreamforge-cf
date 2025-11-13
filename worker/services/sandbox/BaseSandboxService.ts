@@ -128,16 +128,21 @@ export abstract class BaseSandboxService {
                     templateDetails: templateDetailsCache[templateName]
                 };
             }
-            // Download template zip from R2
+
+            // Download template zip from R2 (matching upstream - no versioning)
             const downloadUrl = downloadDir ? `${downloadDir}/${templateName}.zip` : `${templateName}.zip`;
+            console.log(`Downloading template: ${downloadUrl}`);
             const r2Object = await env.TEMPLATES_BUCKET.get(downloadUrl);
-              
+
             if (!r2Object) {
                 throw new Error(`Template '${templateName}' not found in bucket`);
             }
         
             const zipData = await r2Object.arrayBuffer();
-            
+
+            // Get catalog for template metadata (description, language, frameworks)
+            const catalogResponse = await BaseSandboxService.listTemplates();
+
             // Extract all files in memory
             const allFiles = ZipExtractor.extractFiles(zipData);
             
@@ -159,9 +164,8 @@ export abstract class BaseSandboxService {
             const importantFile = allFiles.find(f => f.filePath === '.important_files.json');
             const importantFiles = importantFile ? JSON.parse(importantFile.fileContents) : [];
             
-            // Get template info from catalog
-            const catalogResponse = await BaseSandboxService.listTemplates();
-            const catalogInfo = catalogResponse.success 
+            // Get template info from catalog (reuse catalogResponse from above)
+            const catalogInfo = catalogResponse.success
                 ? catalogResponse.templates.find(t => t.name === templateName)
                 : null;
             

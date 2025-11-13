@@ -8,6 +8,7 @@ export interface TemplateCustomizationOptions {
 export interface CustomizedTemplateFiles {
     'package.json': string;
     'wrangler.jsonc'?: string;
+    'vite.config.ts'?: string;
     '.bootstrap.js': string;
     '.gitignore': string;
 }
@@ -16,6 +17,7 @@ export interface CustomizedTemplateFiles {
  * Customize all template configuration files
  * - Updates package.json with project name and prepare script
  * - Updates wrangler.jsonc with project name (if exists)
+ * - Updates vite.config.ts to read PORT environment variable (if exists)
  * - Generates .bootstrap.js script
  * - Updates .gitignore to exclude bootstrap marker
  */
@@ -40,14 +42,21 @@ export function customizeTemplateFiles(
             options.projectName
         );
     }
-    
-    // 3. Generate bootstrap script
+
+    // 3. Customize vite.config.ts to support PORT environment variable
+    if (templateFiles['vite.config.ts']) {
+        customized['vite.config.ts'] = customizeViteConfig(
+            templateFiles['vite.config.ts']
+        );
+    }
+
+    // 4. Generate bootstrap script
     customized['.bootstrap.js'] = generateBootstrapScript(
         options.projectName,
         options.commandsHistory
     );
-    
-    // 4. Update .gitignore
+
+    // 5. Update .gitignore
     customized['.gitignore'] = updateGitignore(
         templateFiles['.gitignore'] || ''
     );
@@ -78,6 +87,57 @@ function customizeWranglerJsonc(content: string, projectName: string): string {
         }
     });
     return applyEdits(content, edits);
+}
+
+/**
+ * Customize vite.config.ts to properly read PORT environment variable
+ * and configure server to listen on all interfaces for container networking
+ */
+function customizeViteConfig(content: string): string {
+    // Check if server configuration already exists
+    const hasServerConfig = /server\s*:\s*{/.test(content);
+
+    if (hasServerConfig) {
+        // Check if port configuration exists
+        const hasPortConfig = /port\s*:/.test(content);
+
+        if (!hasPortConfig) {
+            // Add port configuration to existing server block
+            content = content.replace(
+                /(server\s*:\s*{)/,
+                `$1\n\t\tport: parseInt(process.env.PORT || '5173', 10),\n\t\thost: '0.0.0.0',`
+            );
+        } else {
+            // Replace existing port configuration
+            content = content.replace(
+                /port\s*:\s*[^,\n}]+/,
+                `port: parseInt(process.env.PORT || '5173', 10)`
+            );
+            // Add host if missing
+            if (!/host\s*:/.test(content)) {
+                content = content.replace(
+                    /(server\s*:\s*{)/,
+                    `$1\n\t\thost: '0.0.0.0',`
+                );
+            }
+        }
+    } else {
+        // Add entire server configuration block before plugins if exists, or before export closing
+        if (/plugins\s*:\s*\[/.test(content)) {
+            content = content.replace(
+                /(plugins\s*:\s*\[)/,
+                `server: {\n\t\tport: parseInt(process.env.PORT || '5173', 10),\n\t\thost: '0.0.0.0',\n\t\tallowedHosts: true,\n\t},\n\n\t$1`
+            );
+        } else {
+            // Add before closing brace of defineConfig
+            content = content.replace(
+                /(\n\}\);?\s*$)/,
+                `\n\tserver: {\n\t\tport: parseInt(process.env.PORT || '5173', 10),\n\t\thost: '0.0.0.0',\n\t\tallowedHosts: true,\n\t},$1`
+            );
+        }
+    }
+
+    return content;
 }
 
 /**

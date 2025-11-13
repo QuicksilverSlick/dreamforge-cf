@@ -55,23 +55,26 @@ export function HeroSection({ onGetStarted, isAuthenticated }: HeroSectionProps)
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
             </span>
-            <span className="text-sm font-medium text-accent">Now in BETA · Limited Spots Available</span>
+            <span className="text-sm font-medium text-accent">Live Training Enrollment Open · Limited Seats</span>
           </motion.div>
 
           {/* Headline */}
           <div className="space-y-4">
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-tight tracking-tight">
-              Build Real{' '}
-              <span className="bg-gradient-to-r from-accent via-[#FFD700] to-accent bg-clip-text text-transparent animate-gradient">
-                Businesses
+              Stuck at{' '}
+              <span className="bg-gradient-to-r from-red-500 via-orange-500 to-red-500 bg-clip-text text-transparent">
+                60-70% Done
               </span>
-              ,<br />
-              Not Just Prototypes
+              {' '}With Your AI Prototype?<br />
+              We{' '}
+              <span className="bg-gradient-to-r from-accent via-[#FFD700] to-accent bg-clip-text text-transparent animate-gradient">
+                Get You to Revenue
+              </span>
+              .
             </h1>
             <p className="text-xl md:text-2xl text-text-secondary leading-relaxed">
-              The only AI code generator that ships{' '}
-              <span className="font-semibold text-text-primary">production-ready business apps</span>
-              {' '}with Stripe payments, authentication, and hosting included.
+              Lovable, v0, and Bolt gave you a beautiful demo—then abandoned you halfway to launch.
+              Dreamforge delivers <span className="font-semibold text-text-primary">production deployment, real payments, and business strategy training</span> to turn your prototype into a sustainable business.
             </p>
           </div>
 
@@ -83,10 +86,10 @@ export function HeroSection({ onGetStarted, isAuthenticated }: HeroSectionProps)
             className="space-y-3"
           >
             {[
-              'Production-ready in days, not months',
-              '$0 hidden costs (vs. $68K-$132K with competitors)',
-              'Stripe payments & auth built-in',
-              'Enterprise-grade Cloudflare infrastructure',
+              'Production deployment that actually works (not preview URLs)',
+              'Real Stripe payments + authentication (not broken demos)',
+              'Security-first code with zero vulnerabilities (not 45% CVE rate)',
+              'Strategic training: "Should I even use AI for this?" guidance',
             ].map((benefit, index) => (
               <div key={index} className="flex items-center gap-3">
                 <CheckCircle className="w-5 h-5 text-accent flex-shrink-0" />
@@ -107,7 +110,7 @@ export function HeroSection({ onGetStarted, isAuthenticated }: HeroSectionProps)
               onClick={onGetStarted}
               className="group bg-gradient-to-r from-accent to-[#FFD700] hover:shadow-lg hover:shadow-accent/50 transition-all duration-300 text-white font-semibold text-lg px-8 py-6 rounded-xl"
             >
-              {isAuthenticated ? 'Start Building' : 'Claim Your BETA Spot'}
+              {isAuthenticated ? 'Complete My App' : 'Finish What You Started'}
               <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Button>
             <Button
@@ -116,7 +119,7 @@ export function HeroSection({ onGetStarted, isAuthenticated }: HeroSectionProps)
               onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
               className="border-2 border-accent/30 hover:border-accent hover:bg-accent/5 font-semibold text-lg px-8 py-6 rounded-xl"
             >
-              View BETA Pricing
+              See How We're Different
             </Button>
           </motion.div>
 
@@ -135,12 +138,12 @@ export function HeroSection({ onGetStarted, isAuthenticated }: HeroSectionProps)
                   </svg>
                 ))}
               </div>
-              <p className="text-sm text-text-tertiary mt-1">Rated 5.0 by early adopters</p>
+              <p className="text-sm text-text-tertiary mt-1">by founders who shipped to production</p>
             </div>
             <div className="h-12 w-px bg-border" />
             <div>
-              <p className="text-2xl font-bold text-text-primary">73%</p>
-              <p className="text-sm text-text-tertiary">avoid deployment failure</p>
+              <p className="text-2xl font-bold text-text-primary">$0</p>
+              <p className="text-sm text-text-tertiary">hidden costs to reach revenue</p>
             </div>
           </motion.div>
         </motion.div>
@@ -163,8 +166,8 @@ export function HeroSection({ onGetStarted, isAuthenticated }: HeroSectionProps)
                   </svg>
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-text-primary">See Dreamforge in Action</p>
-                  <p className="text-sm text-text-tertiary">Watch how we build production apps in minutes</p>
+                  <p className="text-lg font-semibold text-text-primary">Experience Live Training</p>
+                  <p className="text-sm text-text-tertiary">See how our weekly Zoom sessions transform businesses</p>
                 </div>
               </div>
             </div>
@@ -181,8 +184,8 @@ export function HeroSection({ onGetStarted, isAuthenticated }: HeroSectionProps)
                   <CheckCircle className="w-6 h-6 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-text-primary">0 Vulnerabilities</p>
-                  <p className="text-xs text-text-tertiary">vs 45% industry average</p>
+                  <p className="text-sm font-semibold text-text-primary">Live Instruction</p>
+                  <p className="text-xs text-text-tertiary">vs self-paced courses</p>
                 </div>
               </div>
             </motion.div>
@@ -196,12 +199,12 @@ export function HeroSection({ onGetStarted, isAuthenticated }: HeroSectionProps)
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-[#FFD700]/20 flex items-center justify-center">
                   <svg className="w-6 h-6 text-[#FFD700]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-text-primary">Deploy in Days</p>
-                  <p className="text-xs text-text-tertiary">not months or years</p>
+                  <p className="text-sm font-semibold text-text-primary">Team Training</p>
+                  <p className="text-xs text-text-tertiary">classroom + breakouts</p>
                 </div>
               </div>
             </motion.div>

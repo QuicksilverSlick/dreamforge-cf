@@ -21,10 +21,11 @@ export class GitHubOAuthProvider extends BaseOAuthProvider {
     protected readonly userInfoUrl = 'https://api.github.com/user';
     protected readonly emailsUrl = 'https://api.github.com/user/emails';
     
-    // Minimal scopes for authentication only - NO repo access
+    // Scopes for authentication and repository access (BYOP feature)
     protected readonly scopes = [
         'read:user',
-        'user:email'
+        'user:email',
+        'repo' // Full repository access for cloning and importing user projects
     ];
     
     /**

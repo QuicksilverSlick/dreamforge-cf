@@ -1,9 +1,9 @@
 /**
- * Pricing Section - BETA Offer
- * Conversion-optimized pricing with lifetime early adopter discount
+ * Pricing Section - Platform Subscriptions
+ * Platform pricing with business training included (hybrid positioning)
  */
 
-import { Check, ArrowRight, Zap, Star, Shield } from 'react-feather';
+import { Check, ArrowRight, Code, Users, Star } from 'react-feather';
 import { motion } from 'framer-motion';
 import { useInView } from 'framer-motion';
 import { useRef } from 'react';
@@ -13,105 +13,99 @@ interface PricingTier {
   id: string;
   name: string;
   tagline: string;
-  icon: typeof Zap;
-  originalPrice: number;
-  betaPrice: number;
-  discount: string;
-  lifetimeGuarantee: boolean;
+  icon: typeof Code;
+  monthlyPrice: number;
+  seats: string;
+  additionalSeatCost: string;
   features: string[];
-  limits: {
-    projects: string;
-    deployments: string;
-    storage: string;
-    support: string;
+  trainingDetails: {
+    level: string;
+    duration: string;
+    format: string;
+    platform: string;
   };
   cta: string;
   popular?: boolean;
-  priceId?: string; // Stripe Price ID
 }
 
 const PRICING_TIERS: PricingTier[] = [
   {
-    id: 'indie',
-    name: 'Indie Maker',
-    tagline: 'For solo founders building their first SaaS',
-    icon: Zap,
-    originalPrice: 49,
-    betaPrice: 29,
-    discount: '41% OFF',
-    lifetimeGuarantee: true,
+    id: 'starter',
+    name: 'Starter',
+    tagline: 'Production-ready platform access',
+    icon: Code,
+    monthlyPrice: 97,
+    seats: '1 developer seat',
+    additionalSeatCost: '+$40/seat',
     features: [
-      'Production-ready code generation',
-      'Stripe payments integration',
-      'OAuth + Email authentication',
-      'Cloudflare Workers deployment',
-      'D1 database (unlimited)',
-      'Automated security scanning',
-      'Email support (24h response)',
-      'Export to GitHub',
+      'Phase-wise AI app generation (6-12 phases)',
+      'Production deployment to Cloudflare Workers',
+      'Automatic error recovery (6+ TypeScript fixers)',
+      'Real D1 database integration',
+      'Self-hostable on your Cloudflare account',
+      'Multi-LLM support (Gemini, GPT, Claude)',
+      'Community support',
+      'Code export & GitHub integration',
     ],
-    limits: {
-      projects: '5 active projects',
-      deployments: 'Unlimited deploys',
-      storage: '10GB R2 storage',
-      support: '24h email support',
+    trainingDetails: {
+      level: 'Platform Only',
+      duration: 'Self-paced',
+      format: 'Documentation',
+      platform: 'Full platform access',
     },
     cta: 'Start Building',
   },
   {
-    id: 'startup',
-    name: 'Startup',
-    tagline: 'For small teams shipping fast',
-    icon: Star,
-    originalPrice: 99,
-    betaPrice: 59,
-    discount: '40% OFF',
-    lifetimeGuarantee: true,
+    id: 'professional',
+    name: 'Professional',
+    tagline: 'Platform + Business Training',
+    icon: Users,
+    monthlyPrice: 297,
+    seats: 'Up to 3 team seats',
+    additionalSeatCost: '+$40/seat',
     popular: true,
     features: [
-      'Everything in Indie Maker',
-      'Team collaboration (5 members)',
-      'Advanced RBAC & permissions',
-      'Multi-tenancy architecture',
-      'Priority deployment queue',
-      'Advanced monitoring & analytics',
-      'Priority support (4h response)',
-      'Custom domain SSL',
-      'SOC2-ready infrastructure',
+      'Everything in Starter',
+      'Live weekly business training (1 hour/week)',
+      'Go-to-market strategy & customer discovery',
+      'Revenue model validation & scaling fundamentals',
+      'AI vs Automation decision frameworks',
+      'Founder Q&A sessions',
+      'Priority support',
+      'Training materials & resources',
     ],
-    limits: {
-      projects: '20 active projects',
-      deployments: 'Unlimited deploys',
-      storage: '100GB R2 storage',
-      support: '4h priority support',
+    trainingDetails: {
+      level: 'Business Foundations',
+      duration: '1 hour/week live',
+      format: 'Live Zoom + recordings',
+      platform: 'Full platform + training',
     },
-    cta: 'Start Free Trial',
+    cta: 'Get Platform + Training',
   },
   {
-    id: 'agency',
-    name: 'Agency',
-    tagline: 'For agencies & enterprises',
-    icon: Shield,
-    originalPrice: 299,
-    betaPrice: 199,
-    discount: '33% OFF',
-    lifetimeGuarantee: true,
+    id: 'enterprise',
+    name: 'Enterprise',
+    tagline: 'Platform + Advanced Training + Support',
+    icon: Star,
+    monthlyPrice: 997,
+    seats: 'Up to 12 team seats',
+    additionalSeatCost: '+$40/seat',
     features: [
-      'Everything in Startup',
-      'Unlimited team members',
-      'White-label deployments',
-      'Custom AI model fine-tuning',
-      'Dedicated support engineer',
-      'SLA guarantees (99.9%)',
-      'Custom compliance (HIPAA, PCI-DSS)',
-      'Advanced security features',
-      'On-premise deployment option',
+      'Everything in Professional',
+      'Advanced business strategy training',
+      'One-on-one founder coaching sessions',
+      'Custom curriculum for your business needs',
+      'Dedicated success manager',
+      'White-label deployment options',
+      'Priority feature requests',
+      'SLA guarantees & uptime monitoring',
+      'Investor pitch preparation support',
     ],
-    limits: {
-      projects: 'Unlimited projects',
-      deployments: 'Unlimited deploys',
-      storage: '1TB R2 storage',
-      support: '1h dedicated support',
+    trainingDetails: {
+      level: 'Advanced + Coaching',
+      duration: '1 hour/week + 1-on-1',
+      format: 'Live + private coaching',
+      platform: 'Enterprise platform + concierge',
     },
     cta: 'Contact Sales',
   },
@@ -144,14 +138,13 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
             </span>
-            <span className="text-sm font-medium text-accent">BETA Launch Pricing · Limited Time</span>
+            <span className="text-sm font-medium text-accent">Platform + Training · Start Free Trial</span>
           </div>
           <h2 className="text-4xl md:text-5xl font-bold text-text-primary">
-            Early Adopter Pricing
+            Choose Your Plan
           </h2>
           <p className="text-xl text-text-secondary max-w-3xl mx-auto">
-            Lock in up to <span className="font-bold text-accent">41% lifetime discount</span> as a founding member.
-            Price increases to regular rates when we exit BETA.
+            Production-ready platform access starting at $97/mo. Add <span className="font-bold text-accent">business training</span> (Professional and above) to get go-to-market strategy and founder coaching—something Lovable, v0, and Bolt don't offer.
           </p>
 
           {/* Trust Badges */}
@@ -200,11 +193,9 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
                     <div className={`w-12 h-12 rounded-xl ${tier.popular ? 'bg-accent/20' : 'bg-bg-quaternary'} flex items-center justify-center`}>
                       <Icon className={`w-6 h-6 ${tier.popular ? 'text-accent' : 'text-text-tertiary'}`} />
                     </div>
-                    {tier.lifetimeGuarantee && (
-                      <div className="px-2 py-1 rounded-full bg-green-500/10 text-green-500 text-xs font-medium">
-                        {tier.discount}
-                      </div>
-                    )}
+                    <div className="px-2 py-1 rounded-full bg-blue-500/10 text-blue-500 text-xs font-medium">
+                      {tier.trainingDetails.level}
+                    </div>
                   </div>
 
                   <div>
@@ -216,15 +207,13 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
                   <div className="space-y-2">
                     <div className="flex items-end gap-3">
                       <div>
-                        <span className="text-5xl font-bold text-text-primary">${tier.betaPrice}</span>
+                        <span className="text-5xl font-bold text-text-primary">${tier.monthlyPrice}</span>
                         <span className="text-text-tertiary ml-2">/month</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-text-tertiary line-through">${tier.originalPrice}/mo</span>
-                      {tier.lifetimeGuarantee && (
-                        <span className="text-xs text-accent font-medium">· Locked forever</span>
-                      )}
+                      <span className="text-sm text-text-secondary">{tier.seats}</span>
+                      <span className="text-xs text-text-tertiary">· {tier.additionalSeatCost} additional</span>
                     </div>
                   </div>
                 </div>
@@ -254,14 +243,14 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
                     ))}
                   </div>
 
-                  {/* Limits */}
+                  {/* Training Details */}
                   <div className="pt-4 space-y-2 border-t border-border/50">
-                    <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wide">Limits</p>
+                    <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wide">Training Details</p>
                     <div className="space-y-1 text-xs text-text-tertiary">
-                      <p>• {tier.limits.projects}</p>
-                      <p>• {tier.limits.deployments}</p>
-                      <p>• {tier.limits.storage}</p>
-                      <p>• {tier.limits.support}</p>
+                      <p>• {tier.trainingDetails.duration} live sessions</p>
+                      <p>• {tier.trainingDetails.format} classroom format</p>
+                      <p>• {tier.seats} included</p>
+                      <p>• {tier.trainingDetails.platform}</p>
                     </div>
                   </div>
                 </div>
@@ -270,7 +259,7 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
           })}
         </div>
 
-        {/* Lifetime Lock Guarantee */}
+        {/* Training Success Guarantee */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={isInView ? { opacity: 1, y: 0 } : {}}
@@ -280,21 +269,19 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
           <div className="bg-gradient-to-r from-accent/10 via-[#FFD700]/10 to-accent/10 border border-accent/30 rounded-xl p-6 space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-accent/20 flex items-center justify-center">
-                <Shield className="w-6 h-6 text-accent" />
+                <Check className="w-6 h-6 text-accent" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-text-primary">Lifetime Price Lock Guarantee</h3>
-                <p className="text-sm text-text-tertiary">For BETA early adopters only</p>
+                <h3 className="text-lg font-semibold text-text-primary">Production & Business Success Guarantee</h3>
+                <p className="text-sm text-text-tertiary">Platform reliability + business growth support</p>
               </div>
             </div>
             <p className="text-text-secondary text-sm leading-relaxed">
-              Sign up during BETA and your pricing is <span className="font-semibold text-text-primary">locked forever</span>.
-              When we increase prices after launch (estimated $49/$99/$299), you keep your founding member rate.
-              This is our way of thanking early believers who help us build the future of AI coding.
+              All plans include production deployment guarantees. Professional and Enterprise plans include our <span className="font-semibold text-text-primary">Business Success Guarantee</span>: if you don't see measurable progress in business understanding within 30 days, we'll provide one-on-one coaching and refund the training premium.
             </p>
             <div className="flex items-center gap-2 text-sm text-accent">
               <Check className="w-4 h-4" />
-              <span className="font-medium">Valid for life of your subscription · No hidden price increases</span>
+              <span className="font-medium">30-day guarantee · Dedicated support · Cancel anytime · No setup fees</span>
             </div>
           </div>
         </motion.div>
