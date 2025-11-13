@@ -43,6 +43,30 @@ export function setupBYOPRoutes(app: Hono<AppEnv>): void {
         adaptController(BYOPController, BYOPController.getBlueprint)
     );
 
+    // WebSocket for real-time progress updates
+    byopRouter.get(
+        '/analysis/:analysisId/ws',
+        setAuthLevel(AuthConfig.authenticated),
+        async (c) => {
+            const upgradeHeader = c.req.header('Upgrade');
+            if (upgradeHeader?.toLowerCase() !== 'websocket') {
+                return c.json({ error: 'Expected WebSocket upgrade' }, 400);
+            }
+
+            const analysisId = c.req.param('analysisId');
+            if (!analysisId) {
+                return c.json({ error: 'Missing analysisId' }, 400);
+            }
+
+            // Get CodebaseAnalyzer Durable Object
+            const analyzerId = c.env.CodebaseAnalyzerObject.idFromString(analysisId);
+            const analyzerStub = c.env.CodebaseAnalyzerObject.get(analyzerId);
+
+            // Forward WebSocket request to Durable Object
+            return analyzerStub.fetch(c.req.raw);
+        }
+    );
+
     // Mount the BYOP router under /api/byop
     app.route('/api/byop', byopRouter);
 }
