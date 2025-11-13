@@ -103,13 +103,17 @@ export function useImportRepository() {
 }
 
 /**
- * Poll analysis status until completion
+ * Monitor analysis status with WebSocket real-time updates (with polling fallback)
  */
 export function useAnalysisStatus(analysisId: string | null) {
     const [status, setStatus] = useState<AnalysisStateResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const wsRef = useRef<WebSocket | null>(null);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectAttempts = useRef(0);
+    const MAX_RECONNECT_ATTEMPTS = 3;
 
     const fetchStatus = useCallback(async (id: string) => {
         try {
@@ -137,16 +141,14 @@ export function useAnalysisStatus(analysisId: string | null) {
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Unknown error';
             setError(errorMessage);
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
         }
     }, []);
 
     const startPolling = useCallback((id: string) => {
-        setLoading(true);
-        setError(null);
+        // Clear any existing polling
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+        }
 
         // Fetch immediately
         fetchStatus(id);
@@ -162,25 +164,113 @@ export function useAnalysisStatus(analysisId: string | null) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
         }
-        setLoading(false);
     }, []);
 
-    useEffect(() => {
-        if (analysisId) {
-            startPolling(analysisId);
+    const connectWebSocket = useCallback((id: string) => {
+        // Clean up existing WebSocket
+        if (wsRef.current) {
+            wsRef.current.close();
+            wsRef.current = null;
         }
 
+        try {
+            // Construct WebSocket URL
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}${API_BASE}/analysis/${id}/ws`;
+
+            const ws = new WebSocket(wsUrl);
+            wsRef.current = ws;
+
+            ws.addEventListener('open', () => {
+                console.log('WebSocket connected for analysis:', id);
+                reconnectAttempts.current = 0;
+                setLoading(false);
+                setError(null);
+                // Stop polling since WebSocket is connected
+                stopPolling();
+            });
+
+            ws.addEventListener('message', (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    if (message.type === 'progress' && message.data) {
+                        setStatus(message.data);
+                        setError(null);
+
+                        // Close WebSocket if analysis completed or failed
+                        if (message.data.status === 'completed' || message.data.status === 'failed') {
+                            ws.close();
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to parse WebSocket message:', err);
+                }
+            });
+
+            ws.addEventListener('close', (event) => {
+                console.log('WebSocket closed:', event.code, event.reason);
+                wsRef.current = null;
+
+                // Only attempt reconnect if not completed and haven't exceeded max attempts
+                if (status?.status !== 'completed' && status?.status !== 'failed') {
+                    if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
+                        reconnectAttempts.current++;
+                        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000);
+                        console.log(`Reconnecting WebSocket in ${delay}ms (attempt ${reconnectAttempts.current}/${MAX_RECONNECT_ATTEMPTS})`);
+
+                        reconnectTimeoutRef.current = setTimeout(() => {
+                            connectWebSocket(id);
+                        }, delay);
+                    } else {
+                        console.log('Max reconnection attempts reached, falling back to polling');
+                        startPolling(id);
+                    }
+                }
+            });
+
+            ws.addEventListener('error', (event) => {
+                console.error('WebSocket error:', event);
+                // Fall back to polling on error
+                startPolling(id);
+            });
+
+        } catch (err) {
+            console.error('Failed to create WebSocket:', err);
+            // Fall back to polling if WebSocket creation fails
+            startPolling(id);
+        }
+    }, [status?.status, startPolling, stopPolling]);
+
+    useEffect(() => {
+        if (!analysisId) {
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        // Try WebSocket first
+        connectWebSocket(analysisId);
+
+        // Cleanup on unmount or analysisId change
         return () => {
+            if (wsRef.current) {
+                wsRef.current.close();
+                wsRef.current = null;
+            }
             stopPolling();
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+                reconnectTimeoutRef.current = null;
+            }
         };
-    }, [analysisId, startPolling, stopPolling]);
+    }, [analysisId, connectWebSocket, stopPolling]);
 
     return {
         status,
         loading,
         error,
         refetch: () => analysisId && fetchStatus(analysisId),
-        stopPolling,
     };
 }
 

@@ -66,6 +66,7 @@ export interface SourceFileInfo {
  */
 export class CodebaseAnalyzer extends DurableObject<Env> {
     private state: AnalysisState | null = null;
+    private webSockets: Set<WebSocket> = new Set();
 
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
@@ -407,7 +408,7 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
     }
 
     /**
-     * Update analysis state
+     * Update analysis state and broadcast to connected WebSocket clients
      */
     private async updateState(updates: Partial<AnalysisState>): Promise<void> {
         if (!this.state) {
@@ -420,6 +421,40 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
         };
 
         await this.ctx.storage.put('state', this.state);
+        this.broadcastProgress();
+    }
+
+    /**
+     * Broadcast current state to all connected WebSocket clients
+     */
+    private broadcastProgress(): void {
+        if (!this.state) {
+            return;
+        }
+
+        const message = JSON.stringify({
+            type: 'progress',
+            data: {
+                repositoryUrl: this.state.repositoryUrl,
+                repositoryName: this.state.repositoryName,
+                status: this.state.status,
+                progress: this.state.progress,
+                currentPhase: this.state.currentPhase,
+                fileCount: this.state.fileCount,
+                analysisResult: this.state.analysisResult,
+                error: this.state.error
+            }
+        });
+
+        // Send to all connected clients and remove closed connections
+        this.webSockets.forEach((ws) => {
+            try {
+                ws.send(message);
+            } catch (error) {
+                logger.error('Failed to send WebSocket message', error);
+                this.webSockets.delete(ws);
+            }
+        });
     }
 
     /**
@@ -430,6 +465,12 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
         const path = url.pathname;
 
         try {
+            // Handle WebSocket upgrade
+            const upgradeHeader = request.headers.get('Upgrade');
+            if (upgradeHeader?.toLowerCase() === 'websocket') {
+                return this.handleWebSocketUpgrade(request);
+            }
+
             if (path === '/start' && request.method === 'POST') {
                 const body = await request.json() as {
                     repositoryUrl: string;
@@ -460,5 +501,60 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
                 { status: 500 }
             );
         }
+    }
+
+    /**
+     * Handle WebSocket upgrade requests
+     */
+    private handleWebSocketUpgrade(request: Request): Response {
+        const pair = new WebSocketPair();
+        const [client, server] = Object.values(pair);
+
+        this.ctx.acceptWebSocket(server);
+        this.webSockets.add(server);
+
+        server.addEventListener('close', () => {
+            this.webSockets.delete(server);
+            logger.info('WebSocket client disconnected', {
+                totalConnections: this.webSockets.size
+            });
+        });
+
+        server.addEventListener('error', (event) => {
+            logger.error('WebSocket error', event);
+            this.webSockets.delete(server);
+        });
+
+        // Send current state immediately upon connection
+        if (this.state) {
+            const message = JSON.stringify({
+                type: 'progress',
+                data: {
+                    repositoryUrl: this.state.repositoryUrl,
+                    repositoryName: this.state.repositoryName,
+                    status: this.state.status,
+                    progress: this.state.progress,
+                    currentPhase: this.state.currentPhase,
+                    fileCount: this.state.fileCount,
+                    analysisResult: this.state.analysisResult,
+                    error: this.state.error
+                }
+            });
+
+            try {
+                server.send(message);
+            } catch (error) {
+                logger.error('Failed to send initial state', error);
+            }
+        }
+
+        logger.info('WebSocket client connected', {
+            totalConnections: this.webSockets.size
+        });
+
+        return new Response(null, {
+            status: 101,
+            webSocket: client,
+        });
     }
 }
