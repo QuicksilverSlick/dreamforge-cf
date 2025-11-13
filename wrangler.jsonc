@@ -91,6 +91,10 @@
             {
                 "class_name": "DORateLimitStore",
                 "name": "DORateLimitStore"
+            },
+            {
+                "class_name": "CodebaseAnalyzer",
+                "name": "CodebaseAnalyzerObject"
             }
 		]
 	},
@@ -124,6 +128,12 @@
                 "DORateLimitStore"
             ],
             "tag": "v2"
+        },
+        {
+            "new_sqlite_classes": [
+                "CodebaseAnalyzer"
+            ],
+            "tag": "v3"
         }
 	],
 	"vars": {

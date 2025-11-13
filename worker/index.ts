@@ -5,6 +5,7 @@ import { createApp } from './app';
 // import * as Sentry from '@sentry/cloudflare';
 // import { sentryOptions } from './observability/sentry';
 import { DORateLimitStore as BaseDORateLimitStore } from './services/rate-limit/DORateLimitStore';
+import { CodebaseAnalyzer as BaseCodebaseAnalyzer } from './agents/analyzer/codebaseAnalyzer';
 import { getPreviewDomain } from './utils/urls';
 import { proxyToAiGateway } from './services/aigateway-proxy/controller';
 import { isOriginAllowed } from './config/security';
@@ -16,8 +17,10 @@ export { UserAppSandboxService, DeployerService } from './services/sandbox/sandb
 
 // export const CodeGeneratorAgent = Sentry.instrumentDurableObjectWithSentry(sentryOptions, SmartCodeGeneratorAgent);
 // export const DORateLimitStore = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseDORateLimitStore);
+// export const CodebaseAnalyzer = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseCodebaseAnalyzer);
 export const CodeGeneratorAgent = SmartCodeGeneratorAgent;
 export const DORateLimitStore = BaseDORateLimitStore;
+export const CodebaseAnalyzer = BaseCodebaseAnalyzer;
 
 // Logger for the main application and handlers
 const logger = createLogger('App');
