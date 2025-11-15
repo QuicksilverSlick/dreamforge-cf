@@ -424,13 +424,42 @@ export class AuthService extends BaseService {
             // Store GitHub access token for BYOP feature
             if (provider === 'github') {
                 try {
+                    logger.info('=== ATTEMPTING TO STORE GITHUB TOKEN ===', {
+                        userId: user.id,
+                        userEmail: user.email,
+                        hasEncryptionKey: !!this.env.SECRETS_ENCRYPTION_KEY,
+                        hasDatabase: !!this.database,
+                        tokenPrefix: tokens.accessToken.substring(0, 4),
+                        tokenLength: tokens.accessToken.length
+                    });
+
                     const githubTokenService = new GitHubTokenService(this.env);
                     // GitHub scopes are defined in GitHubOAuthProvider.scopes
                     const scopes = ['read:user', 'user:email', 'repo'];
+
                     await githubTokenService.storeToken(user.id, tokens.accessToken, scopes);
-                    logger.info('GitHub access token stored for BYOP', { userId: user.id, scopes: scopes.join(',') });
+
+                    logger.info('✅ GitHub access token stored SUCCESSFULLY for BYOP', {
+                        userId: user.id,
+                        userEmail: user.email,
+                        scopes: scopes.join(',')
+                    });
                 } catch (error) {
-                    logger.error('Failed to store GitHub access token', { userId: user.id, error });
+                    logger.error('❌ CRITICAL: Failed to store GitHub access token', {
+                        userId: user.id,
+                        userEmail: user.email,
+                        errorMessage: error instanceof Error ? error.message : String(error),
+                        errorStack: error instanceof Error ? error.stack : undefined,
+                        hasEncryptionKey: !!this.env.SECRETS_ENCRYPTION_KEY
+                    });
+
+                    // CRITICAL FIX: Re-throw the error to prevent silent failure
+                    // This ensures OAuth fails if token storage fails
+                    throw new SecurityError(
+                        SecurityErrorType.UNAUTHORIZED,
+                        'Failed to store GitHub access token. Please contact support if this persists.',
+                        500
+                    );
                 }
             }
 

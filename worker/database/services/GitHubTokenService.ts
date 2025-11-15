@@ -11,12 +11,58 @@ import { generateId } from '../../utils/idGenerator';
 
 export class GitHubTokenService extends BaseService {
     /**
+     * Helper: Convert Uint8Array to Base64 string (binary-safe)
+     */
+    private arrayBufferToBase64(buffer: Uint8Array): string {
+        let binary = '';
+        for (let i = 0; i < buffer.length; i++) {
+            binary += String.fromCharCode(buffer[i]);
+        }
+        return btoa(binary);
+    }
+
+    /**
+     * Helper: Convert Base64 string to Uint8Array (binary-safe)
+     */
+    private base64ToArrayBuffer(base64: string): Uint8Array {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+    }
+
+    /**
+     * Validate GitHub token format
+     */
+    private isValidGitHubToken(token: string): boolean {
+        const tokenPatterns = [
+            /^gho_[a-zA-Z0-9]{36}$/,           // OAuth tokens
+            /^ghu_[a-zA-Z0-9]{36}$/,           // User-to-server tokens
+            /^ghp_[a-zA-Z0-9]{36}$/,           // Personal access tokens (classic)
+            /^github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}$/  // Fine-grained PATs
+        ];
+
+        return tokenPatterns.some(pattern => pattern.test(token)) && token.length <= 255;
+    }
+
+    /**
      * Encrypt a GitHub access token using XChaCha20-Poly1305
      */
     private async encryptToken(accessToken: string): Promise<string> {
         try {
             if (!this.env.SECRETS_ENCRYPTION_KEY) {
                 throw new Error('SECRETS_ENCRYPTION_KEY environment variable not set');
+            }
+
+            // Validate token format before encryption
+            if (!this.isValidGitHubToken(accessToken)) {
+                this.logger.error('Invalid GitHub token format before encryption', {
+                    tokenPrefix: accessToken.substring(0, 4),
+                    tokenLength: accessToken.length
+                });
+                throw new Error('Invalid GitHub token format');
             }
 
             const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -34,7 +80,8 @@ export class GitHubTokenService extends BaseService {
             combined.set(nonce, salt.length);
             combined.set(encrypted, salt.length + nonce.length);
 
-            return btoa(String.fromCharCode(...combined));
+            // Use binary-safe Base64 encoding instead of btoa with spread operator
+            return this.arrayBufferToBase64(combined);
         } catch (error) {
             this.logger.error('Error encrypting GitHub token:', error);
             throw new Error('Failed to encrypt GitHub token');
@@ -50,9 +97,8 @@ export class GitHubTokenService extends BaseService {
                 throw new Error('SECRETS_ENCRYPTION_KEY environment variable not set');
             }
 
-            const combined = new Uint8Array(
-                Array.from(atob(encryptedToken), c => c.charCodeAt(0))
-            );
+            // Use binary-safe Base64 decoding
+            const combined = this.base64ToArrayBuffer(encryptedToken);
 
             const salt = combined.slice(0, 16);
             const nonce = combined.slice(16, 40);
@@ -61,12 +107,46 @@ export class GitHubTokenService extends BaseService {
             const keyMaterial = await this.deriveKey(this.env.SECRETS_ENCRYPTION_KEY, salt);
 
             const cipher = xchacha20poly1305(keyMaterial, nonce);
-            const decrypted = cipher.decrypt(encrypted);
 
-            return new TextDecoder().decode(decrypted);
+            let decrypted: Uint8Array;
+            try {
+                decrypted = cipher.decrypt(encrypted);
+            } catch (decryptError) {
+                this.logger.error('XChaCha20-Poly1305 decryption failed - possible data corruption or wrong key', {
+                    encryptedLength: encryptedToken.length,
+                    combinedLength: combined.length
+                });
+                throw new Error('Token decryption failed - authentication tag mismatch');
+            }
+
+            const decryptedToken = new TextDecoder().decode(decrypted);
+
+            // Validate token format after decryption
+            if (!this.isValidGitHubToken(decryptedToken)) {
+                this.logger.error('Decrypted token has invalid format', {
+                    tokenPrefix: decryptedToken.substring(0, 4),
+                    tokenLength: decryptedToken.length,
+                    looksValid: decryptedToken.length >= 40 && /^gh[opus]_/.test(decryptedToken)
+                });
+                throw new Error('Invalid GitHub token format after decryption');
+            }
+
+            this.logger.info('Token decryption successful', {
+                tokenPrefix: decryptedToken.substring(0, 4),
+                tokenSuffix: decryptedToken.substring(decryptedToken.length - 4),
+                tokenLength: decryptedToken.length,
+                tokenFormat: decryptedToken.startsWith('ghp_') ? 'PAT' :
+                             decryptedToken.startsWith('gho_') ? 'OAuth' :
+                             decryptedToken.startsWith('ghs_') ? 'Installation' : 'Unknown'
+            });
+
+            return decryptedToken;
         } catch (error) {
-            this.logger.error('Error decrypting GitHub token:', error);
-            throw new Error('Failed to decrypt GitHub token');
+            this.logger.error('Error decrypting GitHub token:', {
+                error: error instanceof Error ? error.message : String(error),
+                hasEncryptionKey: !!this.env.SECRETS_ENCRYPTION_KEY
+            });
+            throw error instanceof Error ? error : new Error('Failed to decrypt GitHub token');
         }
     }
 
@@ -89,7 +169,7 @@ export class GitHubTokenService extends BaseService {
             {
                 name: 'PBKDF2',
                 salt: salt,
-                iterations: 100000,
+                iterations: 600000,  // OWASP 2025 recommended (increased from 100,000)
                 hash: 'SHA-256'
             },
             keyMaterial,
@@ -104,11 +184,25 @@ export class GitHubTokenService extends BaseService {
      */
     async storeToken(userId: string, accessToken: string, scopes: string[]): Promise<void> {
         try {
+            this.logger.info('=== GitHubTokenService.storeToken START ===', {
+                userId,
+                scopes,
+                tokenPrefix: accessToken.substring(0, 4),
+                tokenLength: accessToken.length,
+                hasDatabase: !!this.database,
+                hasEncryptionKey: !!this.env.SECRETS_ENCRYPTION_KEY
+            });
+
+            this.logger.info('Step 1: Encrypting token');
             const encryptedAccessToken = await this.encryptToken(accessToken);
+            this.logger.info('Step 1: Token encrypted successfully', {
+                encryptedLength: encryptedAccessToken.length
+            });
 
             const now = new Date();
+            const tokenId = generateId();
             const newToken = {
-                id: generateId(),
+                id: tokenId,
                 userId,
                 encryptedAccessToken,
                 tokenType: 'bearer',
@@ -122,7 +216,8 @@ export class GitHubTokenService extends BaseService {
                 updatedAt: now
             };
 
-            await this.database
+            this.logger.info('Step 2: Deactivating existing tokens for user', { userId });
+            const deactivateResult = await this.database
                 .update(schema.githubTokens)
                 .set({
                     isActive: false,
@@ -133,16 +228,41 @@ export class GitHubTokenService extends BaseService {
                         eq(schema.githubTokens.userId, userId),
                         eq(schema.githubTokens.isActive, true)
                     )
-                );
+                )
+                .run();
 
-            await this.database.insert(schema.githubTokens).values(newToken);
+            this.logger.info('Step 2: Deactivation complete', {
+                changes: deactivateResult.changes,
+                success: deactivateResult.success
+            });
 
-            this.logger.info('GitHub token stored successfully', {
+            this.logger.info('Step 3: Inserting new token record', {
+                tokenId,
                 userId,
+                scopes
+            });
+            const insertResult = await this.database
+                .insert(schema.githubTokens)
+                .values(newToken)
+                .run();
+
+            this.logger.info('Step 3: Insert complete', {
+                changes: insertResult.changes,
+                success: insertResult.success
+            });
+
+            this.logger.info('✅ GitHub token stored successfully', {
+                userId,
+                tokenId,
                 scopes: scopes.join(',')
             });
         } catch (error) {
-            this.logger.error('Failed to store GitHub token', error);
+            this.logger.error('❌ Failed to store GitHub token', {
+                userId,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorStack: error instanceof Error ? error.stack : undefined,
+                errorName: error instanceof Error ? error.name : 'Unknown'
+            });
             throw error;
         }
     }
@@ -152,6 +272,13 @@ export class GitHubTokenService extends BaseService {
      */
     async getActiveToken(userId: string): Promise<{ token: string; scopes: string[] } | null> {
         try {
+            this.logger.info('=== GitHubTokenService.getActiveToken START ===', {
+                userId,
+                hasDatabase: !!this.database,
+                hasSchema: !!schema.githubTokens
+            });
+
+            this.logger.info('Executing database query for GitHub token');
             const tokenRecord = await this.database
                 .select()
                 .from(schema.githubTokens)
@@ -165,7 +292,13 @@ export class GitHubTokenService extends BaseService {
                 .orderBy(desc(schema.githubTokens.createdAt))
                 .get();
 
+            this.logger.info('Database query result:', {
+                hasTokenRecord: !!tokenRecord,
+                tokenId: tokenRecord?.id
+            });
+
             if (!tokenRecord) {
+                this.logger.warn('No active GitHub token found for user', { userId });
                 return null;
             }
 
