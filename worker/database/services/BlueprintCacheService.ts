@@ -60,7 +60,7 @@ export class BlueprintCacheService extends BaseService {
                 .update(blueprintCache)
                 .set({
                     accessCount: (cached.accessCount || 0) + 1,
-                    lastAccessedAt: now.getTime()
+                    lastAccessedAt: now
                 })
                 .where(eq(blueprintCache.id, cached.id))
                 .execute();
@@ -136,7 +136,7 @@ export class BlueprintCacheService extends BaseService {
                 fileCount,
                 totalLinesOfCode,
                 framework,
-                expiresAt: expiresAt.getTime(),
+                expiresAt,
                 accessCount: 0,
                 lastAccessedAt: null
             };

@@ -468,7 +468,7 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
             // Handle WebSocket upgrade
             const upgradeHeader = request.headers.get('Upgrade');
             if (upgradeHeader?.toLowerCase() === 'websocket') {
-                return this.handleWebSocketUpgrade(request);
+                return this.handleWebSocketUpgrade();
             }
 
             if (path === '/start' && request.method === 'POST') {
