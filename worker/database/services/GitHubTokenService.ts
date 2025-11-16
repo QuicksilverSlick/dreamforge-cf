@@ -216,40 +216,59 @@ export class GitHubTokenService extends BaseService {
                 updatedAt: now
             };
 
-            this.logger.info('Step 2: Deactivating existing tokens for user', { userId });
-            const deactivateResult = await this.database
-                .update(schema.githubTokens)
-                .set({
-                    isActive: false,
-                    updatedAt: now
-                })
-                .where(
-                    and(
-                        eq(schema.githubTokens.userId, userId),
-                        eq(schema.githubTokens.isActive, true)
-                    )
-                )
-                .run();
-
-            this.logger.info('Step 2: Deactivation complete', {
-                changes: deactivateResult.meta?.changes ?? 0,
-                success: deactivateResult.success
-            });
-
-            this.logger.info('Step 3: Inserting new token record', {
-                tokenId,
+            this.logger.info('Step 2: Executing atomic UPDATE+INSERT in D1 batch transaction', {
                 userId,
-                scopes
+                tokenId
             });
-            const insertResult = await this.database
-                .insert(schema.githubTokens)
-                .values(newToken)
-                .run();
 
-            this.logger.info('Step 3: Insert complete', {
-                changes: insertResult.meta?.changes ?? 0,
-                success: insertResult.success
+            // Use D1 batch for atomic operation - all succeed or all rollback
+            const [deactivateResult, insertResult] = await this.database.batch([
+                this.database
+                    .update(schema.githubTokens)
+                    .set({
+                        isActive: false,
+                        updatedAt: now
+                    })
+                    .where(
+                        and(
+                            eq(schema.githubTokens.userId, userId),
+                            eq(schema.githubTokens.isActive, true)
+                        )
+                    ),
+                this.database
+                    .insert(schema.githubTokens)
+                    .values(newToken)
+            ]);
+
+            this.logger.info('Step 2: Batch transaction complete', {
+                deactivate: {
+                    changes: deactivateResult.meta?.changes ?? 0,
+                    success: deactivateResult.success,
+                    hadActiveTokens: (deactivateResult.meta?.changes ?? 0) > 0
+                },
+                insert: {
+                    changes: insertResult.meta?.changes ?? 0,
+                    success: insertResult.success,
+                    lastRowId: insertResult.meta?.last_row_id,
+                    duration: insertResult.meta?.duration
+                }
             });
+
+            // CRITICAL: Validate the UPDATE succeeded
+            if (!deactivateResult.success) {
+                throw new Error('Failed to deactivate existing GitHub tokens - D1 batch operation returned success=false');
+            }
+
+            // CRITICAL: Validate the INSERT succeeded
+            if (!insertResult.success) {
+                throw new Error('GitHub token INSERT failed - D1 batch operation returned success=false');
+            }
+
+            // CRITICAL: Validate a row was actually inserted
+            const changesCount = insertResult.meta?.changes ?? 0;
+            if (changesCount !== 1) {
+                throw new Error(`GitHub token INSERT failed - expected 1 row inserted, got ${changesCount} changes`);
+            }
 
             this.logger.info('✅ GitHub token stored successfully', {
                 userId,
