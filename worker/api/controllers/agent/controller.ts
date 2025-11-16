@@ -299,10 +299,12 @@ export class CodingAgentController extends BaseController {
             this.logger.info(`Connecting to existing agent: ${agentId}`);
 
             try {
-                // Verify the agent instance exists
+                // Get the agent instance
+                // Note: We don't check isInitialized() here because the agent may still be initializing
+                // The WebSocket connection will handle the state appropriately
                 const agentInstance = await getAgentStub(env, agentId);
-                if (!agentInstance || !(await agentInstance.isInitialized())) {
-                    return CodingAgentController.createErrorResponse<AgentConnectionData>('Agent instance not found or not initialized', 404);
+                if (!agentInstance) {
+                    return CodingAgentController.createErrorResponse<AgentConnectionData>('Agent instance not found', 404);
                 }
                 this.logger.info(`Successfully connected to existing agent: ${agentId}`);
 
