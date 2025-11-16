@@ -508,7 +508,7 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
      */
     private handleWebSocketUpgrade(): Response {
         const pair = new WebSocketPair();
-        const [client, server] = Object.values(pair);
+        const [_client, server] = Object.values(pair) as [WebSocket, WebSocket];
 
         this.ctx.acceptWebSocket(server);
         this.webSockets.add(server);
@@ -554,7 +554,7 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
 
         return new Response(null, {
             status: 101,
-            webSocket: client,
+            webSocket: _client,
         });
     }
 }

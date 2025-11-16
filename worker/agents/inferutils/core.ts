@@ -274,12 +274,12 @@ export async function getConfigurationForModel(
         } else if (provider === 'gemini') {
             return {
                 baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-                apiKey: env.GOOGLE_AI_STUDIO_API_KEY || env.CLOUDFLARE_AI_GATEWAY_TOKEN,
+                apiKey: env.GOOGLE_AI_STUDIO_API_KEY ?? env.CLOUDFLARE_AI_GATEWAY_TOKEN ?? '',
             };
         } else if (provider === 'claude') {
             return {
                 baseURL: 'https://api.anthropic.com/v1/',
-                apiKey: env.ANTHROPIC_API_KEY || env.CLOUDFLARE_AI_GATEWAY_TOKEN,
+                apiKey: env.ANTHROPIC_API_KEY ?? env.CLOUDFLARE_AI_GATEWAY_TOKEN ?? '',
             };
         }
         providerForcedOverride = provider as AIGatewayProviders;

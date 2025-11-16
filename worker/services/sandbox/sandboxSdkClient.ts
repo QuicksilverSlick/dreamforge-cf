@@ -703,7 +703,9 @@ export class SandboxSdkClient extends BaseSandboxService {
             // Initialize resource provisioner (skip if credentials are not available)
             let resourceProvisioner: ResourceProvisioner;
             try {
-                resourceProvisioner = new ResourceProvisioner(this.logger);
+                const accountId = env.CLOUDFLARE_ACCOUNT_ID ?? '';
+                const apiToken = env.CLOUDFLARE_API_TOKEN ?? '';
+                resourceProvisioner = new ResourceProvisioner(this.logger, accountId, apiToken);
             } catch (error) {
                 this.logger.warn(`Cannot initialize resource provisioner: ${error instanceof Error ? error.message : 'Unknown error'}`);
                 return {

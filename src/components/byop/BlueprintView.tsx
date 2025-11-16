@@ -67,7 +67,7 @@ export function BlueprintView({
         try {
             const response = await apiClient.startBuilding(analysisId);
 
-            if (response.data && response.data.success) {
+            if (response.data?.success && response.data.agentId) {
                 navigate(`/chat/${response.data.agentId}`);
             } else {
                 setError('Failed to start building session');

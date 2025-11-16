@@ -27,7 +27,7 @@ export function useGitHubRepositories() {
 
         try {
             const response = await apiClient.listGitHubRepositories();
-            setRepositories(response.data ? response.data.repositories : []);
+            setRepositories(response.data?.repositories ?? []);
         } catch (err) {
             const errorMessage = err instanceof ApiError
                 ? err.message

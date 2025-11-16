@@ -474,8 +474,8 @@ export class BYOPController extends BaseController {
             // Cache the blueprint for future use
             const cacheService = new BlueprintCacheService(env);
             const blueprint = state.analysisResult.blueprint as GeneratedBlueprint;
-            const repositoryUrl = state.repositoryUrl;
-            const repositoryName = state.repositoryName;
+            const repositoryUrl = state.repositoryUrl ?? '';
+            const repositoryName = state.repositoryName ?? 'unknown';
 
             // Calculate total lines of code
             const sourceFiles = state.analysisResult.sourceFiles ?? [];

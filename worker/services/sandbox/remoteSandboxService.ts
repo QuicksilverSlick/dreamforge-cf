@@ -31,7 +31,6 @@ import {
     GitHubPushResponseSchema,
 } from './sandboxTypes';
 import { BaseSandboxService } from "./BaseSandboxService";
-import { env } from 'cloudflare:workers'
 import z from 'zod';
 import { FileOutputType } from 'worker/agents/schemas';
 
@@ -247,6 +246,5 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
     }
 }
 
-if (env.SANDBOX_SERVICE_URL && env.SANDBOX_SERVICE_API_KEY) {
-    RemoteSandboxServiceClient.init(env.SANDBOX_SERVICE_URL, env.SANDBOX_SERVICE_API_KEY);
-}
+// NOTE: Auto-initialization removed - env is not available at module scope
+// Initialize RemoteSandboxServiceClient in factory.ts instead

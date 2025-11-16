@@ -201,7 +201,7 @@ export class BlueprintCacheService extends BaseService {
                 .where(lt(blueprintCache.expiresAt, now))
                 .execute();
 
-            const deletedCount = result.success ? result.meta.changes : 0;
+            const deletedCount = result.meta?.changes ?? 0;
 
             if (deletedCount > 0) {
                 this.logger.info('Cleaned up expired cache entries', { deletedCount });
