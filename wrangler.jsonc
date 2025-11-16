@@ -74,8 +74,7 @@
 			"binding": "DB",
 			"database_name": "vibesdk-db",
 			"database_id": "0d8d35e2-91e1-4231-90b1-f49cc313876c",
-			"migrations_dir": "migrations",
-			"remote": true
+			"migrations_dir": "migrations"
 		}
 	],
 	"durable_objects": {
@@ -94,7 +93,10 @@
             },
             {
                 "class_name": "CodebaseAnalyzer",
-                "name": "CodebaseAnalyzerObject"
+                "name": "CodebaseAnalyzerObject",
+                "limits": {
+                    "cpu_ms": 300000
+                }
             }
 		]
 	},
@@ -109,6 +111,7 @@
         {
             "binding": "VibecoderStore",
             "id": "7fc3452e180a4a8997c52346f41685d1",
+            "preview_id": "0faa2e90c1b74cf38af0de0589094f54",
             "remote": true
         }
     ],

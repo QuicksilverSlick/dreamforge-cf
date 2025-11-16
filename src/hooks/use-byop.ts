@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { apiClient, ApiError } from '@/lib/api-client';
 import type {
     GitHubRepository,
     ImportRepositoryRequest,
@@ -11,8 +12,6 @@ import type {
     AnalysisStateResponse,
     BlueprintResponse,
 } from '@/api-types-byop';
-
-const API_BASE = '/api/byop';
 
 /**
  * Fetch user's GitHub repositories
@@ -27,20 +26,15 @@ export function useGitHubRepositories() {
         setError(null);
 
         try {
-            const response = await fetch(`${API_BASE}/repositories`, {
-                method: 'GET',
-                credentials: 'include',
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Failed to fetch repositories' }));
-                throw new Error(errorData.error || 'Failed to fetch repositories');
-            }
-
-            const data = await response.json();
-            setRepositories(data.data.repositories);
+            const response = await apiClient.listGitHubRepositories();
+            setRepositories(response.data ? response.data.repositories : []);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unknown error');
+            const errorMessage = err instanceof ApiError
+                ? err.message
+                : err instanceof Error
+                    ? err.message
+                    : 'Unknown error';
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -72,46 +66,26 @@ export function useImportRepository() {
     const attemptImport = useCallback(async (
         request: ImportRepositoryRequest,
         attempt: number
-    ): Promise<ImportRepositoryResponse | null> => {
+    ): Promise<ImportRepositoryResponse> => {
         try {
-            const response = await fetch(`${API_BASE}/import`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify(request),
-            });
+            const response = await apiClient.importRepository(request);
+            setRetryCount(0);
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Failed to import repository' }));
-                const errorMessage = errorData.error || 'Failed to import repository';
-
-                // Retry on network errors or 5xx server errors
-                if (response.status >= 500 || response.status === 0) {
-                    if (attempt < MAX_RETRIES) {
-                        const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
-                        console.log(`Import failed with ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
-                        setRetryCount(attempt + 1);
-
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        return attemptImport(request, attempt + 1);
-                    }
-                }
-
-                throw new Error(errorMessage);
+            if (!response.data) {
+                throw new Error('No data in response');
             }
 
-            const data = await response.json();
-            setRetryCount(0);
-            return data.data;
+            return response.data;
         } catch (err) {
-            // Retry on network errors (like connection timeout, DNS failure)
-            const isNetworkError = err instanceof TypeError || (err instanceof Error && err.message.includes('fetch'));
+            const isApiError = err instanceof ApiError;
+            const shouldRetry = isApiError
+                ? err.status >= 500 || err.status === 0
+                : err instanceof TypeError || (err instanceof Error && err.message.includes('fetch'));
 
-            if (isNetworkError && attempt < MAX_RETRIES) {
+            // Retry on network errors or 5xx server errors
+            if (shouldRetry && attempt < MAX_RETRIES) {
                 const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
-                console.log(`Network error, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+                console.log(`Import failed${isApiError ? ` with ${(err as ApiError).status}` : ''}, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
                 setRetryCount(attempt + 1);
 
                 await new Promise(resolve => setTimeout(resolve, delay));
@@ -122,7 +96,7 @@ export function useImportRepository() {
         }
     }, []);
 
-    const importRepository = useCallback(async (request: ImportRepositoryRequest): Promise<ImportRepositoryResponse | null> => {
+    const importRepository = useCallback(async (request: ImportRepositoryRequest): Promise<ImportRepositoryResponse | undefined> => {
         setLoading(true);
         setError(null);
         setRetryCount(0);
@@ -131,9 +105,13 @@ export function useImportRepository() {
             const result = await attemptImport(request, 0);
             return result;
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            const errorMessage = err instanceof ApiError
+                ? err.message
+                : err instanceof Error
+                    ? err.message
+                    : 'Unknown error';
             setError(errorMessage);
-            return null;
+            return undefined;
         } finally {
             setLoading(false);
         }
@@ -162,29 +140,24 @@ export function useAnalysisStatus(analysisId: string | null) {
 
     const fetchStatus = useCallback(async (id: string) => {
         try {
-            const response = await fetch(`${API_BASE}/analysis/${id}/status`, {
-                method: 'GET',
-                credentials: 'include',
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Failed to fetch status' }));
-                throw new Error(errorData.error || 'Failed to fetch status');
-            }
-
-            const data = await response.json();
-            setStatus(data.data);
+            const response = await apiClient.getAnalysisStatus(id);
+            const statusData = response.data ?? null;
+            setStatus(statusData);
             setError(null);
 
             // Stop polling if completed or failed
-            if (data.data.status === 'completed' || data.data.status === 'failed') {
+            if (statusData && (statusData.status === 'completed' || statusData.status === 'failed')) {
                 if (intervalRef.current) {
                     clearInterval(intervalRef.current);
                     intervalRef.current = null;
                 }
             }
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            const errorMessage = err instanceof ApiError
+                ? err.message
+                : err instanceof Error
+                    ? err.message
+                    : 'Unknown error';
             setError(errorMessage);
         }
     }, []);
@@ -221,7 +194,7 @@ export function useAnalysisStatus(analysisId: string | null) {
         try {
             // Construct WebSocket URL
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}${API_BASE}/analysis/${id}/ws`;
+            const wsUrl = `${protocol}//${window.location.host}/api/byop/analysis/${id}/ws`;
 
             const ws = new WebSocket(wsUrl);
             wsRef.current = ws;
@@ -235,6 +208,8 @@ export function useAnalysisStatus(analysisId: string | null) {
                 stopPolling();
             });
 
+            let isCompleted = false;
+
             ws.addEventListener('message', (event) => {
                 try {
                     const message = JSON.parse(event.data);
@@ -244,6 +219,7 @@ export function useAnalysisStatus(analysisId: string | null) {
 
                         // Close WebSocket if analysis completed or failed
                         if (message.data.status === 'completed' || message.data.status === 'failed') {
+                            isCompleted = true;
                             ws.close();
                         }
                     }
@@ -257,7 +233,7 @@ export function useAnalysisStatus(analysisId: string | null) {
                 wsRef.current = null;
 
                 // Only attempt reconnect if not completed and haven't exceeded max attempts
-                if (status?.status !== 'completed' && status?.status !== 'failed') {
+                if (!isCompleted && status?.status !== 'completed' && status?.status !== 'failed') {
                     if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
                         reconnectAttempts.current++;
                         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000);
@@ -332,20 +308,14 @@ export function useBlueprint(analysisId: string | null) {
         setError(null);
 
         try {
-            const response = await fetch(`${API_BASE}/analysis/${id}/blueprint`, {
-                method: 'GET',
-                credentials: 'include',
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Failed to fetch blueprint' }));
-                throw new Error(errorData.error || 'Failed to fetch blueprint');
-            }
-
-            const data = await response.json();
-            setBlueprint(data.data);
+            const response = await apiClient.getBlueprint(id);
+            setBlueprint(response.data ?? null);
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            const errorMessage = err instanceof ApiError
+                ? err.message
+                : err instanceof Error
+                    ? err.message
+                    : 'Unknown error';
             setError(errorMessage);
         } finally {
             setLoading(false);

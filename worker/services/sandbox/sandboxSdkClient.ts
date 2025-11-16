@@ -2182,15 +2182,38 @@ export class SandboxSdkClient extends BaseSandboxService {
 
             // Create credential helper script to avoid token exposure in command line
             const credHelperPath = '/tmp/git-credential-helper.sh';
-            const credHelperScript = `#!/bin/sh
-echo "username=oauth2"
-echo "password=${accessToken}"
-`;
 
-            // Write credential helper script
+            this.logger.info('Starting git clone process', {
+                repository: repoName,
+                targetPath,
+                branch: branch || 'default'
+            });
+
+            // Write credential helper script using printf to avoid shell expansion issues
+            this.logger.info('Creating credential helper script');
+
+            // Escape the access token for safe embedding in the printf command
+            const escapedToken = accessToken.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+
             const writeResult = await session.exec(
-                `cat > ${credHelperPath} << 'CREDENTIAL_EOF'\n${credHelperScript}CREDENTIAL_EOF`,
-                { timeout: 5000 }
+                `printf '#!/bin/sh\\n' > ${credHelperPath} && ` +
+                `printf '# Git credential helper for GitHub authentication\\n' >> ${credHelperPath} && ` +
+                `printf 'echo "[CRED_HELPER] Called with: $1" >&2\\n' >> ${credHelperPath} && ` +
+                `printf 'case "$1" in\\n' >> ${credHelperPath} && ` +
+                `printf '  *Username*|*username*)\\n' >> ${credHelperPath} && ` +
+                `printf '    echo "[CRED_HELPER] Username: token" >&2\\n' >> ${credHelperPath} && ` +
+                `printf '    echo "token"\\n' >> ${credHelperPath} && ` +
+                `printf '    ;;\\n' >> ${credHelperPath} && ` +
+                `printf '  *Password*|*password*)\\n' >> ${credHelperPath} && ` +
+                `printf '    echo "[CRED_HELPER] Password: (${accessToken.length} chars)" >&2\\n' >> ${credHelperPath} && ` +
+                `printf '    echo "${escapedToken}"\\n' >> ${credHelperPath} && ` +
+                `printf '    ;;\\n' >> ${credHelperPath} && ` +
+                `printf '  *)\\n' >> ${credHelperPath} && ` +
+                `printf '    echo "[CRED_HELPER] ERROR: Unknown prompt: $1" >&2\\n' >> ${credHelperPath} && ` +
+                `printf '    exit 1\\n' >> ${credHelperPath} && ` +
+                `printf '    ;;\\n' >> ${credHelperPath} && ` +
+                `printf 'esac\\n' >> ${credHelperPath}`,
+                { timeout: 10000 }
             );
 
             if (writeResult.exitCode !== 0) {
@@ -2203,7 +2226,16 @@ echo "password=${accessToken}"
             }
 
             // Make script executable
+            this.logger.info('Making credential helper executable');
             await session.exec(`chmod +x ${credHelperPath}`, { timeout: 5000 });
+
+            // Test network connectivity
+            this.logger.info('Testing GitHub connectivity');
+            const pingResult = await session.exec('curl -I https://github.com', { timeout: 10000 });
+            this.logger.info('GitHub connectivity test result', {
+                exitCode: pingResult.exitCode,
+                stdout: pingResult.stdout.substring(0, 200)
+            });
 
             // Normalize repository URL (no token embedded)
             const cleanUrl = this.normalizeRepositoryUrl(repositoryUrl);
@@ -2215,13 +2247,19 @@ echo "password=${accessToken}"
             }
             cloneCommand += ` "${cleanUrl}" "${targetPath}"`;
 
-            this.logger.info('Cloning repository', {
+            this.logger.info('Executing git clone command', {
                 repository: repoName,
                 targetPath,
                 branch: branch || 'default'
             });
 
             const cloneResult = await session.exec(cloneCommand, { timeout: 120000 });
+
+            this.logger.info('Git clone command completed', {
+                exitCode: cloneResult.exitCode,
+                hasStdout: !!cloneResult.stdout,
+                hasStderr: !!cloneResult.stderr
+            });
 
             // Clean up credential helper immediately
             await session.exec(`rm -f ${credHelperPath}`, { timeout: 5000 });

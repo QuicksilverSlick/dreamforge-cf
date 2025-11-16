@@ -121,3 +121,10 @@ export interface CompletionPhase {
 export interface BlueprintResponse {
     blueprint: GeneratedBlueprint;
 }
+
+export interface StartBuildingResponse {
+    success: boolean;
+    agentId: string;
+    websocketUrl: string;
+    message: string;
+}

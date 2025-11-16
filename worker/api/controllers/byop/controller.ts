@@ -205,14 +205,15 @@ export class BYOPController extends BaseController {
                     );
                 }
 
-                const userData = await testResponse.json() as { login: string };
+                const userData = await testResponse.json() as { login: string | undefined };
+                const githubUsername = userData.login ?? 'unknown';
 
                 // Get actual token scopes from response headers
                 const scopesHeader = testResponse.headers.get('x-oauth-scopes');
                 const actualScopes = scopesHeader ? scopesHeader.split(',').map(s => s.trim()) : [];
 
                 logger.info('Token validation SUCCESS', {
-                    githubUsername: userData.login,
+                    githubUsername,
                     tokenScopes: actualScopes,
                     hasRepoScope: actualScopes.includes('repo'),
                     hasPublicRepoScope: actualScopes.includes('public_repo')
@@ -476,19 +477,23 @@ export class BYOPController extends BaseController {
             const repositoryUrl = state.repositoryUrl;
             const repositoryName = state.repositoryName;
 
+            // Calculate total lines of code
+            const sourceFiles = state.analysisResult.sourceFiles ?? [];
+            const totalLinesOfCode = sourceFiles.reduce(
+                (sum: number, file) => sum + (('linesOfCode' in file && typeof file.linesOfCode === 'number') ? file.linesOfCode : 0),
+                0
+            );
+
             // Save to cache (fire and forget - don't block response)
             cacheService.set({
                 userId: user.id,
                 repositoryUrl,
                 repositoryName,
-                branch: 'main', // Default branch - in production you'd track this
+                branch: 'main',
                 blueprint,
-                fileCount: state.analysisResult.sourceFiles?.length,
-                totalLinesOfCode: state.analysisResult.sourceFiles?.reduce(
-                    (sum: number, file: { linesOfCode?: number }) => sum + (file.linesOfCode || 0),
-                    0
-                ),
-                framework: state.analysisResult.framework as string | undefined,
+                fileCount: sourceFiles.length,
+                totalLinesOfCode,
+                framework: state.analysisResult.framework,
                 ttlDays: 7
             }).catch((error) => {
                 logger.error('Failed to cache blueprint (non-blocking)', { error });

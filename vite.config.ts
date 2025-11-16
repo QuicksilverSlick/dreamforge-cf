@@ -1,11 +1,30 @@
 // import { sentryVitePlugin } from '@sentry/vite-plugin';
-import { defineConfig } from 'vite';
+import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import svgr from 'vite-plugin-svgr';
 import path from 'path';
 
 import { cloudflare } from '@cloudflare/vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
+
+// Plugin to inject Node.js polyfills for ts-morph compatibility
+const nodePolyfills = (): Plugin => ({
+	name: 'node-polyfills',
+	transform(code, id) {
+		if (id.includes('ts-morph') || id.includes('@ts-morph')) {
+			return {
+				code: `
+					if (typeof __filename === 'undefined') {
+						globalThis.__filename = '';
+						globalThis.__dirname = '';
+					}
+					${code}
+				`,
+				map: null
+			};
+		}
+	}
+});
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -31,6 +50,7 @@ export default defineConfig({
 	//     }
 	// },
 	plugins: [
+		nodePolyfills(),
 		react(),
 		svgr(),
 		cloudflare({
@@ -65,8 +85,8 @@ export default defineConfig({
 			process.env.NODE_ENV || 'development',
 		),
 		global: 'globalThis',
-		// '__filename': '""',
-		// '__dirname': '""',
+		'__filename': '""',
+		'__dirname': '""',
 	},
 
 	worker: {

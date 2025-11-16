@@ -58,6 +58,14 @@ import type{
     PlatformStatusData,
     RateLimitError
 } from '@/api-types';
+import type {
+	ListRepositoriesResponse,
+	ImportRepositoryRequest,
+	ImportRepositoryResponse,
+	AnalysisStateResponse,
+	BlueprintResponse,
+	StartBuildingResponse,
+} from '@/api-types-byop';
 import {
     
     RateLimitExceededError,
@@ -1079,6 +1087,65 @@ class ApiClient {
 			{
 				method: 'DELETE',
 			},
+		);
+	}
+
+	// ===============================
+	// BYOP (Bring Your Own Project) API Methods
+	// ===============================
+
+	/**
+	 * List user's GitHub repositories
+	 */
+	async listGitHubRepositories(): Promise<ApiResponse<ListRepositoriesResponse>> {
+		return this.request<ListRepositoriesResponse>('/api/byop/repositories');
+	}
+
+	/**
+	 * Import a GitHub repository for analysis
+	 */
+	async importRepository(
+		data: ImportRepositoryRequest
+	): Promise<ApiResponse<ImportRepositoryResponse>> {
+		return this.request<ImportRepositoryResponse>('/api/byop/import', {
+			method: 'POST',
+			body: data,
+		});
+	}
+
+	/**
+	 * Get analysis status for a repository import
+	 */
+	async getAnalysisStatus(
+		analysisId: string
+	): Promise<ApiResponse<AnalysisStateResponse>> {
+		return this.request<AnalysisStateResponse>(
+			`/api/byop/analysis/${analysisId}/status`
+		);
+	}
+
+	/**
+	 * Get completed blueprint for an analysis
+	 */
+	async getBlueprint(
+		analysisId: string
+	): Promise<ApiResponse<BlueprintResponse>> {
+		return this.request<BlueprintResponse>(
+			`/api/byop/analysis/${analysisId}/blueprint`
+		);
+	}
+
+	/**
+	 * Start building on imported project
+	 */
+	async startBuilding(
+		analysisId: string
+	): Promise<ApiResponse<StartBuildingResponse>> {
+		return this.request<StartBuildingResponse>(
+			`/api/byop/analysis/${analysisId}/start-building`,
+			{
+				method: 'POST'
+			}
 		);
 	}
 

@@ -3,20 +3,12 @@
  * Manages caching of completed BYOP blueprints in D1
  */
 
-import { eq, and, lt } from 'drizzle-orm';
-import { DrizzleD1Database } from 'drizzle-orm/d1';
+import { eq, and, lt, gt } from 'drizzle-orm';
 import { blueprintCache, type BlueprintCache, type NewBlueprintCache } from '../schema';
-import { createLogger } from '../../logger';
+import { BaseService } from './BaseService';
 import type { GeneratedBlueprint } from '../../services/blueprint/BlueprintGenerationService';
 
-const logger = createLogger('BlueprintCacheService');
-
-export class BlueprintCacheService {
-    private db: DrizzleD1Database;
-
-    constructor(db: DrizzleD1Database) {
-        this.db = db;
-    }
+export class BlueprintCacheService extends BaseService {
 
     /**
      * Check if a blueprint exists in cache
@@ -27,9 +19,9 @@ export class BlueprintCacheService {
         branch: string
     ): Promise<BlueprintCache | null> {
         try {
-            const now = Math.floor(Date.now() / 1000);
+            const now = new Date();
 
-            const cached = await this.db
+            const cached = await this.database
                 .select()
                 .from(blueprintCache)
                 .where(
@@ -47,15 +39,15 @@ export class BlueprintCacheService {
             }
 
             // Check if expired
-            if (cached.expiresAt && cached.expiresAt < now) {
-                logger.info('Cache entry expired, deleting', {
+            if (cached.expiresAt && new Date(cached.expiresAt) < now) {
+                this.logger.info('Cache entry expired, deleting', {
                     id: cached.id,
                     repositoryUrl,
                     branch
                 });
 
                 // Delete expired entry
-                await this.db
+                await this.database
                     .delete(blueprintCache)
                     .where(eq(blueprintCache.id, cached.id))
                     .execute();
@@ -64,16 +56,16 @@ export class BlueprintCacheService {
             }
 
             // Update access tracking
-            await this.db
+            await this.database
                 .update(blueprintCache)
                 .set({
                     accessCount: (cached.accessCount || 0) + 1,
-                    lastAccessedAt: now
+                    lastAccessedAt: now.getTime()
                 })
                 .where(eq(blueprintCache.id, cached.id))
                 .execute();
 
-            logger.info('Cache hit', {
+            this.logger.info('Cache hit', {
                 id: cached.id,
                 repositoryUrl,
                 branch,
@@ -82,7 +74,7 @@ export class BlueprintCacheService {
 
             return cached;
         } catch (error) {
-            logger.error('Failed to get cached blueprint', { error, repositoryUrl, branch });
+            this.logger.error('Failed to get cached blueprint', { error, repositoryUrl, branch });
             return null;
         }
     }
@@ -114,14 +106,14 @@ export class BlueprintCacheService {
                 ttlDays = 7 // Default 7 days cache
             } = options;
 
-            const now = Math.floor(Date.now() / 1000);
-            const expiresAt = now + (ttlDays * 24 * 60 * 60);
+            const now = new Date();
+            const expiresAt = new Date(now.getTime() + (ttlDays * 24 * 60 * 60 * 1000));
 
             // Generate unique ID
             const id = `blueprint_${userId}_${Buffer.from(repositoryUrl + branch).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 32)}`;
 
             // Delete any existing cache for this repo+branch
-            await this.db
+            await this.database
                 .delete(blueprintCache)
                 .where(
                     and(
@@ -144,27 +136,27 @@ export class BlueprintCacheService {
                 fileCount,
                 totalLinesOfCode,
                 framework,
-                expiresAt,
+                expiresAt: expiresAt.getTime(),
                 accessCount: 0,
                 lastAccessedAt: null
             };
 
-            await this.db
+            await this.database
                 .insert(blueprintCache)
                 .values(newCache)
                 .execute();
 
-            logger.info('Blueprint cached successfully', {
+            this.logger.info('Blueprint cached successfully', {
                 id,
                 repositoryUrl,
                 branch,
                 completenessPercentage: blueprint.currentState.completenessPercentage,
-                expiresAt: new Date(expiresAt * 1000).toISOString()
+                expiresAt: expiresAt.toISOString()
             });
 
             return true;
         } catch (error) {
-            logger.error('Failed to cache blueprint', { error, options });
+            this.logger.error('Failed to cache blueprint', { error, options });
             return false;
         }
     }
@@ -178,7 +170,7 @@ export class BlueprintCacheService {
         branch: string
     ): Promise<boolean> {
         try {
-            await this.db
+            await this.database
                 .delete(blueprintCache)
                 .where(
                     and(
@@ -189,10 +181,10 @@ export class BlueprintCacheService {
                 )
                 .execute();
 
-            logger.info('Cache entry deleted', { repositoryUrl, branch });
+            this.logger.info('Cache entry deleted', { repositoryUrl, branch });
             return true;
         } catch (error) {
-            logger.error('Failed to delete cached blueprint', { error, repositoryUrl, branch });
+            this.logger.error('Failed to delete cached blueprint', { error, repositoryUrl, branch });
             return false;
         }
     }
@@ -202,22 +194,22 @@ export class BlueprintCacheService {
      */
     async cleanupExpired(): Promise<number> {
         try {
-            const now = Math.floor(Date.now() / 1000);
+            const now = new Date();
 
-            const result = await this.db
+            const result = await this.database
                 .delete(blueprintCache)
                 .where(lt(blueprintCache.expiresAt, now))
                 .execute();
 
-            const deletedCount = result.rowsAffected || 0;
+            const deletedCount = result.success ? result.meta.changes : 0;
 
             if (deletedCount > 0) {
-                logger.info('Cleaned up expired cache entries', { deletedCount });
+                this.logger.info('Cleaned up expired cache entries', { deletedCount });
             }
 
             return deletedCount;
         } catch (error) {
-            logger.error('Failed to cleanup expired cache', { error });
+            this.logger.error('Failed to cleanup expired cache', { error });
             return 0;
         }
     }
@@ -227,22 +219,22 @@ export class BlueprintCacheService {
      */
     async listByUser(userId: string): Promise<BlueprintCache[]> {
         try {
-            const now = Math.floor(Date.now() / 1000);
+            const now = new Date();
 
-            const cached = await this.db
+            const cached = await this.database
                 .select()
                 .from(blueprintCache)
                 .where(
                     and(
                         eq(blueprintCache.userId, userId),
-                        lt(now, blueprintCache.expiresAt)
+                        gt(blueprintCache.expiresAt, now)
                     )
                 )
                 .all();
 
             return cached;
         } catch (error) {
-            logger.error('Failed to list cached blueprints', { error, userId });
+            this.logger.error('Failed to list cached blueprints', { error, userId });
             return [];
         }
     }

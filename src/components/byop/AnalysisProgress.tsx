@@ -1,10 +1,10 @@
 /**
  * Analysis Progress Component
- * Shows real-time progress of repository analysis
+ * Shows real-time progress of repository analysis with WebSocket updates
  */
 
 import { motion } from 'framer-motion';
-import { CheckCircle2, XCircle, Loader2, ArrowRight, X } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, ArrowRight, X, Code2, Package, FileSearch, Brain } from 'lucide-react';
 import type { AnalysisStateResponse } from '@/api-types-byop';
 
 interface AnalysisProgressProps {
@@ -118,29 +118,40 @@ export function AnalysisProgress({
                 {/* Phases Checklist */}
                 <div className="space-y-3 mb-8">
                     <PhaseItem
-                        label="Cloning repository"
-                        completed={progress >= 20}
-                        active={progress < 20 && isAnalyzing}
+                        label="Reading repository structure"
+                        completed={progress > 10}
+                        active={progress <= 10 && isAnalyzing}
+                        icon={<FileSearch className="w-4 h-4" />}
                     />
                     <PhaseItem
                         label="Analyzing package.json"
-                        completed={progress >= 40}
-                        active={progress >= 20 && progress < 40 && isAnalyzing}
+                        completed={progress > 30}
+                        active={progress > 10 && progress <= 30 && isAnalyzing}
+                        icon={<Package className="w-4 h-4" />}
                     />
                     <PhaseItem
-                        label="Parsing source files"
-                        completed={progress >= 60}
-                        active={progress >= 40 && progress < 60 && isAnalyzing}
+                        label="Parsing source files with ts-morph"
+                        completed={progress > 30}
+                        active={progress > 30 && progress <= 30 && isAnalyzing}
+                        icon={<Code2 className="w-4 h-4" />}
+                    />
+                    <PhaseItem
+                        label="Analyzing dependencies"
+                        completed={progress > 50}
+                        active={progress > 30 && progress <= 50 && isAnalyzing}
+                        icon={<Package className="w-4 h-4" />}
                     />
                     <PhaseItem
                         label="Building codebase context"
-                        completed={progress >= 80}
-                        active={progress >= 60 && progress < 80 && isAnalyzing}
+                        completed={progress > 65}
+                        active={progress > 50 && progress <= 65 && isAnalyzing}
+                        icon={<FileSearch className="w-4 h-4" />}
                     />
                     <PhaseItem
-                        label="Generating completion blueprint"
+                        label="Generating completion blueprint with Gemini 2.5 Pro"
                         completed={progress >= 100}
-                        active={progress >= 80 && progress < 100 && isAnalyzing}
+                        active={progress > 65 && progress < 100 && isAnalyzing}
+                        icon={<Brain className="w-4 h-4" />}
                     />
                 </div>
 
@@ -172,13 +183,14 @@ interface PhaseItemProps {
     label: string;
     completed: boolean;
     active: boolean;
+    icon?: React.ReactNode;
 }
 
-function PhaseItem({ label, completed, active }: PhaseItemProps) {
+function PhaseItem({ label, completed, active, icon }: PhaseItemProps) {
     return (
         <div className="flex items-center gap-3">
             <div className={`
-                w-5 h-5 rounded-full border-2 flex items-center justify-center
+                w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0
                 ${completed ? 'bg-accent border-accent' :
                   active ? 'border-accent' :
                   'border-border'}
@@ -192,13 +204,24 @@ function PhaseItem({ label, completed, active }: PhaseItemProps) {
                     />
                 )}
             </div>
-            <span className={`text-sm ${
-                completed ? 'text-text-primary font-medium' :
-                active ? 'text-accent font-medium' :
-                'text-text-tertiary'
-            }`}>
-                {label}
-            </span>
+            <div className="flex items-center gap-2 flex-1">
+                {icon && (
+                    <span className={`shrink-0 ${
+                        completed ? 'text-accent' :
+                        active ? 'text-accent' :
+                        'text-text-tertiary'
+                    }`}>
+                        {icon}
+                    </span>
+                )}
+                <span className={`text-sm ${
+                    completed ? 'text-text-primary font-medium' :
+                    active ? 'text-accent font-medium' :
+                    'text-text-tertiary'
+                }`}>
+                    {label}
+                </span>
+            </div>
         </div>
     );
 }

@@ -73,10 +73,11 @@ export default function ImportPage() {
                     </div>
 
                     {/* Blueprint View */}
-                    {showBlueprint && blueprint ? (
+                    {showBlueprint && blueprint && analysisId ? (
                         <BlueprintView
                             blueprint={blueprint.blueprint}
                             repositoryName={analysisStatus?.repositoryName || 'Unknown'}
+                            analysisId={analysisId}
                             onBack={handleBack}
                             onNewImport={handleNewImport}
                         />

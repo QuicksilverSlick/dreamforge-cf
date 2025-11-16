@@ -1,11 +1,11 @@
 /**
  * Code Analysis Service
- * Uses ts-morph to parse and analyze TypeScript/JavaScript source files
+ * Uses regex-based analysis for Cloudflare Workers compatibility
+ * Note: ts-morph was removed due to Node.js dependency incompatibility with Workers
  */
 
-import { Project, SourceFile, SyntaxKind } from 'ts-morph';
 import { createLogger } from '../../logger';
-import type { SourceFileAnalysis, FunctionInfo, ClassInfo, TodoComment, FixmeComment } from '../blueprint/BlueprintGenerationService';
+import type { SourceFileAnalysis, FunctionInfo, ClassInfo } from '../blueprint/BlueprintGenerationService';
 
 const logger = createLogger('CodeAnalysisService');
 
@@ -19,61 +19,27 @@ export class CodeAnalysisService {
     static async analyzeSourceFiles(
         fileContents: Map<string, string>
     ): Promise<SourceFileAnalysis[]> {
+        // TEMPORARY FIX: Bypass ts-morph due to memory constraints in Cloudflare Workers
+        // ts-morph loads the entire TypeScript compiler (925KB) + creates in-memory AST
+        // This exceeds the 128MB Worker memory limit for repos with 20+ files
+        // TODO: Migrate to @typescript-eslint/typescript-estree (lighter alternative)
+        logger.info('Using regex-based analysis for Cloudflare Workers compatibility', {
+            fileCount: fileContents.size
+        });
+        return this.analyzeWithRegex(fileContents);
+
+        /* Original ts-morph code - commented out due to memory issues
         try {
-            // Try ts-morph analysis first
             return await this.analyzeWithTsMorph(fileContents);
         } catch (error) {
             logger.warn('ts-morph analysis failed, falling back to basic analysis', error);
-
-            // Fallback to basic regex-based analysis
             return this.analyzeWithRegex(fileContents);
         }
+        */
     }
 
     /**
-     * Analyze using ts-morph (full AST parsing)
-     */
-    private static async analyzeWithTsMorph(
-        fileContents: Map<string, string>
-    ): Promise<SourceFileAnalysis[]> {
-        const project = new Project({
-            useInMemoryFileSystem: true,
-            compilerOptions: {
-                target: 99, // ESNext
-                module: 99, // ESNext
-                allowJs: true,
-                checkJs: false,
-                jsx: 2, // React
-                strict: false
-            }
-        });
-
-        const analyses: SourceFileAnalysis[] = [];
-
-        for (const [filePath, content] of fileContents.entries()) {
-            if (!this.isAnalyzableFile(filePath)) {
-                continue;
-            }
-
-            try {
-                const sourceFile = project.createSourceFile(filePath, content, {
-                    overwrite: true
-                });
-
-                const analysis = this.analyzeSourceFile(sourceFile, filePath);
-                analyses.push(analysis);
-
-            } catch (error) {
-                logger.warn(`Failed to analyze file: ${filePath}`, error);
-            }
-        }
-
-        logger.info(`Analyzed ${analyses.length} source files with ts-morph`);
-        return analyses;
-    }
-
-    /**
-     * Fallback: Basic regex-based analysis when ts-morph is unavailable
+     * Regex-based analysis for Cloudflare Workers compatibility
      */
     private static analyzeWithRegex(
         fileContents: Map<string, string>
@@ -178,36 +144,6 @@ export class CodeAnalysisService {
     }
 
     /**
-     * Analyze a single source file
-     */
-    private static analyzeSourceFile(sourceFile: SourceFile, filePath: string): SourceFileAnalysis {
-        const language = this.detectLanguage(filePath);
-        const linesOfCode = sourceFile.getEndLineNumber();
-
-        const functions = this.extractFunctions(sourceFile);
-        const classes = this.extractClasses(sourceFile);
-        const imports = this.extractImports(sourceFile);
-        const exports = this.extractExports(sourceFile);
-        const todos = this.extractTodoComments(sourceFile, filePath);
-        const fixmes = this.extractFixmeComments(sourceFile, filePath);
-
-        const hasTests = this.detectTestFile(filePath);
-
-        return {
-            path: filePath,
-            language,
-            linesOfCode,
-            functions,
-            classes,
-            imports,
-            exports,
-            hasTests,
-            todos,
-            fixmes
-        };
-    }
-
-    /**
      * Detect programming language from file extension
      */
     private static detectLanguage(filePath: string): string {
@@ -216,173 +152,6 @@ export class CodeAnalysisService {
         if (filePath.endsWith('.mjs')) return 'javascript-module';
         if (filePath.endsWith('.cjs')) return 'javascript-commonjs';
         return 'javascript';
-    }
-
-    /**
-     * Extract function information
-     */
-    private static extractFunctions(sourceFile: SourceFile): FunctionInfo[] {
-        const functions: FunctionInfo[] = [];
-
-        // Function declarations
-        sourceFile.getFunctions().forEach(func => {
-            const name = func.getName() || 'anonymous';
-            const parameters = func.getParameters().map(p => p.getName());
-            const returnType = func.getReturnType().getText();
-            const isAsync = func.isAsync();
-            const isExported = func.isExported();
-            const hasDocumentation = func.getJsDocs().length > 0;
-
-            functions.push({
-                name,
-                parameters,
-                returnType,
-                isAsync,
-                isExported,
-                hasDocumentation
-            });
-        });
-
-        // Arrow functions and function expressions (variables)
-        sourceFile.getVariableDeclarations().forEach(varDecl => {
-            const initializer = varDecl.getInitializer();
-            if (initializer && (
-                initializer.getKind() === SyntaxKind.ArrowFunction ||
-                initializer.getKind() === SyntaxKind.FunctionExpression
-            )) {
-                const name = varDecl.getName();
-                const funcExpr = initializer.asKind(SyntaxKind.ArrowFunction) ||
-                               initializer.asKind(SyntaxKind.FunctionExpression);
-
-                if (funcExpr) {
-                    const parameters = funcExpr.getParameters().map(p => p.getName());
-                    const isAsync = funcExpr.isAsync();
-                    const parent = varDecl.getParent()?.getParent();
-                    const isExported = parent?.getKind() === SyntaxKind.VariableStatement &&
-                                      (parent as any).isExported?.() || false;
-
-                    functions.push({
-                        name,
-                        parameters,
-                        isAsync,
-                        isExported,
-                        hasDocumentation: false
-                    });
-                }
-            }
-        });
-
-        return functions;
-    }
-
-    /**
-     * Extract class information
-     */
-    private static extractClasses(sourceFile: SourceFile): ClassInfo[] {
-        const classes: ClassInfo[] = [];
-
-        sourceFile.getClasses().forEach(cls => {
-            const name = cls.getName() || 'anonymous';
-            const extendsClause = cls.getExtends()?.getText();
-            const implementsClauses = cls.getImplements().map(i => i.getText());
-            const methods = cls.getMethods().map(m => m.getName());
-            const properties = cls.getProperties().map(p => p.getName());
-            const isExported = cls.isExported();
-
-            classes.push({
-                name,
-                extends: extendsClause,
-                implements: implementsClauses.length > 0 ? implementsClauses : undefined,
-                methods,
-                properties,
-                isExported
-            });
-        });
-
-        return classes;
-    }
-
-    /**
-     * Extract import statements
-     */
-    private static extractImports(sourceFile: SourceFile): string[] {
-        const imports: string[] = [];
-
-        sourceFile.getImportDeclarations().forEach(imp => {
-            const moduleSpecifier = imp.getModuleSpecifierValue();
-            imports.push(moduleSpecifier);
-        });
-
-        return imports;
-    }
-
-    /**
-     * Extract export statements
-     */
-    private static extractExports(sourceFile: SourceFile): string[] {
-        const exports: string[] = [];
-
-        sourceFile.getExportDeclarations().forEach(exp => {
-            const moduleSpecifier = exp.getModuleSpecifierValue();
-            if (moduleSpecifier) {
-                exports.push(moduleSpecifier);
-            }
-        });
-
-        // Named exports
-        sourceFile.getExportedDeclarations().forEach((_declarations, name) => {
-            exports.push(name);
-        });
-
-        return exports;
-    }
-
-    /**
-     * Extract TODO comments
-     */
-    private static extractTodoComments(sourceFile: SourceFile, filePath: string): TodoComment[] {
-        const todos: TodoComment[] = [];
-        const fullText = sourceFile.getFullText();
-        const lines = fullText.split('\n');
-
-        lines.forEach((line, index) => {
-            const todoMatch = line.match(/\/\/\s*TODO:?\s*(.+)/i) ||
-                            line.match(/\/\*\s*TODO:?\s*(.+)\*\//i);
-
-            if (todoMatch) {
-                todos.push({
-                    file: filePath,
-                    line: index + 1,
-                    text: todoMatch[1].trim()
-                });
-            }
-        });
-
-        return todos;
-    }
-
-    /**
-     * Extract FIXME comments
-     */
-    private static extractFixmeComments(sourceFile: SourceFile, filePath: string): FixmeComment[] {
-        const fixmes: FixmeComment[] = [];
-        const fullText = sourceFile.getFullText();
-        const lines = fullText.split('\n');
-
-        lines.forEach((line, index) => {
-            const fixmeMatch = line.match(/\/\/\s*FIXME:?\s*(.+)/i) ||
-                             line.match(/\/\*\s*FIXME:?\s*(.+)\*\//i);
-
-            if (fixmeMatch) {
-                fixmes.push({
-                    file: filePath,
-                    line: index + 1,
-                    text: fixmeMatch[1].trim()
-                });
-            }
-        });
-
-        return fixmes;
     }
 
     /**

@@ -67,6 +67,13 @@ export function setupBYOPRoutes(app: Hono<AppEnv>): void {
         }
     );
 
+    // Start building on imported project
+    byopRouter.post(
+        '/analysis/:analysisId/start-building',
+        setAuthLevel(AuthConfig.authenticated),
+        adaptController(BYOPController, BYOPController.startBuilding)
+    );
+
     // Mount the BYOP router under /api/byop
     app.route('/api/byop', byopRouter);
 }

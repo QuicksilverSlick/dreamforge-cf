@@ -293,14 +293,14 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
             readmeContent: this.state.fileContents['README.md']
         };
 
-        // Phase 4: Generate blueprint with Gemini 2.5 Pro
+        // Phase 4: Generate blueprint with Gemini 2.5 Pro via AI Gateway
         await this.updateState({
             currentPhase: 'Generating completion blueprint with Gemini 2.5 Pro',
             progress: 80
         });
 
         const blueprint = await BlueprintGenerationService.generateBlueprint(
-            this.env.AI,
+            this.env,
             context
         );
 
@@ -506,7 +506,7 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
     /**
      * Handle WebSocket upgrade requests
      */
-    private handleWebSocketUpgrade(request: Request): Response {
+    private handleWebSocketUpgrade(): Response {
         const pair = new WebSocketPair();
         const [client, server] = Object.values(pair);
 

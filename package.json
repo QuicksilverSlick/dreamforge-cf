@@ -6,7 +6,8 @@
 	"scripts": {
 		"setup": "tsx scripts/setup.ts",
 		"prepare": "husky",
-		"dev": "DEV_MODE=true vite --force",
+		"dev": "DOCKER_HOST=unix:///var/run/docker.sock DEV_MODE=true vite --force",
+		"dev:remote": "DOCKER_HOST=unix:///var/run/docker.sock wrangler dev --remote",
 		"build": "tsc -b --incremental && vite build && tsx scripts/copy-landing-pages.ts",
 		"typecheck": "tsc -b --incremental --noEmit",
 		"lint": "eslint .",

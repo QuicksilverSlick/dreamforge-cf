@@ -3,7 +3,7 @@
  * Displays AI-generated completion blueprint with recommendations
  */
 
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft,
     Plus,
@@ -15,12 +15,19 @@ import {
     Zap,
     TestTube,
     Sparkles,
+    Rocket,
+    X,
+    Loader2,
 } from 'lucide-react';
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
+import { apiClient, ApiError } from '@/lib/api-client';
 import type { GeneratedBlueprint } from '@/api-types-byop';
 
 interface BlueprintViewProps {
     blueprint: GeneratedBlueprint;
     repositoryName: string;
+    analysisId: string;
     onBack: () => void;
     onNewImport: () => void;
 }
@@ -28,9 +35,15 @@ interface BlueprintViewProps {
 export function BlueprintView({
     blueprint,
     repositoryName,
+    analysisId,
     onBack,
     onNewImport,
 }: BlueprintViewProps) {
+    const navigate = useNavigate();
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [isStarting, setIsStarting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
     const { currentState, recommendations, nextSteps, technicalDebt, completionPhases } = blueprint;
 
     const priorityColors = {
@@ -47,6 +60,31 @@ export function BlueprintView({
         testing: TestTube,
     };
 
+    const handleStartBuilding = async () => {
+        setIsStarting(true);
+        setError(null);
+
+        try {
+            const response = await apiClient.startBuilding(analysisId);
+
+            if (response.data && response.data.success) {
+                navigate(`/chat/${response.data.agentId}`);
+            } else {
+                setError('Failed to start building session');
+            }
+        } catch (err) {
+            const errorMessage = err instanceof ApiError
+                ? err.message
+                : err instanceof Error
+                    ? err.message
+                    : 'Unknown error';
+            setError(errorMessage);
+        } finally {
+            setIsStarting(false);
+            setShowConfirmModal(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -58,14 +96,37 @@ export function BlueprintView({
                     <ArrowLeft className="w-5 h-5" />
                     Back
                 </button>
-                <button
-                    onClick={onNewImport}
-                    className="flex items-center gap-2 px-4 py-2 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition-colors"
-                >
-                    <Plus className="w-5 h-5" />
-                    Import Another Project
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setShowConfirmModal(true)}
+                        className="flex items-center gap-2 px-6 py-2.5 bg-accent text-black font-semibold rounded-lg hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 hover:shadow-accent/30"
+                    >
+                        <Rocket className="w-5 h-5" />
+                        Start Building
+                    </button>
+                    <button
+                        onClick={onNewImport}
+                        className="flex items-center gap-2 px-4 py-2 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition-colors"
+                    >
+                        <Plus className="w-5 h-5" />
+                        Import Another
+                    </button>
+                </div>
             </div>
+
+            {/* Error Message */}
+            {error && (
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg"
+                >
+                    <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                        <span>{error}</span>
+                    </div>
+                </motion.div>
+            )}
 
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -90,8 +151,8 @@ export function BlueprintView({
                     </div>
 
                     <div className="grid grid-cols-4 gap-4 mt-6">
-                        <StatCard label="Files" value={currentState.totalFiles.toLocaleString()} />
-                        <StatCard label="Lines of Code" value={currentState.totalLinesOfCode.toLocaleString()} />
+                        <StatCard label="Files" value={(currentState.totalFiles ?? 0).toLocaleString()} />
+                        <StatCard label="Lines of Code" value={(currentState.totalLinesOfCode ?? 0).toLocaleString()} />
                         <StatCard label="Framework" value={currentState.framework || 'N/A'} />
                         <StatCard label="Recommendations" value={recommendations.length.toString()} />
                     </div>
@@ -137,8 +198,8 @@ export function BlueprintView({
                     </h2>
                     <div className="space-y-3">
                         {recommendations.map((rec, i) => {
-                            const colors = priorityColors[rec.priority];
-                            const Icon = categoryIcons[rec.category] || Code2;
+                            const colors = priorityColors[rec.priority as keyof typeof priorityColors] || priorityColors.medium;
+                            const Icon = categoryIcons[rec.category as keyof typeof categoryIcons] || Code2;
 
                             return (
                                 <div
@@ -240,6 +301,139 @@ export function BlueprintView({
                     </div>
                 )}
             </motion.div>
+
+            {/* Confirmation Modal */}
+            <AnimatePresence>
+                {showConfirmModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        onClick={() => !isStarting && setShowConfirmModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-bg-2 border border-border rounded-lg shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+                        >
+                            {/* Modal Header */}
+                            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
+                                        <Rocket className="w-5 h-5 text-accent" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-bold text-text-primary">Start AI-Assisted Development</h2>
+                                        <p className="text-sm text-text-tertiary">Review the plan before starting</p>
+                                    </div>
+                                </div>
+                                {!isStarting && (
+                                    <button
+                                        onClick={() => setShowConfirmModal(false)}
+                                        className="text-text-secondary hover:text-text-primary transition-colors"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Modal Body */}
+                            <div className="px-6 py-4 overflow-y-auto flex-1">
+                                <div className="space-y-4">
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-accent uppercase tracking-wide mb-2">
+                                            What will Dreamforge AI do?
+                                        </h3>
+                                        <p className="text-text-secondary text-sm leading-relaxed">
+                                            Dreamforge will analyze your project and implement improvements based on the blueprint.
+                                            The AI will focus on high-priority recommendations and missing components.
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-accent uppercase tracking-wide mb-2">
+                                            Priority Tasks
+                                        </h3>
+                                        <ul className="space-y-2">
+                                            {recommendations
+                                                .filter(r => r.priority === 'high')
+                                                .slice(0, 3)
+                                                .map((rec, i) => (
+                                                    <li key={i} className="flex items-start gap-2 text-sm">
+                                                        <CheckCircle2 className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
+                                                        <span className="text-text-secondary">{rec.title}</span>
+                                                    </li>
+                                                ))}
+                                        </ul>
+                                    </div>
+
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-accent uppercase tracking-wide mb-2">
+                                            Next Steps
+                                        </h3>
+                                        <ul className="space-y-2">
+                                            {nextSteps.slice(0, 3).map((step, i) => (
+                                                <li key={i} className="flex items-start gap-2 text-sm">
+                                                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-accent/20 text-accent text-xs font-bold flex-shrink-0 mt-0.5">
+                                                        {i + 1}
+                                                    </span>
+                                                    <span className="text-text-secondary">{step}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+
+                                    <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
+                                        <div className="flex items-start gap-3">
+                                            <Sparkles className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+                                            <div>
+                                                <h4 className="text-sm font-semibold text-text-primary mb-1">
+                                                    AI-Assisted Speed
+                                                </h4>
+                                                <p className="text-xs text-text-secondary leading-relaxed">
+                                                    Dreamforge works 10-50x faster than manual development.
+                                                    Most improvements complete in minutes to hours, not days or weeks.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-3">
+                                <button
+                                    onClick={() => setShowConfirmModal(false)}
+                                    disabled={isStarting}
+                                    className="px-4 py-2 text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleStartBuilding}
+                                    disabled={isStarting}
+                                    className="flex items-center gap-2 px-6 py-2 bg-accent text-black font-semibold rounded-lg hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isStarting ? (
+                                        <>
+                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                            Starting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Rocket className="w-5 h-5" />
+                                            Confirm & Start
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
