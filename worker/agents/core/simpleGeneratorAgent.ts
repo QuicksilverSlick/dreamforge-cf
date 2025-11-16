@@ -400,8 +400,13 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
         }
     }
 
-    onConnect(connection: Connection, ctx: ConnectionContext) {
+    async onConnect(connection: Connection, ctx: ConnectionContext) {
         this.logger().info(`Agent connected for agent ${this.getAgentId()}`, { connection, ctx });
+
+        // Ensure template details are loaded before sending to client
+        // This is important for BYOP connections that may happen before initialization completes
+        await this.ensureTemplateDetails();
+
         sendToConnection(connection, 'agent_connected', {
             state: this.state,
             templateDetails: this.getTemplateDetails()
