@@ -183,11 +183,31 @@ export function setSecureAuthCookies(
 		accessToken: string;
 		accessTokenExpiry?: number; // seconds
 	},
+	request?: Request,
 ): void {
 	const {
 		accessToken,
 		accessTokenExpiry = 3 * 24 * 60 * 60, // 3 days
 	} = tokens;
+
+	// Extract cookie domain from request URL
+	// Use root domain for subdomain sharing (e.g., ".getdreamforge.com")
+	let cookieDomain: string | undefined;
+	if (request) {
+		try {
+			const url = new URL(request.url);
+			const hostname = url.hostname;
+			// Extract root domain (last two parts of hostname)
+			// e.g., "app.getdreamforge.com" → ".getdreamforge.com"
+			const parts = hostname.split('.');
+			if (parts.length >= 2) {
+				cookieDomain = `.${parts.slice(-2).join('.')}`;
+			}
+		} catch (error) {
+			// If URL parsing fails, don't set domain (falls back to default behavior)
+			console.error('Failed to extract cookie domain from request:', error);
+		}
+	}
 
 	// Set access token cookie
 	response.headers.append(
@@ -198,6 +218,8 @@ export function setSecureAuthCookies(
 			maxAge: accessTokenExpiry,
 			httpOnly: true,
 			sameSite: 'Lax',
+			secure: true,
+			domain: cookieDomain,
 		}),
 	);
 }

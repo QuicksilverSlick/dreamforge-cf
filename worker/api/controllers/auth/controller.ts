@@ -345,8 +345,8 @@ export class AuthController extends BaseController {
             
             setSecureAuthCookies(response, {
                 accessToken: result.accessToken,
-            });
-            
+            }, request);
+
             return response;
         } catch (error) {
             this.logger.error('OAuth callback failed', error);

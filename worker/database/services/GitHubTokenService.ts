@@ -38,13 +38,13 @@ export class GitHubTokenService extends BaseService {
      */
     private isValidGitHubToken(token: string): boolean {
         const tokenPatterns = [
-            /^gho_[a-zA-Z0-9]{36}$/,           // OAuth tokens
-            /^ghu_[a-zA-Z0-9]{36}$/,           // User-to-server tokens
-            /^ghp_[a-zA-Z0-9]{36}$/,           // Personal access tokens (classic)
-            /^github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}$/  // Fine-grained PATs
+            /^gho_[A-Za-z0-9_]+$/,              // OAuth tokens (variable length, includes underscore)
+            /^ghu_[A-Za-z0-9_]+$/,              // User-to-server tokens (variable length, includes underscore)
+            /^ghp_[A-Za-z0-9_]+$/,              // Personal access tokens (classic, variable length)
+            /^github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}$/  // Fine-grained PATs (fixed length)
         ];
 
-        return tokenPatterns.some(pattern => pattern.test(token)) && token.length <= 255;
+        return tokenPatterns.some(pattern => pattern.test(token)) && token.length >= 20 && token.length <= 255;
     }
 
     /**
@@ -232,7 +232,7 @@ export class GitHubTokenService extends BaseService {
                 .run();
 
             this.logger.info('Step 2: Deactivation complete', {
-                changes: deactivateResult.changes,
+                changes: deactivateResult.meta?.changes ?? 0,
                 success: deactivateResult.success
             });
 
@@ -247,7 +247,7 @@ export class GitHubTokenService extends BaseService {
                 .run();
 
             this.logger.info('Step 3: Insert complete', {
-                changes: insertResult.changes,
+                changes: insertResult.meta?.changes ?? 0,
                 success: insertResult.success
             });
 

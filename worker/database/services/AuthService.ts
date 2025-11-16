@@ -445,7 +445,7 @@ export class AuthService extends BaseService {
                         scopes: scopes.join(',')
                     });
                 } catch (error) {
-                    logger.error('❌ CRITICAL: Failed to store GitHub access token', {
+                    logger.error('⚠️  NON-FATAL: Failed to store GitHub access token', {
                         userId: user.id,
                         userEmail: user.email,
                         errorMessage: error instanceof Error ? error.message : String(error),
@@ -453,13 +453,10 @@ export class AuthService extends BaseService {
                         hasEncryptionKey: !!this.env.SECRETS_ENCRYPTION_KEY
                     });
 
-                    // CRITICAL FIX: Re-throw the error to prevent silent failure
-                    // This ensures OAuth fails if token storage fails
-                    throw new SecurityError(
-                        SecurityErrorType.UNAUTHORIZED,
-                        'Failed to store GitHub access token. Please contact support if this persists.',
-                        500
-                    );
+                    // IMPORTANT: Do NOT throw - allow authentication to succeed
+                    // User can still log in and use the app, just can't use BYOP until they re-authenticate
+                    // or the token storage issue is resolved
+                    logger.warn('User authenticated successfully but GitHub token storage failed - BYOP will not work');
                 }
             }
 
