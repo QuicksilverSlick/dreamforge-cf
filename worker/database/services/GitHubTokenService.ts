@@ -169,7 +169,7 @@ export class GitHubTokenService extends BaseService {
             {
                 name: 'PBKDF2',
                 salt: salt,
-                iterations: 600000,  // OWASP 2025 recommended (increased from 100,000)
+                iterations: 100000,  // Cloudflare Workers maximum (platform limit, OWASP 2025 recommends 600,000)
                 hash: 'SHA-256'
             },
             keyMaterial,
