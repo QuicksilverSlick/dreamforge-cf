@@ -24,7 +24,7 @@ type MCPServersMessage = {
 type AgentConnectedMessage = {
     type: 'agent_connected';
     state: CodeGenState;
-    templateDetails: TemplateDetails;
+    templateDetails: TemplateDetails | null;
 };
 
 type ConversationStateMessage = {
