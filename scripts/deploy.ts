@@ -1505,6 +1505,13 @@ class CloudflareDeploymentManager {
 			});
 			console.log('   ✅ Removed .wrangler directory');
 
+			// Remove TypeScript incremental build cache
+			execSync('rm -f tsconfig.tsbuildinfo', {
+				stdio: 'pipe',
+				cwd: PROJECT_ROOT,
+			});
+			console.log('   ✅ Removed TypeScript build cache');
+
 			// Remove wrangler.json files from dist/* directories
 			// Use find to locate and remove any wrangler.json files in dist subdirectories
 			try {
