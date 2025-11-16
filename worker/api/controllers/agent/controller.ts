@@ -6,7 +6,7 @@ import { getAgentStub, getTemplateForQuery } from '../../../agents';
 import { AgentConnectionData, AgentPreviewResponse, CodeGenArgs } from './types';
 import { ApiResponse, ControllerResponse } from '../types';
 import { RouteContext } from '../../types/route-context';
-import { ModelConfigService } from '../../../database';
+import { ModelConfigService, AppService } from '../../../database';
 import { ModelConfig } from '../../../agents/inferutils/config.types';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { validateWebSocketOrigin } from '../../../middleware/security/websocket';
@@ -112,6 +112,36 @@ export class CodingAgentController extends BaseController {
             });
 
             const { templateDetails, selection } = await getTemplateForQuery(env, inferenceContext, query, body.images, this.logger);
+
+            // Create database record for agent ownership validation
+            const appService = new AppService(env);
+            const appTitle = this.generateAppTitle(query, templateDetails.name);
+            const framework = body.frameworks?.[0] || templateDetails.frameworks?.[0] || 'react';
+
+            try {
+                await appService.createApp({
+                    id: agentId,
+                    title: appTitle,
+                    originalPrompt: query,
+                    userId: user.id,
+                    status: 'generating',
+                    visibility: 'private',
+                    framework,
+                });
+                this.logger.info('✅ Agent database record created', {
+                    agentId,
+                    userId: user.id,
+                    title: appTitle,
+                    framework
+                });
+            } catch (error) {
+                this.logger.error('❌ Failed to create agent database record', {
+                    agentId,
+                    userId: user.id,
+                    error: error instanceof Error ? error.message : String(error)
+                });
+                throw new Error('Failed to create agent database record');
+            }
 
             const websocketUrl = `${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}/api/agent/${agentId}/ws`;
             const httpStatusUrl = `${url.origin}/api/agent/${agentId}`;
@@ -334,5 +364,32 @@ export class CodingAgentController extends BaseController {
             const appError = CodingAgentController.handleError(error, 'deploy preview') as ControllerResponse<ApiResponse<AgentPreviewResponse>>;
             return appError;
         }
+    }
+
+    /**
+     * Generate a meaningful app title from the query or template name
+     */
+    private static generateAppTitle(query: string, templateName: string): string {
+        // Try to extract a meaningful title from the query
+        const cleanQuery = query.trim();
+
+        // If query is short enough, use it directly (max 100 chars)
+        if (cleanQuery.length > 0 && cleanQuery.length <= 100) {
+            return cleanQuery;
+        }
+
+        // Otherwise, use first sentence or first 100 chars
+        const firstSentence = cleanQuery.split(/[.!?]\s/)[0];
+        if (firstSentence && firstSentence.length <= 100) {
+            return firstSentence;
+        }
+
+        // Fallback: truncate to 97 chars + "..."
+        if (cleanQuery.length > 100) {
+            return cleanQuery.substring(0, 97) + '...';
+        }
+
+        // Last resort: use template name
+        return `App based on ${templateName}`;
     }
 }
