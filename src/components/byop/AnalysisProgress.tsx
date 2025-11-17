@@ -55,19 +55,19 @@ export function AnalysisProgress({
                 {/* Progress Bar */}
                 <div className="mb-8">
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-text-secondary">
+                        <span className="text-sm font-semibold text-text-primary">
                             {currentPhase || 'Initializing...'}
                         </span>
-                        <span className="text-sm font-bold text-accent">
+                        <span className="text-sm font-bold text-accent drop-shadow-[0_0_4px_rgba(255,61,0,0.3)]">
                             {progress}%
                         </span>
                     </div>
-                    <div className="h-3 bg-bg-3 rounded-full overflow-hidden">
+                    <div className="h-3 bg-bg-3 rounded-full overflow-hidden shadow-inner">
                         <motion.div
                             className={`h-full rounded-full ${
-                                isCompleted ? 'bg-green-500' :
-                                isFailed ? 'bg-red-500' :
-                                'bg-accent'
+                                isCompleted ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.4)]' :
+                                isFailed ? 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.4)]' :
+                                'bg-accent shadow-[0_0_12px_rgba(255,61,0,0.4)]'
                             }`}
                             initial={{ width: 0 }}
                             animate={{ width: `${progress}%` }}
@@ -80,11 +80,11 @@ export function AnalysisProgress({
                 <div className="flex flex-col items-center justify-center py-8">
                     {isAnalyzing && (
                         <>
-                            <Loader2 className="w-16 h-16 text-accent animate-spin mb-4" />
-                            <p className="text-lg text-text-secondary">
+                            <Loader2 className="w-20 h-20 text-accent animate-spin mb-4 drop-shadow-[0_0_20px_rgba(255,61,0,0.6)] transition-all duration-300" />
+                            <p className="text-lg font-semibold text-text-primary">
                                 Analyzing your codebase...
                             </p>
-                            <p className="text-sm text-text-tertiary mt-2">
+                            <p className="text-sm text-text-secondary mt-2">
                                 This may take 30-90 seconds
                             </p>
                         </>
@@ -92,11 +92,11 @@ export function AnalysisProgress({
 
                     {isCompleted && (
                         <>
-                            <CheckCircle2 className="w-16 h-16 text-green-500 mb-4" />
+                            <CheckCircle2 className="w-20 h-20 text-green-500 mb-4 drop-shadow-[0_0_20px_rgba(34,197,94,0.5)]" />
                             <p className="text-lg font-semibold text-text-primary">
                                 Analysis Complete!
                             </p>
-                            <p className="text-sm text-text-tertiary mt-2">
+                            <p className="text-sm text-text-secondary mt-2">
                                 Your completion blueprint is ready
                             </p>
                         </>
@@ -104,11 +104,11 @@ export function AnalysisProgress({
 
                     {isFailed && (
                         <>
-                            <XCircle className="w-16 h-16 text-red-500 mb-4" />
+                            <XCircle className="w-20 h-20 text-red-500 mb-4 drop-shadow-[0_0_20px_rgba(239,68,68,0.5)]" />
                             <p className="text-lg font-semibold text-text-primary">
                                 Analysis Failed
                             </p>
-                            <p className="text-sm text-text-tertiary mt-2">
+                            <p className="text-sm text-text-secondary mt-2">
                                 {error || 'An error occurred during analysis'}
                             </p>
                         </>
@@ -190,33 +190,33 @@ function PhaseItem({ label, completed, active, icon }: PhaseItemProps) {
     return (
         <div className="flex items-center gap-3">
             <div className={`
-                w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0
-                ${completed ? 'bg-accent border-accent' :
-                  active ? 'border-accent' :
+                w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-300
+                ${completed ? 'bg-accent border-accent drop-shadow-[0_0_8px_rgba(255,61,0,0.4)]' :
+                  active ? 'border-accent drop-shadow-[0_0_12px_rgba(255,61,0,0.5)]' :
                   'border-border'}
             `}>
-                {completed && <CheckCircle2 className="w-4 h-4 text-black" />}
+                {completed && <CheckCircle2 className="w-5 h-5 text-black" />}
                 {active && !completed && (
                     <motion.div
-                        className="w-2 h-2 rounded-full bg-accent"
-                        animate={{ scale: [1, 1.2, 1] }}
+                        className="w-3 h-3 rounded-full bg-accent drop-shadow-[0_0_8px_rgba(255,61,0,0.6)]"
+                        animate={{ scale: [1, 1.3, 1] }}
                         transition={{ duration: 1, repeat: Infinity }}
                     />
                 )}
             </div>
             <div className="flex items-center gap-2 flex-1">
                 {icon && (
-                    <span className={`shrink-0 ${
-                        completed ? 'text-accent' :
-                        active ? 'text-accent' :
-                        'text-text-tertiary'
+                    <span className={`shrink-0 transition-all duration-300 ${
+                        completed ? 'text-accent drop-shadow-[0_0_6px_rgba(255,61,0,0.3)]' :
+                        active ? 'text-accent drop-shadow-[0_0_8px_rgba(255,61,0,0.4)]' :
+                        'text-text-tertiary/70'
                     }`}>
                         {icon}
                     </span>
                 )}
-                <span className={`text-sm ${
-                    completed ? 'text-text-primary font-medium' :
-                    active ? 'text-accent font-medium' :
+                <span className={`text-sm transition-all duration-300 ${
+                    completed ? 'text-text-primary font-semibold' :
+                    active ? 'text-accent font-semibold' :
                     'text-text-tertiary'
                 }`}>
                     {label}

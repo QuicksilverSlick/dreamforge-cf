@@ -51,6 +51,26 @@
   .animate-debug-pulse { animation: none; }
 }
 
+/* Enhanced spinner glow animation for better visibility */
+@keyframes spinner-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px currentColor);
+    opacity: 1;
+  }
+  50% {
+    filter: drop-shadow(0 0 12px currentColor);
+    opacity: 0.9;
+  }
+}
+
+.spinner-enhanced {
+  animation: spinner-glow 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner-enhanced { animation: none; }
+}
+
 /* Custom scrollbar for debug bubble */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;

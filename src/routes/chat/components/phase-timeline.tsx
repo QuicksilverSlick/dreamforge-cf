@@ -43,25 +43,25 @@ interface StatusLoaderProps {
 }
 
 const StatusLoader = ({ size = 'md', color = 'accent' }: StatusLoaderProps) => {
-	const sizeClass = size === 'sm' ? 'size-3' : 'w-4 h-4';
+	const sizeClass = size === 'sm' ? 'size-4' : 'w-5 h-5';
 	const colorMap = {
-		accent: 'text-accent',
-		blue: 'text-blue-400',
-		orange: 'text-orange-400',
-		tertiary: 'text-text-tertiary',
-		green: 'text-green-500'
+		accent: 'text-accent drop-shadow-[0_0_8px_rgba(255,61,0,0.5)]',
+		blue: 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]',
+		orange: 'text-orange-400 drop-shadow-[0_0_8px_rgba(251,146,60,0.5)]',
+		tertiary: 'text-accent/80 drop-shadow-[0_0_6px_rgba(255,61,0,0.3)]',
+		green: 'text-green-500 drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]'
 	};
-	return <Loader className={`${sizeClass} animate-spin ${colorMap[color]}`} />;
+	return <Loader className={`${sizeClass} animate-spin ${colorMap[color]} transition-all duration-300`} />;
 };
 
 const StatusCheck = ({ size = 'md', color = 'green' }: StatusLoaderProps) => {
-	const sizeClass = size === 'sm' ? 'size-3' : 'w-4 h-4';
+	const sizeClass = size === 'sm' ? 'size-4' : 'w-5 h-5';
 	const colorMap = {
-		accent: 'text-accent',
-		blue: 'text-blue-400',
-		orange: 'text-orange-400',
-		tertiary: 'text-text-tertiary',
-		green: 'text-green-500'
+		accent: 'text-accent drop-shadow-[0_0_6px_rgba(255,61,0,0.4)]',
+		blue: 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.4)]',
+		orange: 'text-orange-400 drop-shadow-[0_0_6px_rgba(251,146,60,0.4)]',
+		tertiary: 'text-text-secondary',
+		green: 'text-green-500 drop-shadow-[0_0_6px_rgba(34,197,94,0.4)]'
 	};
 	return <Check className={`${sizeClass} ${colorMap[color]}`} />;
 };
@@ -75,28 +75,28 @@ interface StatusIconProps {
 
 function StatusIcon({ status, size = 'md', className }: StatusIconProps) {
 	const sizeClasses = {
-		sm: 'w-3 h-3',
-		md: 'w-4 h-4',
+		sm: 'w-4 h-4',
+		md: 'w-5 h-5',
 	};
 
 	const iconClasses = sizeClasses[size];
 
 	switch (status) {
 		case 'generating':
-			return <Loader className={clsx(iconClasses, 'animate-spin text-accent', className)} />;
+			return <Loader className={clsx(iconClasses, 'animate-spin text-accent drop-shadow-[0_0_8px_rgba(255,61,0,0.5)] transition-all duration-300', className)} />;
 		case 'validating':
-			return <Loader className={clsx(iconClasses, 'animate-spin text-blue-400', className)} />;
+			return <Loader className={clsx(iconClasses, 'animate-spin text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)] transition-all duration-300', className)} />;
 		case 'completed':
-			return <Check className={clsx(iconClasses, 'text-green-500', className)} />;
+			return <Check className={clsx(iconClasses, 'text-green-500 drop-shadow-[0_0_6px_rgba(34,197,94,0.4)]', className)} />;
 		case 'cancelled':
-			return <XCircle className={clsx(iconClasses, 'text-orange-400', className)} />;
+			return <XCircle className={clsx(iconClasses, 'text-orange-400 drop-shadow-[0_0_6px_rgba(251,146,60,0.4)]', className)} />;
 		case 'error':
-			return <AlertCircle className={clsx(iconClasses, 'text-red-500', className)} />;
+			return <AlertCircle className={clsx(iconClasses, 'text-red-500 drop-shadow-[0_0_6px_rgba(239,68,68,0.4)]', className)} />;
 		case 'active':
-			return <Loader className={clsx(iconClasses, 'animate-spin text-accent', className)} />;
+			return <Loader className={clsx(iconClasses, 'animate-spin text-accent drop-shadow-[0_0_8px_rgba(255,61,0,0.5)] transition-all duration-300', className)} />;
 		case 'pending':
 		default:
-			return <div className={clsx(iconClasses, 'bg-bg-3-foreground/40 dark:bg-bg-3-foreground/30 rounded-full', className)} />;
+			return <div className={clsx(iconClasses, 'bg-text-tertiary/50 dark:bg-text-tertiary/30 rounded-full', className)} />;
 	}
 }
 
@@ -133,9 +133,9 @@ function AnimatedStatusIndicator({ status, size = 5 }: AnimatedStatusIndicatorPr
 						animate="animate"
 						exit="exit"
 						transition={commonTransitions.smoothInOut}
-						className={clsx(sizeClass, 'bg-bg-4 dark:bg-bg-2 flex items-center justify-center')}
+						className={clsx(sizeClass, 'bg-bg-4 dark:bg-bg-2 flex items-center justify-center rounded-full')}
 					>
-						<Loader className="size-3 text-accent animate-spin" />
+						<Loader className="size-4 text-accent animate-spin drop-shadow-[0_0_10px_rgba(255,61,0,0.6)] transition-all duration-300" />
 					</motion.div>
 				)}
 				{status === 'completed' && (
@@ -861,22 +861,22 @@ export function PhaseTimeline({
 										const validatingPhase = getPhaseByStatus(phaseTimeline, 'validating');
 										if (validatingPhase) {
 											return (
-												<div className="space-y-1 relative bg-blue-50/5 border border-blue-200/20 rounded-lg p-3">
+												<div className="space-y-1 relative bg-blue-500/10 border border-blue-400/30 rounded-lg p-3 shadow-[0_0_20px_rgba(96,165,250,0.15)]">
 													<div className="flex items-center gap-2">
 														<StatusLoader size="sm" color="blue" />
-														<span className="text-sm font-medium text-blue-400">Reviewing phase...</span>
+														<span className="text-sm font-semibold text-blue-300">Reviewing phase...</span>
 													</div>
-													<span className="text-xs text-blue-300/80 ml-5">Identifying issues...</span>
+													<span className="text-xs text-blue-200/90 ml-6">Identifying issues...</span>
 												</div>
 											);
 										} else if (isPreviewDeploying) {
 											return (
-												<div className="space-y-1 relative bg-orange-50/5 border border-orange-200/20 rounded-lg p-3">
+												<div className="space-y-1 relative bg-orange-500/10 border border-orange-400/30 rounded-lg p-3 shadow-[0_0_20px_rgba(251,146,60,0.15)]">
 													<div className="flex items-center gap-2">
 														<StatusLoader size="sm" color="orange" />
-														<span className="text-sm font-medium text-orange-400">Deploying preview...</span>
+														<span className="text-sm font-semibold text-orange-300">Deploying preview...</span>
 													</div>
-													<span className="text-xs text-orange-300/80 ml-5">Updating your preview environment</span>
+													<span className="text-xs text-orange-200/90 ml-6">Updating your preview environment</span>
 												</div>
 											);
 										}

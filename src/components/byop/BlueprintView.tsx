@@ -419,7 +419,7 @@ export function BlueprintView({
                                 >
                                     {isStarting ? (
                                         <>
-                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                            <Loader2 className="w-5 h-5 animate-spin drop-shadow-[0_0_10px_rgba(0,0,0,0.4)]" />
                                             Starting...
                                         </>
                                     ) : (

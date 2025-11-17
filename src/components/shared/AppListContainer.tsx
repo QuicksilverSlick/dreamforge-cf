@@ -107,8 +107,8 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
     return (
       <div className="flex items-center py-20">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-text-tertiary" />
-          <p className="text-neutral-50">Loading apps...</p>
+          <Loader2 className="h-10 w-10 animate-spin mx-auto mb-4 text-accent drop-shadow-[0_0_16px_rgba(255,61,0,0.5)] transition-all duration-300" />
+          <p className="text-text-primary font-medium">Loading apps...</p>
         </div>
       </div>
     );

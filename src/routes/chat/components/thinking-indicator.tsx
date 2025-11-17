@@ -54,23 +54,23 @@ export function ThinkingIndicator({ visible }: ThinkingIndicatorProps) {
           initial={{ opacity: 0, y: 10, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -10, scale: 0.95 }}
-          transition={{ 
+          transition={{
             duration: 0.4,
             ease: [0.23, 1, 0.32, 1]
           }}
-          className="flex items-center gap-2 mt-3"
+          className="flex items-center gap-2 mt-3 px-3 py-2 bg-orange-500/10 border border-orange-400/30 rounded-lg shadow-[0_0_16px_rgba(251,146,60,0.15)]"
         >
           <motion.div
-            animate={{ 
+            animate={{
               rotate: [0, 360],
-              scale: [1, 1.1, 1]
+              scale: [1, 1.2, 1]
             }}
-            transition={{ 
+            transition={{
               rotate: { duration: 3, repeat: Infinity, ease: "linear" },
               scale: { duration: 2, repeat: Infinity, ease: "easeInOut" }
             }}
           >
-            <Sparkles className="size-3 text-orange-400" />
+            <Sparkles className="size-4 text-orange-400 drop-shadow-[0_0_8px_rgba(251,146,60,0.5)]" />
           </motion.div>
           <AnimatePresence mode="wait">
             <motion.span
@@ -78,17 +78,17 @@ export function ThinkingIndicator({ visible }: ThinkingIndicatorProps) {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 10 }}
-              transition={{ 
+              transition={{
                 duration: 0.3,
                 ease: [0.23, 1, 0.32, 1]
               }}
-              className="text-sm text-text-50/60 font-medium flex items-center gap-1"
+              className="text-sm text-orange-300 font-semibold flex items-center gap-1"
             >
-              {THINKING_PHRASES[phraseIndex]}...
+              {THINKING_PHRASES[phraseIndex]}
               <motion.span
                 animate={{ opacity: [1, 0.3, 1] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
-                className="inline-block"
+                className="inline-block text-orange-400/80"
               >
                 ...
               </motion.span>
