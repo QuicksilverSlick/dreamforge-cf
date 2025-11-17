@@ -1703,6 +1703,8 @@ class CloudflareDeploymentManager {
 		const secretVars = [
 			'CLOUDFLARE_API_TOKEN',
 			'CLOUDFLARE_ACCOUNT_ID',
+			'CF_ACCOUNT_ID',
+			'CF_AI_GATEWAY_ID',
 			'TEMPLATES_REPOSITORY',
 			'CLOUDFLARE_AI_GATEWAY',
 			'CLOUDFLARE_AI_GATEWAY_URL',
