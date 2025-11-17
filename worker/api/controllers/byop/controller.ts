@@ -12,6 +12,7 @@ import { Octokit } from '@octokit/rest';
 import { SandboxSdkClient } from '../../../services/sandbox/sandboxSdkClient';
 import type { GeneratedBlueprint } from '../../../services/blueprint/BlueprintGenerationService';
 import type { AnalysisState } from '../../../agents/analyzer/codebaseAnalyzer';
+import { getProjectDisplayName } from '../../../utils/readmeParser';
 
 const logger = createLogger('BYOPController');
 
@@ -321,6 +322,17 @@ export class BYOPController extends BaseController {
             const packageJson = packageJsonContent ? JSON.parse(packageJsonContent) : undefined;
             logger.info('Package.json parsed', { hasPackageJson: !!packageJson });
 
+            // Step 4.5: Extract project name from README.md
+            logger.info('Step 4.5: Extracting project name from README.md');
+            const readmeContent = fileContents['README.md'];
+            const gitHubRepoName = cloneResult.repositoryName || 'unknown';
+            const projectName = getProjectDisplayName(readmeContent, gitHubRepoName);
+            logger.info('Project name determined', {
+                gitHubRepoName,
+                extractedProjectName: projectName,
+                hasReadme: !!readmeContent
+            });
+
             // Step 5: Start analysis using CodebaseAnalyzer Durable Object
             logger.info('Step 5: Creating CodebaseAnalyzer Durable Object');
             logger.info('Getting Durable Object ID from name');
@@ -336,7 +348,7 @@ export class BYOPController extends BaseController {
             logger.info('Calculating payload size');
             const payloadSize = JSON.stringify({
                 repositoryUrl,
-                repositoryName: cloneResult.repositoryName || 'unknown',
+                repositoryName: projectName,
                 clonePath: cloneResult.clonePath,
                 fileContents,
                 packageJson
@@ -344,7 +356,8 @@ export class BYOPController extends BaseController {
             logger.info('Preparing to send analysis request', {
                 payloadSizeBytes: payloadSize,
                 payloadSizeMB: (payloadSize / 1024 / 1024).toFixed(2),
-                fileCount: Object.keys(fileContents).length
+                fileCount: Object.keys(fileContents).length,
+                projectName
             });
 
             logger.info('About to send fetch request to CodebaseAnalyzer DO');
@@ -353,7 +366,7 @@ export class BYOPController extends BaseController {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     repositoryUrl,
-                    repositoryName: cloneResult.repositoryName || 'unknown',
+                    repositoryName: projectName,
                     clonePath: cloneResult.clonePath,
                     fileContents,
                     packageJson
@@ -377,13 +390,14 @@ export class BYOPController extends BaseController {
             logger.info('Repository import initiated', {
                 userId: user.id,
                 analysisId: analysisResponse.analysisId,
-                filesCount: cloneResult.filesCount
+                filesCount: cloneResult.filesCount,
+                projectName
             });
 
             return this.createSuccessResponse({
                 success: true,
                 analysisId: analysisResponse.analysisId,
-                repositoryName: cloneResult.repositoryName,
+                repositoryName: projectName,
                 filesCount: cloneResult.filesCount,
                 message: 'Repository import started. Analysis in progress.'
             });
