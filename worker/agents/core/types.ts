@@ -20,6 +20,17 @@ export interface AgentInitArgs {
     }
     images?: ProcessedImageAttachment[];
     onBlueprintChunk: (chunk: string) => void;
+    /**
+     * Imported repository files from BYOP (Bring Your Own Project)
+     * When provided, the agent should modify/extend these files instead of generating from scratch
+     */
+    importedRepository?: {
+        fileContents: Record<string, string>;
+        repositoryName: string;
+        repositoryUrl?: string;
+        framework?: string;
+        packageJson?: Record<string, unknown>;
+    };
 }
 
 export interface AllIssues {

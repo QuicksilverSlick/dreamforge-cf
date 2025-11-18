@@ -8,6 +8,17 @@ export interface CodeGenArgs {
     selectedTemplate?: string;
     agentMode: 'deterministic' | 'smart';
     images?: ImageAttachment[];
+    /**
+     * Imported repository files from BYOP (Bring Your Own Project)
+     * When provided, the agent should modify/extend these files instead of generating from scratch
+     */
+    importedRepository?: {
+        fileContents: Record<string, string>;
+        repositoryName: string;
+        repositoryUrl?: string;
+        framework?: string;
+        packageJson?: Record<string, unknown>;
+    };
 }
 
 /**

@@ -809,6 +809,29 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
     •   Component exports: Export all components properly, avoid mixing default/named imports
     •   UI spacing: Ensure proper padding/margins, avoid left-aligned layouts without proper spacing
 
+    **🔥 CRITICAL: NODE.JS API PROHIBITION (CLOUDFLARE WORKERS ENVIRONMENT) 🔥**
+    ❌ **ABSOLUTELY FORBIDDEN - These APIs will crash the application in Workers/Sandbox:**
+    •   \`process.env.VARIABLE\` → Use \`import.meta.env.VARIABLE\` (Vite standard)
+    •   \`__dirname\` or \`__filename\` → Use relative imports: \`'./path/to/file'\`
+    •   \`require('module')\` → Use ES6 imports: \`import module from 'module'\`
+    •   \`path.resolve()\`, \`path.join()\` → Use string concatenation or URL APIs
+    •   \`fs.readFileSync()\`, \`fs.writeFileSync()\` → No filesystem access in browser/Workers
+    •   \`child_process.exec()\` → No subprocess execution
+    •   \`os.platform()\`, \`os.cpus()\` → No OS-level APIs
+    •   \`Buffer\` → Use \`Uint8Array\` or Web Crypto API
+
+    ✅ **CORRECT PATTERNS FOR WORKERS/VITE:**
+    •   Environment variables: \`import.meta.env.VITE_API_KEY\` (must be prefixed with VITE_)
+    •   File imports: \`import config from './config.json'\` or \`import.meta.url\`
+    •   Module imports: \`import { someFunc } from '@/lib/utils'\`
+    •   Config paths: Use relative strings like \`'@/components'\` in vite.config.ts, NOT \`path.resolve(__dirname, './src/components')\`
+
+    **VALIDATION CHECKPOINT:**
+    Before generating ANY configuration file (vite.config.ts, tailwind.config.js, etc):
+    → Search your code for: \`process.\`, \`__dirname\`, \`__filename\`, \`require(\`, \`path.resolve\`, \`path.join\`
+    → If found: REWRITE using Vite/Web standards above
+    → This is NON-NEGOTIABLE - Node.js APIs = guaranteed production crash
+
     **PROPER IMPORTS**:
        - **Importing React and other libraries should be done correctly.**
 

@@ -19,7 +19,15 @@ export interface AnalysisState {
     progress: number;
     currentPhase?: string;
     fileCount?: number;
+    /**
+     * @deprecated fileContents are now stored in R2 due to Durable Object 128KB storage limit.
+     * Use getFileContents() method to retrieve from R2.
+     */
     fileContents?: Record<string, string>;
+    /**
+     * R2 key where file contents are stored (format: byop-files/{analysisId})
+     */
+    fileContentsR2Key?: string;
     packageJson?: Record<string, unknown>;
     analysisResult?: CodebaseAnalysisResult;
     error?: string;
@@ -96,11 +104,37 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
                 };
             }
 
+            // Store fileContents in R2 to avoid Durable Object 128KB storage limit
+            const r2Key = `byop-files/${analysisId}`;
+            logger.info('Storing file contents in R2', {
+                analysisId,
+                r2Key,
+                fileCount: Object.keys(options.fileContents).length,
+                totalSize: validation.totalSize
+            });
+
+            await this.env.TEMPLATES_BUCKET.put(
+                r2Key,
+                JSON.stringify(options.fileContents),
+                {
+                    httpMetadata: {
+                        contentType: 'application/json'
+                    },
+                    customMetadata: {
+                        analysisId,
+                        repositoryName: options.repositoryName,
+                        fileCount: String(Object.keys(options.fileContents).length)
+                    }
+                }
+            );
+
+            logger.info('File contents stored in R2 successfully', { analysisId, r2Key });
+
             this.state = {
                 repositoryUrl: options.repositoryUrl,
                 repositoryName: options.repositoryName,
                 clonePath: options.clonePath,
-                fileContents: options.fileContents,
+                fileContentsR2Key: r2Key,
                 packageJson: options.packageJson,
                 fileCount: Object.keys(options.fileContents).length,
                 status: 'pending',
@@ -114,7 +148,8 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
                 analysisId,
                 repository: options.repositoryName,
                 fileCount: this.state.fileCount,
-                totalSize: validation.totalSize
+                totalSize: validation.totalSize,
+                r2Key
             });
 
             this.executeAnalysis().catch((error) => {
@@ -193,6 +228,54 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
     }
 
     /**
+     * Get file contents from R2 storage
+     * IMPORTANT: This should be used instead of accessing state.fileContents
+     */
+    async getFileContents(): Promise<Record<string, string>> {
+        if (!this.state) {
+            await this.getState();
+        }
+
+        if (!this.state?.fileContentsR2Key) {
+            logger.error('No R2 key found for file contents', {
+                analysisId: this.ctx.id.toString(),
+                hasState: !!this.state
+            });
+            return {};
+        }
+
+        try {
+            logger.info('Retrieving file contents from R2', {
+                r2Key: this.state.fileContentsR2Key
+            });
+
+            const r2Object = await this.env.TEMPLATES_BUCKET.get(this.state.fileContentsR2Key);
+            if (!r2Object) {
+                logger.error('File contents not found in R2', {
+                    r2Key: this.state.fileContentsR2Key
+                });
+                return {};
+            }
+
+            const fileContentsJson = await r2Object.text();
+            const fileContents = JSON.parse(fileContentsJson) as Record<string, string>;
+
+            logger.info('File contents retrieved from R2 successfully', {
+                r2Key: this.state.fileContentsR2Key,
+                fileCount: Object.keys(fileContents).length
+            });
+
+            return fileContents;
+        } catch (error) {
+            logger.error('Failed to retrieve file contents from R2', {
+                error: error instanceof Error ? error.message : String(error),
+                r2Key: this.state.fileContentsR2Key
+            });
+            return {};
+        }
+    }
+
+    /**
      * Execute the codebase analysis (runs asynchronously)
      */
     private async executeAnalysis(): Promise<void> {
@@ -249,7 +332,14 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
      * Perform the actual codebase analysis using ts-morph and Gemini 2.5 Pro
      */
     private async performAnalysis(): Promise<CodebaseAnalysisResult> {
-        if (!this.state?.fileContents) {
+        // Load file contents from R2
+        await this.updateState({
+            currentPhase: 'Loading repository files from storage',
+            progress: 20
+        });
+
+        const fileContents = await this.getFileContents();
+        if (!fileContents || Object.keys(fileContents).length === 0) {
             throw new Error('No file contents available for analysis');
         }
 
@@ -259,7 +349,7 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
             progress: 30
         });
 
-        const fileContentsMap = new Map(Object.entries(this.state.fileContents));
+        const fileContentsMap = new Map(Object.entries(fileContents));
         const sourceFileAnalyses = await CodeAnalysisService.analyzeSourceFiles(fileContentsMap);
 
         // Phase 2: Extract package.json data
@@ -267,6 +357,10 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
             currentPhase: 'Analyzing dependencies',
             progress: 50
         });
+
+        if (!this.state) {
+            throw new Error('Analysis state is not available');
+        }
 
         const packageJson = this.state.packageJson || {};
         const dependencies = (packageJson.dependencies as Record<string, string>) || {};
@@ -290,7 +384,7 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
             fileStructure: [],
             sourceFiles: sourceFileAnalyses,
             configFiles: [],
-            readmeContent: this.state.fileContents['README.md']
+            readmeContent: fileContents['README.md']
         };
 
         // Phase 4: Generate blueprint with Gemini 2.5 Pro via AI Gateway
@@ -322,8 +416,8 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
             dependencies,
             devDependencies,
             fileStructure: [],
-            entryPoints: this.detectEntryPoints(this.state.fileContents),
-            configFiles: this.detectConfigFiles(this.state.fileContents),
+            entryPoints: this.detectEntryPoints(fileContents),
+            configFiles: this.detectConfigFiles(fileContents),
             sourceFiles,
             completionSuggestions: blueprint.nextSteps,
             estimatedCompleteness: blueprint.currentState.completenessPercentage,
@@ -487,6 +581,18 @@ export class CodebaseAnalyzer extends DurableObject<Env> {
             if (path === '/state' && request.method === 'GET') {
                 const state = await this.getState();
                 return Response.json(state);
+            }
+
+            if (path === '/files' && request.method === 'GET') {
+                logger.info('Retrieving file contents via /files endpoint', {
+                    analysisId: this.ctx.id.toString()
+                });
+                const fileContents = await this.getFileContents();
+                return Response.json({
+                    success: true,
+                    fileContents,
+                    fileCount: Object.keys(fileContents).length
+                });
             }
 
             return Response.json(

@@ -92,6 +92,9 @@ function customizeWranglerJsonc(content: string, projectName: string): string {
 /**
  * Customize vite.config.ts to properly read PORT environment variable
  * and configure server to listen on all interfaces for container networking
+ *
+ * CRITICAL: Uses import.meta.env.PORT (Vite/Workers-compatible) instead of process.env.PORT (Node.js-only)
+ * This prevents crashes in Cloudflare Workers/Sandbox environments
  */
 function customizeViteConfig(content: string): string {
     // Check if server configuration already exists
@@ -103,15 +106,16 @@ function customizeViteConfig(content: string): string {
 
         if (!hasPortConfig) {
             // Add port configuration to existing server block
+            // Use parseInt with fallback for type safety (import.meta.env values are strings)
             content = content.replace(
                 /(server\s*:\s*{)/,
-                `$1\n\t\tport: parseInt(process.env.PORT || '5173', 10),\n\t\thost: '0.0.0.0',`
+                `$1\n\t\tport: parseInt(import.meta.env.PORT as string || '5173', 10),\n\t\thost: '0.0.0.0',`
             );
         } else {
             // Replace existing port configuration
             content = content.replace(
                 /port\s*:\s*[^,\n}]+/,
-                `port: parseInt(process.env.PORT || '5173', 10)`
+                `port: parseInt(import.meta.env.PORT as string || '5173', 10)`
             );
             // Add host if missing
             if (!/host\s*:/.test(content)) {
@@ -126,13 +130,13 @@ function customizeViteConfig(content: string): string {
         if (/plugins\s*:\s*\[/.test(content)) {
             content = content.replace(
                 /(plugins\s*:\s*\[)/,
-                `server: {\n\t\tport: parseInt(process.env.PORT || '5173', 10),\n\t\thost: '0.0.0.0',\n\t\tallowedHosts: true,\n\t},\n\n\t$1`
+                `server: {\n\t\tport: parseInt(import.meta.env.PORT as string || '5173', 10),\n\t\thost: '0.0.0.0',\n\t\tallowedHosts: true,\n\t},\n\n\t$1`
             );
         } else {
             // Add before closing brace of defineConfig
             content = content.replace(
                 /(\n\}\);?\s*$)/,
-                `\n\tserver: {\n\t\tport: parseInt(process.env.PORT || '5173', 10),\n\t\thost: '0.0.0.0',\n\t\tallowedHosts: true,\n\t},$1`
+                `\n\tserver: {\n\t\tport: parseInt(import.meta.env.PORT as string || '5173', 10),\n\t\thost: '0.0.0.0',\n\t\tallowedHosts: true,\n\t},$1`
             );
         }
     }

@@ -7,6 +7,7 @@ import { generalSystemPromptBuilder, issuesPromptFormatter, PROMPT_UTILS } from 
 import { TemplateRegistry } from '../inferutils/schemaFormatters';
 import { z } from 'zod';
 import { AgentOperation, OperationOptions } from '../operations/common';
+import { validateFiles, formatViolations } from '../utils/nodeApiValidator';
 
 export interface CodeReviewInputs {
     issues: IssueReport
@@ -181,9 +182,36 @@ export class CodeReviewOperation extends AgentOperation<CodeReviewInputs, CodeRe
     ): Promise<CodeReviewOutputType> {
         const { issues } = inputs;
         const { env, logger, context } = options;
-        
+
         logger.info("Performing code review");
         logger.info("Running static code analysis via linting...");
+
+        // Validate for Node.js API usage (Workers/Sandbox incompatibility)
+        logger.info("Checking for Node.js API usage (Workers incompatible)...");
+        const filesMap = context.allFiles.reduce((acc, file) => {
+            acc[file.filePath] = file.fileContents;
+            return acc;
+        }, {} as Record<string, string>);
+
+        const nodeApiValidation = validateFiles(filesMap);
+
+        if (!nodeApiValidation.valid) {
+            logger.warn(`🚨 Node.js API violations detected: ${nodeApiValidation.summary}`);
+            logger.warn(formatViolations(nodeApiValidation.violations));
+
+            // Add Node.js API violations to lint issues
+            const nodeApiError = {
+                message: formatViolations(nodeApiValidation.violations),
+                filePath: 'Multiple files',
+                line: 0,
+                column: 0,
+                severity: 'error' as const,
+                rule: 'no-nodejs-apis',
+            };
+            issues.staticAnalysis.lint.issues.push(nodeApiError);
+        } else {
+            logger.info("✅ No Node.js API violations detected - code is Workers-compatible");
+        }
 
         // Log all types of issues for comprehensive analysis
         if (issues.runtimeErrors.length > 0) {
@@ -195,7 +223,7 @@ export class CodeReviewOperation extends AgentOperation<CodeReviewInputs, CodeRe
         if (issues.staticAnalysis.typecheck.issues.length > 0) {
             logger.info(`Found ${issues.staticAnalysis.typecheck.issues.length} typecheck issues`);
         }
-        
+
         logger.info("Performing comprehensive codebase analysis for all issue types (runtime, logic, UI, state management, incomplete features)");
 
         // Get files context

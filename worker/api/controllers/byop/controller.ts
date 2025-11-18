@@ -664,12 +664,13 @@ export class BYOPController extends BaseController {
             const analyzerId = env.CodebaseAnalyzerObject.idFromString(analysisId);
             const analyzerStub = env.CodebaseAnalyzerObject.get(analyzerId);
 
+            logger.info('Fetching analysis state from CodebaseAnalyzer', { analysisId });
             const stateResult = await analyzerStub.fetch('http://analyzer/state');
             const state = await stateResult.json() as {
                 status: string;
                 repositoryUrl?: string;
                 repositoryName?: string;
-                fileContents?: Record<string, string>;
+                fileContentsR2Key?: string;
                 packageJson?: Record<string, unknown>;
                 analysisResult?: {
                     blueprint?: GeneratedBlueprint;
@@ -684,6 +685,12 @@ export class BYOPController extends BaseController {
                 error?: string;
             };
 
+            logger.info('Analysis state retrieved', {
+                analysisId,
+                status: state.status,
+                hasR2Key: !!state.fileContentsR2Key
+            });
+
             // Verify analysis is completed
             if (state.status !== 'completed') {
                 return this.createErrorResponse(
@@ -697,6 +704,32 @@ export class BYOPController extends BaseController {
             if (!state.analysisResult?.blueprint) {
                 return this.createErrorResponse('Blueprint not available', 404);
             }
+
+            // Retrieve file contents from R2 via the analyzer's /files endpoint
+            logger.info('Fetching file contents from CodebaseAnalyzer /files endpoint', { analysisId });
+            const filesResult = await analyzerStub.fetch('http://analyzer/files');
+            const filesResponse = await filesResult.json() as {
+                success: boolean;
+                fileContents: Record<string, string>;
+                fileCount: number;
+            };
+
+            if (!filesResponse.success || !filesResponse.fileContents) {
+                logger.error('Failed to retrieve file contents from analyzer', {
+                    analysisId,
+                    success: filesResponse.success,
+                    fileCount: filesResponse.fileCount
+                });
+                return this.createErrorResponse(
+                    'Failed to retrieve repository files. Please try re-importing the project.',
+                    500
+                );
+            }
+
+            logger.info('File contents retrieved successfully', {
+                analysisId,
+                fileCount: filesResponse.fileCount
+            });
 
             const blueprint = state.analysisResult.blueprint;
             const repositoryName = state.repositoryName || 'imported-project';
@@ -724,8 +757,23 @@ export class BYOPController extends BaseController {
                 language: 'typescript',
                 frameworks: this.inferFrameworks(framework),
                 selectedTemplate: 'auto',
-                agentMode: 'smart' as const
+                agentMode: 'smart' as const,
+                // Pass imported repository files to the agent
+                importedRepository: {
+                    fileContents: filesResponse.fileContents,
+                    repositoryName,
+                    repositoryUrl: state.repositoryUrl,
+                    framework,
+                    packageJson: state.packageJson
+                }
             };
+
+            logger.info('Prepared code generation request with imported files', {
+                analysisId,
+                fileCount: Object.keys(filesResponse.fileContents).length,
+                repositoryName,
+                framework
+            });
 
             // Create internal request to code generation endpoint
             const url = new URL(request.url);

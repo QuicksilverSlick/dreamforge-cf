@@ -149,36 +149,37 @@ export class SandboxSdkClient extends BaseSandboxService {
      */
     private async getOrCreateSession(sessionId: string, cwd: string): Promise<ExecutionSession> {
         try {
-            // Try to create a new session with the specified cwd
-            this.logger.info('Creating new session', { sessionId, cwd });
-            const session = await this.getSandbox().createSession({ id: sessionId, cwd });
-            return session;
-        } catch (error) {
-            // If session already exists, get it
-            this.logger.info('Session already exists, retrieving it', { sessionId, cwd });
+            // First, try to get an existing session
+            this.logger.info('Attempting to retrieve existing session', { sessionId, cwd });
             const existingSession = await this.getSandbox().getSession(sessionId);
-            
+
             // Verify the cwd matches what we expect
             const pwdResult = await existingSession.exec('pwd');
             const actualCwd = pwdResult.stdout.trim();
-            
+
             if (actualCwd !== cwd) {
-                this.logger.warn('Existing session has wrong cwd, attempting to change directory', { 
-                    sessionId, 
-                    expectedCwd: cwd, 
-                    actualCwd 
+                this.logger.warn('Existing session has wrong cwd, attempting to change directory', {
+                    sessionId,
+                    expectedCwd: cwd,
+                    actualCwd
                 });
                 // Try to cd to the correct directory
                 await existingSession.exec(`cd ${cwd}`);
                 const verifyResult = await existingSession.exec('pwd');
                 if (verifyResult.stdout.trim() !== cwd) {
-                    // throw new Error(`Failed to set working directory to ${cwd}, currently at ${verifyResult.stdout.trim()}`);
                     this.logger.error(`Failed to set working directory to ${cwd}, currently at ${verifyResult.stdout.trim()}`);
                 }
                 this.logger.info('Successfully changed directory for existing session', { sessionId, cwd });
             }
-            
+
+            this.logger.info('Successfully retrieved existing session', { sessionId, cwd });
             return existingSession;
+        } catch (error) {
+            // Session doesn't exist, create a new one
+            this.logger.info('Session does not exist, creating new session', { sessionId, cwd });
+            const session = await this.getSandbox().createSession({ id: sessionId, cwd });
+            this.logger.info('Successfully created new session', { sessionId, cwd });
+            return session;
         }
     }
 

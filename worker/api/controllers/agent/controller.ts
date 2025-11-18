@@ -175,6 +175,7 @@ export class CodingAgentController extends BaseController {
                     writer.write({chunk});
                 },
                 templateInfo: { templateDetails, selection },
+                importedRepository: body.importedRepository,
             }, body.agentMode || defaultCodeGenArgs.agentMode) as Promise<CodeGenState>;
             agentPromise.then(async (_state: CodeGenState) => {
                 writer.write("terminate");

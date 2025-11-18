@@ -254,33 +254,77 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
         });
 
         await this.gitInit();
-        
+
+        // Determine which files to use: imported repository or template
+        const isImportedProject = !!initArgs.importedRepository;
+        const baseFiles = isImportedProject
+            ? initArgs.importedRepository!.fileContents
+            : templateInfo.templateDetails.allFiles;
+
+        if (isImportedProject) {
+            this.logger().info('🔄 BYOP Mode: Using imported repository files', {
+                repositoryName: initArgs.importedRepository!.repositoryName,
+                fileCount: Object.keys(baseFiles).length,
+                framework: initArgs.importedRepository!.framework
+            });
+        } else {
+            this.logger().info('📋 Template Mode: Using template files', {
+                templateName: templateInfo.templateDetails.name,
+                fileCount: Object.keys(baseFiles).length
+            });
+        }
+
         // Customize template files (package.json, wrangler.jsonc, .bootstrap.js, .gitignore)
         const customizedFiles = customizeTemplateFiles(
-            templateInfo.templateDetails.allFiles,
+            baseFiles,
             {
                 projectName,
                 commandsHistory: [] // Empty initially, will be updated later
             }
         );
-        
-        this.logger().info('Customized template files', { 
-            files: Object.keys(customizedFiles) 
+
+        this.logger().info('Customized project files', {
+            files: Object.keys(customizedFiles)
         });
-        
-        // Save customized files to git
+
+        // For BYOP: save all imported files first, then apply customizations
+        if (isImportedProject) {
+            this.logger().info('💾 Saving imported repository files to git');
+
+            // Convert imported files to file objects for saving
+            const importedFilesToSave = Object.entries(baseFiles)
+                .filter(([filePath]) => !filePath.startsWith('.git/')) // Exclude git internal files
+                .map(([filePath, content]) => ({
+                    filePath,
+                    fileContents: content,
+                    filePurpose: 'Imported from repository'
+                }));
+
+            await this.fileManager.saveGeneratedFiles(
+                importedFilesToSave,
+                `Import project files from ${initArgs.importedRepository!.repositoryName}`
+            );
+
+            this.logger().info('✅ Committed imported files to git', {
+                fileCount: importedFilesToSave.length
+            });
+        }
+
+        // Save customized configuration files (these override imported versions if any)
         const filesToSave = Object.entries(customizedFiles).map(([filePath, content]) => ({
             filePath,
             fileContents: content,
             filePurpose: 'Project configuration file'
         }));
-        
+
         await this.fileManager.saveGeneratedFiles(
             filesToSave,
-            'Initialize project configuration files'
+            isImportedProject
+                ? 'Update configuration for imported project'
+                : 'Initialize project configuration files'
         );
-        
-        this.logger().info('Committed customized template files to git');
+
+        this.logger().info('✅ Committed customized configuration files to git');
 
         this.initializeAsync().catch((error: unknown) => {
             this.broadcastError("Initialization failed", error);
