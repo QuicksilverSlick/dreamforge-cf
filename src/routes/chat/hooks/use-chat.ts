@@ -33,15 +33,6 @@ export interface FileType {
 	language?: string;
 }
 
-// Phase source type - matches backend
-export type PhaseSource = 'blueprint' | 'user';
-
-// Roadmap phase from blueprint
-export interface RoadmapPhase {
-	phase: string;
-	description: string;
-}
-
 // New interface for phase timeline tracking
 export interface PhaseTimelineItem {
 	id: string;
@@ -50,11 +41,10 @@ export interface PhaseTimelineItem {
 	files: {
 		path: string;
 		purpose: string;
-		status: 'generating' | 'completed' | 'error' | 'validating' | 'cancelled' | 'pending';
+		status: 'generating' | 'completed' | 'error' | 'validating' | 'cancelled';
 		contents?: string;
 	}[];
-	status: 'generating' | 'completed' | 'error' | 'validating' | 'cancelled' | 'pending';
-	source: PhaseSource;
+	status: 'generating' | 'completed' | 'error' | 'validating' | 'cancelled';
 	timestamp: number;
 }
 
@@ -100,9 +90,6 @@ export function useChat({
 
 	// New state for phase timeline tracking
 	const [phaseTimeline, setPhaseTimeline] = useState<PhaseTimelineItem[]>([]);
-
-	// Implementation roadmap from blueprint (for showing pending phases)
-	const [implementationRoadmap, setImplementationRoadmap] = useState<RoadmapPhase[]>([]);
 
 	const [files, setFiles] = useState<FileType[]>([]);
 
@@ -203,7 +190,6 @@ export function useChat({
 			setRuntimeErrorCount,
 			setStaticIssueCount,
 			setIsDebugging,
-			setImplementationRoadmap,
 			// Current state
 			isInitialStateRestored,
 			blueprint,
@@ -315,32 +301,8 @@ export function useChat({
 
 				ws.addEventListener('message', (event) => {
 					try {
-						const parsed = JSON.parse(event.data);
-
-						// Handle malformed messages where type is a JSON string (Agents SDK bug)
-						if (typeof parsed.type === 'string' && parsed.type.startsWith('{')) {
-							try {
-								const innerMessage = JSON.parse(parsed.type);
-								if (innerMessage.state) {
-									// This is a cf_agent_state message that was double-stringified
-									const correctedMessage = { type: 'cf_agent_state', state: innerMessage.state };
-									handleWebSocketMessage(ws, correctedMessage as WebSocketMessage);
-									return;
-								}
-							} catch {
-								// Not a valid JSON, ignore
-							}
-							logger.warn('Received malformed message with JSON type string:', parsed.type.substring(0, 100));
-							return;
-						}
-
-						// Validate message has proper type field
-						if (!parsed.type || typeof parsed.type !== 'string') {
-							logger.warn('Received message without valid type field:', parsed);
-							return;
-						}
-
-						handleWebSocketMessage(ws, parsed as WebSocketMessage);
+						const message: WebSocketMessage = JSON.parse(event.data);
+						handleWebSocketMessage(ws, message);
 					} catch (parseError) {
 						logger.error('❌ Error parsing WebSocket message:', parseError, event.data);
 					}
@@ -674,7 +636,6 @@ export function useChat({
 		clearEdit,
 		projectStages,
 		phaseTimeline,
-		implementationRoadmap,
 		isThinking,
 		onCompleteBootstrap,
 		// Deployment and generation control

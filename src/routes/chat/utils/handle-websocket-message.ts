@@ -286,13 +286,6 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 break;
             }
 
-            case 'cf_agent_mcp_servers': {
-                logger.debug('📡 MCP servers configuration received');
-                // This message contains MCP server configuration from the backend
-                // Currently no frontend action needed, but logged for debugging
-                break;
-            }
-
             case 'conversation_state': {
                 if (message.type !== 'conversation_state') break;
                 const { state, deepDebugSession } = message;
@@ -509,14 +502,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'deployment_failed': {
-                setIsPreviewDeploying(false);
-                const errorMessage = message.error || 'Deployment failed';
-                toast.error(`Error: ${errorMessage}`);
-                onDebugMessage?.('error',
-                    'Preview Deployment Failed',
-                    errorMessage,
-                    'Deployment'
-                );
+                toast.error(message.error);
                 break;
             }
 
