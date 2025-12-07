@@ -35,6 +35,32 @@ self.MonacoEnvironment = {
 	},
 };
 
+// Suppress Monaco TypeScript worker "Could not find source file" errors
+// This is a known race condition when files change rapidly during code generation
+// The errors are non-blocking and don't affect functionality
+if (typeof window !== 'undefined') {
+	// Handle async errors (Promise rejections)
+	window.addEventListener('unhandledrejection', (event) => {
+		if (
+			event.reason?.message?.includes('Could not find source file') ||
+			event.reason?.message?.includes('inmemory://model')
+		) {
+			event.preventDefault();
+		}
+	});
+
+	// Handle sync errors thrown by Monaco workers
+	window.addEventListener('error', (event) => {
+		if (
+			event.message?.includes('Could not find source file') ||
+			event.message?.includes('inmemory://model')
+		) {
+			event.preventDefault();
+			return true; // Suppress the error
+		}
+	});
+}
+
 // From GitHub Dark theme
 monaco.editor.defineTheme('v1-dev-dark', {
 	base: 'vs-dark',
