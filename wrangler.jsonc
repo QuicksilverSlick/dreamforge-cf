@@ -129,12 +129,28 @@
         // internal tracking — no runtime binding, no exported class — and listing
         // it here only realigns wrangler with the server-recorded migration state.
         // Phase E will properly port the UserSecretsStore implementation from
-        // upstream OR add a v4 migration to drop the phantom class.
+        // upstream OR add a higher migration to drop the phantom class.
         {
             "new_sqlite_classes": [
                 "UserSecretsStore"
             ],
             "tag": "v3"
+        },
+        // v4 deletes CodebaseAnalyzer — an experimental Durable Object class that
+        // was deployed once (likely a prior AI-assisted iteration) and left
+        // orphaned DO instances on the live worker. The class has been absent from
+        // this repo's source for at least 5 months. CF rejected the previous
+        // deploy with error 10064 because the live worker has existing DOs of
+        // this class that no longer have a corresponding exported class.
+        //
+        // WARNING: `deleted_classes` permanently destroys all DOs of that class.
+        // Asynchronous deletion, irreversible. Confirmed safe: zero references
+        // to CodebaseAnalyzer anywhere in worker/* or shared/*.
+        {
+            "deleted_classes": [
+                "CodebaseAnalyzer"
+            ],
+            "tag": "v4"
         }
     ],
 	"vars": {
