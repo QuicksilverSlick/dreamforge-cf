@@ -47,6 +47,15 @@ jobs:
         with:
           bun-version: latest
 
+      # wrangler 4.90+ requires Node.js >= 22 when invoked as a CLI.
+      # The GHA ubuntu-latest runner ships Node 20 by default, and our
+      # later `./node_modules/.bin/wrangler` calls (deployments status,
+      # deploy, rollback) use the system Node via shebang.
+      - name: Setup Node 22 (required by wrangler 4.90+ CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
