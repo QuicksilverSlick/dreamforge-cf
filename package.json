@@ -6,7 +6,7 @@
 	"scripts": {
 		"setup": "tsx scripts/setup.ts",
 		"dev": "DEV_MODE=true vite",
-		"build": "./node_modules/.bin/tsc -b --incremental && ./node_modules/.bin/vite build && tsx scripts/copy-landing-pages.ts",
+		"build": "./node_modules/.bin/tsc -b --incremental && ./node_modules/.bin/vite build",
 		"lint": "eslint .",
 		"preview": "npm run build && vite preview",
 		"deploy": "bun --env-file .prod.vars scripts/deploy.ts",
