@@ -132,14 +132,55 @@ const worker = {
 		// --- Domain-based Routing ---
 
 		// Normalize hostnames for both local development (localhost) and production.
-		const isMainDomainRequest =
-			hostname === env.CUSTOM_DOMAIN || hostname === 'localhost';
+		const isMarketingDomain =
+			hostname === 'getdreamforge.com' ||
+			hostname === 'www.getdreamforge.com' ||
+			(hostname === 'localhost' && pathname.startsWith('/marketing'));
+
+		const isAppDomain =
+			hostname === 'app.getdreamforge.com' ||
+			hostname === env.CUSTOM_DOMAIN ||
+			(hostname === 'localhost' && !pathname.startsWith('/marketing'));
+
 		const isSubdomainRequest =
 			hostname.endsWith(`.${previewDomain}`) ||
 			(hostname.endsWith('.localhost') && hostname !== 'localhost');
 
-		// Route 1: Main Platform Request (e.g., build.cloudflare.dev or localhost)
-		if (isMainDomainRequest) {
+		// Route 1: Marketing Website (e.g., getdreamforge.com)
+		if (isMarketingDomain) {
+			// Serve landing pages from /marketing/ in ASSETS
+			if (!pathname.startsWith('/api/')) {
+				// Rewrite URL to point to marketing directory
+				let marketingPath: string;
+
+				if (pathname.startsWith('/dream-builder')) {
+					// Enterprise landing page
+					marketingPath = pathname.replace(
+						'/dream-builder',
+						'/marketing/dream-builder'
+					);
+				} else {
+					// Individual landing page (root)
+					if (pathname === '/' || pathname === '') {
+						marketingPath = '/marketing/index.html';
+					} else {
+						marketingPath = `/marketing${pathname}`;
+					}
+				}
+
+				// Create a new request with the rewritten URL
+				const marketingUrl = new URL(marketingPath, url.origin);
+				const marketingRequest = new Request(marketingUrl, request);
+
+				logger.info(`Serving marketing page: ${marketingPath}`);
+				return env.ASSETS.fetch(marketingRequest);
+			}
+			// Marketing domain shouldn't access APIs
+			return new Response('Not Found', { status: 404 });
+		}
+
+		// Route 2: Main Application (e.g., app.getdreamforge.com or localhost)
+		if (isAppDomain) {
 			// Serve static assets for all non-API routes from the ASSETS binding.
 			if (!pathname.startsWith('/api/')) {
 				return env.ASSETS.fetch(request);
