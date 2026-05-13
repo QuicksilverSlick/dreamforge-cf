@@ -5,7 +5,8 @@ This directory defines the deployment contract for `dreamforge-cf`. **The contra
 ## The deploy contract
 
 1. **No direct commits to `main`.** Every change reaches `main` via PR. Branch protection enforces this.
-2. **Every PR runs CI** ([`ci.yml`](./ci.yml)): install, typecheck, lint, build, `wrangler deploy --dry-run`. All hard gates except lint (soft during Phase D; will be hardened once the existing 40 errors are fixed).
+2. **Every PR runs CI** ([`ci.yml`](./ci.yml)): install, typecheck, build, and `wrangler types` config validation. All hard gates. Lint runs in parallel as a non-blocking soft signal until Phase D (when the existing 40 errors are fixed).
+   - **Note:** we deliberately do **not** run `wrangler deploy --dry-run` in CI. This project bundles the Worker through `@cloudflare/vite-plugin` (see [`vite.config.ts`](../../vite.config.ts)), not wrangler's built-in esbuild. `wrangler deploy --dry-run` runs its own esbuild that can't resolve the Vite-only `worker/*` and `shared/*` path aliases. The **Build** job (`bun run build`) is the real bundle gate — it exercises the same path that production deploys use. `wrangler types` covers `wrangler.jsonc` syntax, binding references, and DO migration consistency.
 3. **Merge to `main` triggers deploy** ([`deploy.yml`](./deploy.yml)): install, build, deploy to Cloudflare, health check `https://app.getdreamforge.com/api/health`, auto-rollback on health-check failure.
 4. **No deploys from feature branches.** The previous `claude/**` push trigger was a foot-gun and is intentionally removed.
 5. **Manual deploys** are possible via `workflow_dispatch` on `deploy.yml` for emergency cases (e.g. cherry-pick a fix without going through PR). Use sparingly and document the reason in the input field.
