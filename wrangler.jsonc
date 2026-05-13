@@ -122,6 +122,19 @@
                 "DORateLimitStore"
             ],
             "tag": "v2"
+        },
+        // v3 declared here to match the migration_tag CF has on record for this
+        // worker (originally set by an interim deploy that included UserSecretsStore
+        // from upstream cloudflare/vibesdk). The class is a phantom in CF's
+        // internal tracking — no runtime binding, no exported class — and listing
+        // it here only realigns wrangler with the server-recorded migration state.
+        // Phase E will properly port the UserSecretsStore implementation from
+        // upstream OR add a v4 migration to drop the phantom class.
+        {
+            "new_sqlite_classes": [
+                "UserSecretsStore"
+            ],
+            "tag": "v3"
         }
     ],
 	"vars": {
