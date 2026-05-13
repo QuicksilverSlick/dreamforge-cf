@@ -79,4 +79,22 @@ bun run build                                         # build (Vite + @cloudflar
 ./node_modules/.bin/eslint .                          # lint (soft until Phase D)
 ```
 
-`bun run build` is the real bundle gate — if it succeeds locally it will succeed in CI. **Do not** use `wrangler deploy --dry-run` for local validation: this project bundles through `@cloudflare/vite-plugin`, and wrangler's built-in esbuild cannot resolve the Vite-only `worker/*` and `shared/*` path aliases, so the dry-run will fail with `Could not resolve "worker/..."` errors that don't reflect real deploy behaviour.
+`bun run build` is the real bundle gate — if it succeeds locally it will succeed in CI.
+
+### How the build / deploy hand-off works
+
+`bun run build` (Vite + `@cloudflare/vite-plugin`) emits:
+
+- `dist/client/` — the frontend SPA
+- `dist/dreamforge_cf/index.js` — the pre-bundled Worker
+- `dist/dreamforge_cf/wrangler.json` — a wrangler config with `"no_bundle": true` that points at the pre-bundled `index.js` and the sibling `../client/` assets
+
+The deploy workflow runs `wrangler deploy -c dist/dreamforge_cf/wrangler.json`. The `-c` flag is essential — without it, wrangler reads the source `wrangler.jsonc` and re-bundles `worker/index.ts` with its built-in esbuild, which cannot resolve the Vite-only `worker/*` and `shared/*` path aliases.
+
+**Do not** use `wrangler deploy --dry-run` against the source `wrangler.jsonc` for local validation — it will fail with `Could not resolve "worker/..."` errors that don't reflect real deploy behaviour. If you want a deploy dry-run locally, build first, then:
+
+```sh
+./node_modules/.bin/wrangler deploy --dry-run -c dist/dreamforge_cf/wrangler.json --outdir=/tmp/dist-worker
+```
+
+(On Windows, this currently hits a `UV_HANDLE_CLOSING` libuv crash in wrangler 4.42 — fixed in 4.87+. CI runs on Linux so this doesn't affect deploys.)
