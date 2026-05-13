@@ -131,9 +131,19 @@ const worker = {
 
 		// --- Domain-based Routing ---
 
-		// Normalize hostnames for both local development (localhost) and production.
+		// Hostnames that should serve the main application (React SPA + API).
+		// Includes the canonical app domain (env.CUSTOM_DOMAIN), the marketing-
+		// facing apex and www, and local dev. Marketing and app currently share
+		// the same React build — the Home component is the landing page for
+		// unauthenticated visitors and the entry into the authenticated
+		// experience for signed-in users. If we later split marketing into its
+		// own content, swap this to a hostname switch that routes marketing
+		// hostnames to a separate path.
 		const isMainDomainRequest =
-			hostname === env.CUSTOM_DOMAIN || hostname === 'localhost';
+			hostname === env.CUSTOM_DOMAIN ||
+			hostname === 'getdreamforge.com' ||
+			hostname === 'www.getdreamforge.com' ||
+			hostname === 'localhost';
 		const isSubdomainRequest =
 			hostname.endsWith(`.${previewDomain}`) ||
 			(hostname.endsWith('.localhost') && hostname !== 'localhost');
