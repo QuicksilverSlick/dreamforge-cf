@@ -15,7 +15,7 @@ This directory defines the deployment contract for `dreamforge-cf`. **The contra
 
 | File | When | Purpose |
 |---|---|---|
-| [`ci.yml`](./ci.yml) | PR to `main`, push to `main` | Validate every change before merge |
+| [`ci.yml`](./ci.yml) | PR to `main` | Pre-merge gate — validates every PR before it can be merged |
 | [`deploy.yml`](./deploy.yml) | Push to `main`, `workflow_dispatch` | Deploy to Cloudflare with health-check + rollback |
 | [`upstream-sync-manual.yml`](./upstream-sync-manual.yml) | `workflow_dispatch` only | Sync from `cloudflare/vibesdk` upstream (see [`UPSTREAM_SYNC.md`](../../UPSTREAM_SYNC.md)) |
 | [`upstream-notifications.yml`](./upstream-notifications.yml) | Weekly cron | Open a GitHub issue summarising new upstream commits |
