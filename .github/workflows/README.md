@@ -67,14 +67,16 @@ env.CF_VERSION_METADATA.timestamp  // CF-side deploy timestamp
 
 The git SHA is embedded in the deploy *message* (visible via `wrangler deployments list`) for correlating CF versions to commits. **Phase F follow-up:** surface a `/api/version` route that returns the version metadata + git SHA from the deploy message, for support/debugging.
 
-## Local dry-run
+## Local validation
 
-Before opening a PR you can validate the deploy locally:
+Before opening a PR you can run the same gates locally:
 
 ```sh
 bun install
-bun run build
-./node_modules/.bin/wrangler deploy --dry-run --outdir=dist-worker
+./node_modules/.bin/tsc -b                            # typecheck — must pass
+bun run build                                         # build (Vite + @cloudflare/vite-plugin)
+./node_modules/.bin/wrangler types --include-runtime false   # wrangler.jsonc validation
+./node_modules/.bin/eslint .                          # lint (soft until Phase D)
 ```
 
-The dry-run job in `ci.yml` runs exactly this. If it passes locally and in CI, the real deploy will too (barring transient Cloudflare errors).
+`bun run build` is the real bundle gate — if it succeeds locally it will succeed in CI. **Do not** use `wrangler deploy --dry-run` for local validation: this project bundles through `@cloudflare/vite-plugin`, and wrangler's built-in esbuild cannot resolve the Vite-only `worker/*` and `shared/*` path aliases, so the dry-run will fail with `Could not resolve "worker/..."` errors that don't reflect real deploy behaviour.

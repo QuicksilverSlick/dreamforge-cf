@@ -52,11 +52,25 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          previous=$(./node_modules/.bin/wrangler deployments status --name "$WORKER_NAME" 2>/dev/null \
-            | awk '/Version\(s\):/ { match($0, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/); if (RSTART) { print substr($0, RSTART, RLENGTH); exit } }')
-          if [ -z "${previous:-}" ]; then
+          # Tolerate transient wrangler/CF API failures here — if we can't get
+          # the previous version we just lose the auto-rollback capability for
+          # this deploy, which is preferable to blocking the deploy entirely.
+          # The `if` form keeps `set -e` happy because the failing branch is
+          # part of a conditional.
+          previous=""
+          if status_output=$(./node_modules/.bin/wrangler deployments status --name "$WORKER_NAME" 2>&1); then
+            previous=$(printf '%s\n' "$status_output" | awk '
+              /Version\(s\):/ {
+                match($0, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)
+                if (RSTART) { print substr($0, RSTART, RLENGTH); exit }
+              }
+            ')
+          else
+            echo "::warning::wrangler deployments status exited non-zero; rollback target unknown."
+            printf '%s\n' "$status_output" | head -20
+          fi
+          if [ -z "$previous" ]; then
             echo "::warning::Could not determine previous active version — rollback will be a no-op if this deploy fails."
-            previous=""
           fi
           echo "previous=$previous" >> "$GITHUB_OUTPUT"
           echo "Previous active version: ${previous:-<none>}"
