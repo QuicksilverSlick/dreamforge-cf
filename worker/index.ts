@@ -148,35 +148,46 @@ const worker = {
 
 		// Route 1: Marketing Website (e.g., getdreamforge.com)
 		if (isMarketingDomain) {
-			// Serve landing pages from /marketing/ in ASSETS
-			if (!pathname.startsWith('/api/')) {
-				// Rewrite URL to point to marketing directory
-				let marketingPath: string;
-
-				if (pathname.startsWith('/dream-builder')) {
-					// Enterprise landing page
-					marketingPath = pathname.replace(
-						'/dream-builder',
-						'/marketing/dream-builder'
-					);
-				} else {
-					// Individual landing page (root)
-					if (pathname === '/' || pathname === '') {
-						marketingPath = '/marketing/index.html';
-					} else {
-						marketingPath = `/marketing${pathname}`;
-					}
-				}
-
-				// Create a new request with the rewritten URL
-				const marketingUrl = new URL(marketingPath, url.origin);
-				const marketingRequest = new Request(marketingUrl, request);
-
-				logger.info(`Serving marketing page: ${marketingPath}`);
-				return env.ASSETS.fetch(marketingRequest);
+			// Marketing domain shouldn't access APIs.
+			if (pathname.startsWith('/api/')) {
+				return new Response('Not Found', { status: 404 });
 			}
-			// Marketing domain shouldn't access APIs
-			return new Response('Not Found', { status: 404 });
+
+			// Defensive guard: if the path already lives under /marketing/
+			// (which can happen if CF Assets ever 307s us back into the
+			// worker via the redirected URL), serve directly without
+			// re-prefixing — otherwise we'd produce /marketing/marketing/...
+			// and 404.
+			if (pathname.startsWith('/marketing/') || pathname === '/marketing') {
+				return env.ASSETS.fetch(request);
+			}
+
+			// Rewrite the user-facing URL to the corresponding internal
+			// assets path under /marketing/.
+			let marketingPath: string;
+			if (pathname.startsWith('/dream-builder')) {
+				// Enterprise landing page — preserve any sub-path
+				marketingPath = pathname.replace(
+					'/dream-builder',
+					'/marketing/dream-builder'
+				);
+			} else if (pathname === '/' || pathname === '') {
+				// Apex: request the directory itself, not the explicit
+				// index.html. CF Assets serves the directory's index
+				// without issuing a 307 redirect to the canonical URL,
+				// which would otherwise leak the internal /marketing/
+				// path back to the user.
+				marketingPath = '/marketing/';
+			} else {
+				// Other paths under apex (e.g. /styles.css, /script.js)
+				marketingPath = `/marketing${pathname}`;
+			}
+
+			const marketingUrl = new URL(marketingPath, url.origin);
+			const marketingRequest = new Request(marketingUrl, request);
+
+			logger.info(`Serving marketing page: ${marketingPath}`);
+			return env.ASSETS.fetch(marketingRequest);
 		}
 
 		// Route 2: Main Application (e.g., app.getdreamforge.com or localhost)
