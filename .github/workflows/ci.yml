@@ -1,14 +1,17 @@
 name: CI
 
+# CI is a pure pre-merge gate. It runs on PR open/update/synchronize and
+# evaluates the merge commit (GitHub's default `pull_request` event behavior).
+# Once a PR is merged, branch protection guarantees its CI passed against the
+# exact code that becomes main — re-running on the push-to-main event would
+# duplicate that work. The post-merge action is `deploy.yml`, not this.
 on:
   pull_request:
-    branches: [main]
-  push:
     branches: [main]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
