@@ -172,6 +172,20 @@
 	"workers_dev": false,
     "preview_urls": false,
     "routes": [
+        // Marketing-facing apex + www. Bare custom domains — these capture all
+        // paths on their hostname. Declared here so wrangler keeps them
+        // attached across deploys (wrangler reconciles custom domains against
+        // this list and removes any not declared).
+        {
+            "pattern": "getdreamforge.com",
+            "custom_domain": true
+        },
+        {
+            "pattern": "www.getdreamforge.com",
+            "custom_domain": true
+        },
+        // App domain — custom domain for the bare hostname plus a wildcard
+        // route to handle preview-app subdomains (e.g. customer-1.app.getdreamforge.com).
         {
             "pattern": "app.getdreamforge.com",
             "custom_domain": true
