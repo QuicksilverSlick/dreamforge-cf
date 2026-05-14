@@ -58,11 +58,19 @@ import type{
     RateLimitError
 } from '@/api-types';
 import {
-    
+
     RateLimitExceededError,
     SecurityError,
     SecurityErrorType,
 } from '@/api-types';
+import type {
+    ListRepositoriesResponse,
+    ImportRepositoryRequest,
+    ImportRepositoryResponse,
+    AnalysisStateResponse,
+    BlueprintResponse,
+    StartBuildingResponse,
+} from '@/api-types-byop';
 import { toast } from 'sonner';
 
 /**
@@ -1037,6 +1045,72 @@ class ApiClient {
 			{
 				method: 'DELETE',
 			},
+		);
+	}
+
+	// ===============================
+	// BYOP (Bring Your Own Project) API Methods
+	// ===============================
+	//
+	// These methods target the `/api/byop/*` routes, which are restored
+	// server-side in PR 20d (CodebaseAnalyzer DO + controller + routes).
+	// They ship in this PR so `useGitHubRepositories`, `useImportRepository`,
+	// `useAnalysisStatus`, and `useBlueprint` (src/hooks/use-byop.ts) compile.
+	// Calling them before PR 20d lands will return 404; nothing calls them
+	// yet since the /import React route is wired in PR 20e.
+
+	/**
+	 * List user's GitHub repositories
+	 */
+	async listGitHubRepositories(): Promise<ApiResponse<ListRepositoriesResponse>> {
+		return this.request<ListRepositoriesResponse>('/api/byop/repositories');
+	}
+
+	/**
+	 * Import a GitHub repository for analysis
+	 */
+	async importRepository(
+		data: ImportRepositoryRequest
+	): Promise<ApiResponse<ImportRepositoryResponse>> {
+		return this.request<ImportRepositoryResponse>('/api/byop/import', {
+			method: 'POST',
+			body: data,
+		});
+	}
+
+	/**
+	 * Get analysis status for a repository import
+	 */
+	async getAnalysisStatus(
+		analysisId: string
+	): Promise<ApiResponse<AnalysisStateResponse>> {
+		return this.request<AnalysisStateResponse>(
+			`/api/byop/analysis/${analysisId}/status`
+		);
+	}
+
+	/**
+	 * Get completed blueprint for an analysis
+	 */
+	async getBlueprint(
+		analysisId: string
+	): Promise<ApiResponse<BlueprintResponse>> {
+		return this.request<BlueprintResponse>(
+			`/api/byop/analysis/${analysisId}/blueprint`
+		);
+	}
+
+	/**
+	 * Start building on imported project
+	 */
+	async startBuilding(
+		analysisId: string
+	): Promise<ApiResponse<StartBuildingResponse>> {
+		return this.request<StartBuildingResponse>(
+			`/api/byop/analysis/${analysisId}/start-building`,
+			{
+				method: 'POST'
+			}
 		);
 	}
 
