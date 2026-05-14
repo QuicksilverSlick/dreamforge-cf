@@ -1,3 +1,4 @@
+import { DurableObject } from 'cloudflare:workers';
 import { createLogger } from './logger';
 import { SmartCodeGeneratorAgent } from './agents/core/smartGeneratorAgent';
 import { proxyToSandbox } from '@cloudflare/sandbox';
@@ -17,6 +18,26 @@ export { UserAppSandboxService, DeployerService } from './services/sandbox/sandb
 // export const DORateLimitStore = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseDORateLimitStore);
 export const CodeGeneratorAgent = SmartCodeGeneratorAgent;
 export const DORateLimitStore = BaseDORateLimitStore;
+
+/**
+ * Tombstone Durable Object class — temporary export.
+ *
+ * UserSecretsStore was declared in migration v3 (legacy upstream sync) but
+ * never had an exported class, runtime binding, or any live DO instances.
+ * The real user-secrets feature lives in
+ * `worker/database/services/SecretsService.ts` (D1, XChaCha20-Poly1305).
+ *
+ * Cloudflare rejects `deleted_classes` migrations targeting a class that
+ * was not exported by the previous deploy (error 10074). To clean this up
+ * we ship the export now (this PR), then in the follow-up PR remove the
+ * export *and* add a v5 `deleted_classes` migration. CF will accept that
+ * sequence because the previous deploy (this one) exports the class.
+ *
+ * Do not add methods, bindings, or migration changes here. This class has
+ * no instances and no callers — it exists solely to satisfy the export
+ * invariant for one deploy cycle.
+ */
+export class UserSecretsStore extends DurableObject<Env> {}
 
 // Logger for the main application and handlers
 const logger = createLogger('App');
