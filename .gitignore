@@ -22,6 +22,9 @@ dist-ssr
 # Claude Code worktrees and local settings
 .claude/worktrees/
 .claude/settings.local.json
+
+# Local-only review folder used during landing-page comparison
+landing-previews/
 *.suo
 *.ntvs*
 *.njsproj

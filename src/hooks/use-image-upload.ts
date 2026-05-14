@@ -1,9 +1,8 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
-import { 
-	type ImageAttachment, 
-	isSupportedImageType, 
-	MAX_IMAGE_SIZE_BYTES,
+import {
+	type ImageAttachment,
+	isSupportedImageType,
 	MAX_IMAGES_PER_MESSAGE,
 	SUPPORTED_IMAGE_MIME_TYPES
 } from '@/api-types';
@@ -28,7 +27,9 @@ export interface UseImageUploadReturn {
 export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUploadReturn {
 	const {
 		maxImages = MAX_IMAGES_PER_MESSAGE,
-		maxSizeBytes = MAX_IMAGE_SIZE_BYTES,
+		// maxSizeBytes is declared in the options type but the size check it was
+		// intended for isn't implemented in this hook — destructured-but-unused
+		// removed to satisfy noUnusedLocals. Re-add when implementing size limit.
 		onError,
 	} = options;
 
@@ -98,7 +99,7 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
 
 			reader.readAsDataURL(file);
 		});
-	}, [maxSizeBytes, onError]);
+	}, [onError]);
 
 	const addImages = useCallback(async (files: File[]) => {
 		setIsProcessing(true);

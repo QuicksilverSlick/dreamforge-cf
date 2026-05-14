@@ -142,6 +142,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
+    // setupTokenRefresh is defined below as a stable useCallback (empty deps)
+    // and is captured by closure. Re-creating checkAuth on every render would
+    // also force its only caller (the init useEffect) to re-fire, causing an
+    // extra profile fetch per render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Setup automatic session validation (cookie-based)

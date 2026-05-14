@@ -1,3 +1,25 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+//
+// This hook orchestrates the live WebSocket chat session and has four
+// intentional violations of exhaustive-deps:
+//
+//  - handleWebSocketMessage (useCallback) wraps a factory call. Its deps are
+//    hand-curated to match the values the factory closes over via its `deps`
+//    object literal; ESLint can't statically infer those.
+//  - connectWithRetry (useCallback) intentionally captures handleWebSocketMessage,
+//    handleConnectionFailure, sendMessage, and urlChatId via closure. Adding them
+//    as deps would re-create the function on every WebSocket message and tear
+//    down the active connection.
+//  - handleConnectionFailure (useCallback) intentionally captures connectWithRetry
+//    via closure to avoid a definition cycle.
+//  - The mount-init useEffect is intentionally a `[]` ("run once") effect.
+//    Including agentMode, connectWithRetry, urlChatId, etc. would cause a full
+//    re-initialization (state reset + WebSocket reconnect) on every render where
+//    any of those changes.
+//
+// Other hooks in this file are still checked by other rules. If you add a new
+// hook here, write it with proper exhaustive-deps satisfied, or add a per-line
+// disable with explicit reasoning. Do NOT extend the file-level disable lightly.
 import { WebSocket } from 'partysocket';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';

@@ -3,9 +3,10 @@ import { FileGenerationOutputType } from "../../schemas";
 import { applyDiff } from '../diff-formats/udiff';
 import { extractCommands } from '../../utils/common';
 
-// SCOF-specific parsing state with comprehensive tracking
-export interface SCOFParsingState extends ParsingState {
-}
+// SCOF-specific parsing state with comprehensive tracking. Kept as a named
+// alias of ParsingState so future SCOF-only fields can be added without a
+// cross-cutting type change.
+export type SCOFParsingState = ParsingState;
 
 /**
  * SCOF (Shell Command Output Format) implementation with robust chunk handling

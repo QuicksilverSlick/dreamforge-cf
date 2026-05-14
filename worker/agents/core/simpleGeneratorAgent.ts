@@ -187,7 +187,7 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
                 if (Array.isArray(parsed)) {
                     fullHistory = parsed as ConversationMessage[];
                 }
-            } catch (_e) {}
+            } catch (_e) { /* stored JSON unparseable — fall back to empty history below */ }
         }
         if (fullHistory.length === 0) {
             fullHistory = currentConversation;
@@ -201,7 +201,7 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
                 if (Array.isArray(parsed)) {
                     runningHistory = parsed as ConversationMessage[];
                 }
-            } catch (_e) {}
+            } catch (_e) { /* stored JSON unparseable — fall back to empty history below */ }
         }
         if (runningHistory.length === 0) {
             runningHistory = currentConversation;

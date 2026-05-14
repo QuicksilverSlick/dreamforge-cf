@@ -246,8 +246,14 @@ IMPORTANT:
             }
         }
         
-        // Prevent buffer from growing too large
-        if (state.contentBuffer.length > (state as any).maxBufferSize || 10000) {
+        // Prevent buffer from growing too large.
+        // Bug fix: original was `length > maxBufferSize || 10000`, which due to
+        // operator precedence means `(length > maxBufferSize) || 10000` — the
+        // OR-with-truthy always evaluates true and the buffer was trimmed on
+        // EVERY call. Intent is to use a 10000 default when maxBufferSize is
+        // unset, then compare length against that.
+        const maxBufferSize = (state as any).maxBufferSize || 10000;
+        if (state.contentBuffer.length > maxBufferSize) {
             // Keep last portion in case we have partial tags
             const keepSize = Math.min(2000, state.contentBuffer.length);
             state.contentBuffer = state.contentBuffer.substring(state.contentBuffer.length - keepSize);
