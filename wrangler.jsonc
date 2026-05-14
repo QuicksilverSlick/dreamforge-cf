@@ -127,17 +127,18 @@
         // as SQLite Durable Object classes. The server has migration_tag "v3"
         // already applied, so CF won't reapply this — migrations are tracked
         // by tag only, not by contents. The declarations here exist solely to
-        // satisfy wrangler's local static validation (which requires v4's
-        // delete to reference a class that appears earlier in the list).
+        // satisfy wrangler's local static validation, which requires any
+        // subsequent `deleted_classes` to reference a class that appears
+        // earlier in the migration list.
         //
-        // - UserSecretsStore: phantom in CF tracking from an interim upstream
-        //   sync; no runtime binding, no exported class, no DOs. Will be
-        //   resolved properly in Phase E (port from upstream OR add a future
-        //   migration to delete).
-        // - CodebaseAnalyzer: was bound as a Durable Object on the live
-        //   worker by a prior iteration that's been absent from source for 5+
-        //   months. Has existing DO instances (which is why error 10064
-        //   blocked previous deploys). Deleted below in v4.
+        // Both classes are dead and resolved in later tags:
+        // - CodebaseAnalyzer: bound on the live worker by a prior iteration
+        //   that's been absent from source for 5+ months. Deleted in v4.
+        // - UserSecretsStore: phantom from an interim upstream sync; never
+        //   had an exported class, runtime binding, or live DO instances.
+        //   The user-secrets feature is implemented in D1 via
+        //   `worker/database/services/SecretsService.ts`, not as a DO.
+        //   Deleted in v5.
         {
             "new_sqlite_classes": [
                 "UserSecretsStore",
@@ -147,7 +148,7 @@
         },
         // v4 deletes CodebaseAnalyzer permanently. Asynchronous, irreversible
         // (CF docs). Confirmed safe: zero references to CodebaseAnalyzer
-        // anywhere in worker/* or shared/* (grep verified). This is the only
+        // anywhere in worker/* or shared/* (grep verified). This was the
         // class blocking the first successful production deploy since
         // 2025-12-15.
         {
@@ -155,6 +156,19 @@
                 "CodebaseAnalyzer"
             ],
             "tag": "v4"
+        },
+        // v5 deletes UserSecretsStore permanently. Confirmed safe: no code
+        // references in worker/* or shared/* (grep verified). The class was
+        // declared in v3 only to satisfy wrangler's static validation; it
+        // never had a runtime binding or any DO instances, so the actual
+        // server-side delete is a no-op. After this migration applies, the
+        // class will drop from `durableNamespaces` in the next
+        // `wrangler types --include-runtime false` regen.
+        {
+            "deleted_classes": [
+                "UserSecretsStore"
+            ],
+            "tag": "v5"
         }
     ],
 	"vars": {
