@@ -6,7 +6,7 @@ import { createApp } from './app';
 // import * as Sentry from '@sentry/cloudflare';
 // import { sentryOptions } from './observability/sentry';
 import { DORateLimitStore as BaseDORateLimitStore } from './services/rate-limit/DORateLimitStore';
-import { getPreviewDomain } from './utils/urls';
+import { getPreviewDomain, isPreviewOrigin } from './utils/urls';
 import { proxyToAiGateway } from './services/aigateway-proxy/controller';
 import { isOriginAllowed } from './config/security';
 
@@ -198,20 +198,35 @@ const worker = {
 			if (!pathname.startsWith('/api/')) {
 				return env.ASSETS.fetch(request);
 			}
-			// AI Gateway proxy for generated apps
+			// AI Gateway proxy for generated apps.
+			//
+			// This route is reachable only from browser iframes whose Origin is
+			// a preview subdomain of CUSTOM_PREVIEW_DOMAIN (e.g.
+			// `<deploymentId>.app.getdreamforge.com`). Any other Origin — a
+			// third-party site, a server-to-server request without an Origin
+			// header, or the bare main-app domain — is rejected here before
+			// the controller runs. The JWT check inside the controller is the
+			// second gate; this is the first.
 			if (pathname.startsWith('/api/proxy/openai')) {
-                // Only handle requests from valid origins of the preview domain
-                const origin = request.headers.get('Origin');
-                const previewDomain = getPreviewDomain(env);
-
-                logger.info(`Origin: ${origin}, Preview Domain: ${previewDomain}`);
-
-                return proxyToAiGateway(request, env, ctx);
-				// if (origin && origin.endsWith(`.${previewDomain}`)) {
-                //     return proxyToAiGateway(request, env, ctx);
-                // }
-                // logger.warn(`Access denied. Invalid origin: ${origin}, preview domain: ${previewDomain}`);
-                // return new Response('Access denied. Invalid origin.', { status: 403 });
+				const origin = request.headers.get('Origin');
+				if (!isPreviewOrigin(env, origin)) {
+					logger.warn(
+						`AI proxy denied. origin=${origin ?? '(none)'} previewDomain=${getPreviewDomain(env)}`,
+					);
+					return new Response(
+						JSON.stringify({
+							error: {
+								message: 'Origin not allowed',
+								type: 'invalid_request_error',
+							},
+						}),
+						{
+							status: 403,
+							headers: { 'Content-Type': 'application/json' },
+						},
+					);
+				}
+				return proxyToAiGateway(request, env, ctx);
 			}
 			// Handle all API requests with the main Hono application.
 			logger.info(`Handling API request for: ${url}`);
