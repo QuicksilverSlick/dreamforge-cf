@@ -131,24 +131,68 @@ const worker = {
 
 		// --- Domain-based Routing ---
 
-		// Hostnames that should serve the main application (React SPA + API).
-		// Includes the canonical app domain (env.CUSTOM_DOMAIN), the marketing-
-		// facing apex and www, and local dev. Marketing and app currently share
-		// the same React build — the Home component is the landing page for
-		// unauthenticated visitors and the entry into the authenticated
-		// experience for signed-in users. If we later split marketing into its
-		// own content, swap this to a hostname switch that routes marketing
-		// hostnames to a separate path.
-		const isMainDomainRequest =
-			hostname === env.CUSTOM_DOMAIN ||
+		// Marketing hostnames: serve the StoryBrand landing pages from
+		// dist/client/marketing/ (copied there from worker/static/landing-pages/
+		// by scripts/copy-landing-pages.ts during the build).
+		//
+		// `localhost` is included with a path prefix so local dev can preview
+		// the marketing pages at http://localhost:5173/marketing/...
+		const isMarketingDomain =
 			hostname === 'getdreamforge.com' ||
 			hostname === 'www.getdreamforge.com' ||
-			hostname === 'localhost';
+			(hostname === 'localhost' && pathname.startsWith('/marketing'));
+
+		// App hostnames: serve the React SPA + API.
+		const isMainDomainRequest =
+			hostname === env.CUSTOM_DOMAIN ||
+			(hostname === 'localhost' && !pathname.startsWith('/marketing'));
+
 		const isSubdomainRequest =
 			hostname.endsWith(`.${previewDomain}`) ||
 			(hostname.endsWith('.localhost') && hostname !== 'localhost');
 
-		// Route 1: Main Platform Request (e.g., build.cloudflare.dev or localhost)
+		// Route 1: Marketing Website (e.g., getdreamforge.com)
+		if (isMarketingDomain) {
+			// Marketing domain shouldn't serve APIs.
+			if (pathname.startsWith('/api/')) {
+				return new Response('Not Found', { status: 404 });
+			}
+
+			// Defensive: if the path is already under /marketing/ (e.g. from a
+			// CF Assets normalization redirect), serve directly without
+			// re-prefixing — otherwise we'd produce /marketing/marketing/...
+			if (pathname.startsWith('/marketing/') || pathname === '/marketing') {
+				return env.ASSETS.fetch(request);
+			}
+
+			// Rewrite user-facing URLs to the internal /marketing/... paths.
+			let marketingPath: string;
+			if (pathname.startsWith('/dream-builder')) {
+				// Enterprise landing page (preserve any sub-path).
+				marketingPath = pathname.replace(
+					'/dream-builder',
+					'/marketing/dream-builder'
+				);
+			} else if (pathname === '/' || pathname === '') {
+				// Apex: request the directory itself, not /marketing/index.html.
+				// CF Assets serves the directory's index without issuing a
+				// 307 redirect to the canonical URL — which would otherwise
+				// leak the internal /marketing/ path back to the user and
+				// trigger an infinite loop through the defensive guard above.
+				marketingPath = '/marketing/';
+			} else {
+				// Other paths under apex (e.g. /styles.css, /script.js).
+				marketingPath = `/marketing${pathname}`;
+			}
+
+			const marketingUrl = new URL(marketingPath, url.origin);
+			const marketingRequest = new Request(marketingUrl, request);
+
+			logger.info(`Serving marketing page: ${marketingPath}`);
+			return env.ASSETS.fetch(marketingRequest);
+		}
+
+		// Route 2: Main Application (e.g., app.getdreamforge.com or localhost)
 		if (isMainDomainRequest) {
 			// Serve static assets for all non-API routes from the ASSETS binding.
 			if (!pathname.startsWith('/api/')) {
@@ -161,7 +205,7 @@ const worker = {
                 const previewDomain = getPreviewDomain(env);
 
                 logger.info(`Origin: ${origin}, Preview Domain: ${previewDomain}`);
-                
+
                 return proxyToAiGateway(request, env, ctx);
 				// if (origin && origin.endsWith(`.${previewDomain}`)) {
                 //     return proxyToAiGateway(request, env, ctx);
@@ -175,7 +219,7 @@ const worker = {
 			return app.fetch(request, env, ctx);
 		}
 
-		// Route 2: User App Request (e.g., xyz.build.cloudflare.dev or test.localhost)
+		// Route 3: User App Request (e.g., xyz.build.cloudflare.dev or test.localhost)
 		if (isSubdomainRequest) {
 			return handleUserAppRequest(request, env);
 		}
