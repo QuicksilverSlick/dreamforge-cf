@@ -1007,19 +1007,18 @@ export class SandboxSdkClient extends BaseSandboxService {
             const instanceId = `i-${generateId()}`;
             this.logger.info('Creating sandbox instance', { instanceId, templateName, projectName });
             
-            let results: {previewURL: string, tunnelURL: string, processId: string, allocatedPort: number} | undefined;
             await this.ensureTemplateExists(templateName);
 
             const [donttouchFiles, redactedFiles] = await Promise.all([
                 this.fetchDontTouchFiles(templateName),
                 this.fetchRedactedFiles(templateName)
             ]);
-            
+
             const moveTemplateResult = await sandbox.exec(`mv ${templateName} ${instanceId}`);
             if (moveTemplateResult.exitCode !== 0) {
                 throw new Error(`Failed to move template: ${moveTemplateResult.stderr}`);
             }
-            
+
             const setupPromise = () => this.setupInstance(instanceId, projectName, localEnvVars);
             const setupResult = await setupPromise();
             if (!setupResult) {
@@ -1028,7 +1027,7 @@ export class SandboxSdkClient extends BaseSandboxService {
                     error: 'Failed to setup instance'
                 };
             }
-            results = setupResult;
+            const results: {previewURL: string, tunnelURL: string, processId: string, allocatedPort: number} = setupResult;
             // Store instance metadata
             const metadata = {
                 templateName: templateName,
@@ -1533,7 +1532,7 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     async clearInstanceErrors(instanceId: string): Promise<ClearErrorsResponse> {
         try {
-            let clearedCount = 0;
+            const clearedCount = 0;
 
             // Try enhanced error system first - clear ALL errors
             try {
@@ -1836,7 +1835,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             
             // Step 2: Parse wrangler config from KV
             this.logger.info('Reading wrangler configuration from KV');
-            let wranglerConfigContent = await env.VibecoderStore.get(this.getWranglerKVKey(instanceId));
+            const wranglerConfigContent = await env.VibecoderStore.get(this.getWranglerKVKey(instanceId));
             
             if (!wranglerConfigContent) {
                 // This should never happen unless KV itself has some issues
@@ -2071,6 +2070,7 @@ export class SandboxSdkClient extends BaseSandboxService {
         // Remove control characters, limit length, and escape special characters
         const sanitizedMessage = commitMessage
             .substring(0, 500) // Limit message length
+            // eslint-disable-next-line no-control-regex -- intentional: remove ASCII control chars from commit message
             .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
             .replace(/[`$\\]/g, '\\$&') // Escape backticks, dollar signs, and backslashes
             .replace(/"/g, '\\"') // Escape double quotes

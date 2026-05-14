@@ -26,6 +26,11 @@ export default tseslint.config(
       'react-hooks/exhaustive-deps': 'error',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
+      // Allow tagged template literals as statements — this codebase uses the
+      // Cloudflare Workers SQL DO API pattern `this.sql`SELECT...`` as a
+      // statement (the return value is the result rows; discarding is correct
+      // for INSERT / UPDATE / CREATE TABLE / etc).
+      '@typescript-eslint/no-unused-expressions': ['error', { allowTaggedTemplates: true }],
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },

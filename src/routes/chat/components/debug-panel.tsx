@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, Component } from 'react';
+import { useState, useRef, useMemo, useCallback, Component } from 'react';
 import { Bug, X, Download, Mail, Maximize2, Minimize2, Clock, BookmarkPlus, Bookmark, Activity, BarChart3 } from 'lucide-react';
 import { Button } from '../../../components/primitives/button';
 import { captureDebugScreenshot } from '../../../utils/screenshot';
@@ -280,7 +280,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
     }
   };
   
-  const processTimelineData = (messages: DebugMessage[]) => {
+  const processTimelineData = useCallback((messages: DebugMessage[]) => {
     try {
       if (!messages || messages.length === 0) return { events: [], lanes: [] };
       
@@ -309,8 +309,8 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
       console.error('Error processing timeline data:', error);
       return { events: [], lanes: [] };
     }
-  };
-  
+  }, [bookmarkedMessages]);
+
   // Advanced performance analytics - only compute when panel is open
   const analyticsData = useMemo(() => {
     try {
@@ -358,19 +358,19 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
       console.error('Error calculating analytics data:', error);
       return null;
     }
-  }, [messages, isOpen, bookmarkedMessages]);
-  
+  }, [messages, isOpen]);
+
   // Timeline data processing - optimized for performance
   const timelineData = useMemo(() => {
     try {
       if (!isOpen || viewMode !== 'timeline') return null; // Only compute when timeline is active
-      
+
       return processTimelineData(messages);
     } catch (error) {
       console.error('Error processing timeline data:', error);
       return null;
     }
-  }, [messages, isOpen, viewMode, bookmarkedMessages]);
+  }, [messages, isOpen, viewMode, processTimelineData]);
   
   // notifications logic removed
   

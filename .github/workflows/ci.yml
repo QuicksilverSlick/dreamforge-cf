@@ -99,19 +99,8 @@ jobs:
       - name: Install if cache miss
         run: bun install --frozen-lockfile
 
-      - name: Run ESLint (soft — to be hardened in Phase D)
-        id: eslint
-        continue-on-error: true
+      - name: Run ESLint (hard gate — clean as of PR 13)
         run: ./node_modules/.bin/eslint .
-
-      - name: Annotate soft lint result
-        if: always()
-        run: |
-          if [ "${{ steps.eslint.outcome }}" = "failure" ]; then
-            echo "::warning::ESLint reported errors. This is non-blocking until Phase D, but please review the previous step's output and avoid adding new violations."
-          else
-            echo "ESLint clean ✓"
-          fi
 
   build:
     name: Build
