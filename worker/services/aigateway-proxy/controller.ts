@@ -19,15 +19,20 @@ export async function proxyToAiGateway(request: Request, env: Env, _ctx: Executi
             headers: { 'Content-Type': 'application/json' } 
         });
     }
-    // Handle CORS preflight requests
+    // Handle CORS preflight. By the time we reach this handler the caller
+    // is index.ts and the Origin has already been validated as a preview
+    // subdomain (see `isPreviewOrigin`). Echo the request Origin instead of
+    // a wildcard so credentialed iframes work and so caches behave per-origin.
     if (request.method === 'OPTIONS') {
+        const requestOrigin = request.headers.get('Origin') ?? '';
         return new Response(null, {
             status: 204,
             headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                'Access-Control-Allow-Origin': requestOrigin,
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type, Authorization',
                 'Access-Control-Max-Age': '86400',
+                'Vary': 'Origin',
             },
         });
     }
