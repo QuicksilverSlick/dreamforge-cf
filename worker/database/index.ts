@@ -14,3 +14,7 @@ export { AppService } from './services/AppService';
 export { SecretsService } from './services/SecretsService';
 export { ModelConfigService } from './services/ModelConfigService';
 export { ModelTestService } from './services/ModelTestService';
+
+// BYOP (Bring Your Own Project) services
+export { GitHubTokenService } from './services/GitHubTokenService';
+export { BlueprintCacheService } from './services/BlueprintCacheService';
