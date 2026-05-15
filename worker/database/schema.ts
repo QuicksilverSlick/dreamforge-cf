@@ -321,6 +321,89 @@ export const appViews = sqliteTable('app_views', {
 }));
 
 // ========================================
+// BYOP — BRING YOUR OWN PROJECT
+// ========================================
+
+/**
+ * GitHub Tokens table - Store GitHub OAuth access tokens for repository access
+ * Used for BYOP (Bring Your Own Project) feature to clone and analyze user repositories.
+ *
+ * Tokens are encrypted with XChaCha20-Poly1305 (via `@noble/ciphers`) keyed off
+ * SECRETS_ENCRYPTION_KEY. See `worker/database/services/GitHubTokenService.ts`.
+ */
+export const githubTokens = sqliteTable('github_tokens', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+    // Encrypted Token Data
+    encryptedAccessToken: text('encrypted_access_token').notNull(),
+    tokenType: text('token_type').notNull().default('bearer'),
+
+    // Scope Management
+    scopes: text('scopes', { mode: 'json' }).notNull().$type<string[]>(),
+
+    // Token Metadata
+    expiresAt: integer('expires_at', { mode: 'timestamp' }), // GitHub tokens typically don't expire but field reserved
+
+    // Usage Tracking
+    lastUsed: integer('last_used', { mode: 'timestamp' }),
+
+    // Status
+    isActive: integer('is_active', { mode: 'boolean' }).default(true),
+    isRevoked: integer('is_revoked', { mode: 'boolean' }).default(false),
+    revokedAt: integer('revoked_at', { mode: 'timestamp' }),
+
+    // Metadata
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    userIdx: index('github_tokens_user_idx').on(table.userId),
+    isActiveIdx: index('github_tokens_is_active_idx').on(table.isActive),
+    lastUsedIdx: index('github_tokens_last_used_idx').on(table.lastUsed),
+}));
+
+/**
+ * Blueprint Cache table - Cache completed BYOP blueprints for faster retrieval.
+ *
+ * The `blueprint` column stores a JSON-serialized analysis result produced by
+ * the BYOP analysis pipeline (PR 20d's CodebaseAnalyzer DO). The
+ * `fileContentsR2Key` column points at an R2 object holding the imported repo
+ * file contents — necessary because a typical project exceeds the 128 KB
+ * Durable Object value-size cap.
+ */
+export const blueprintCache = sqliteTable('blueprint_cache', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+    // Repository Information
+    repositoryUrl: text('repository_url').notNull(),
+    repositoryName: text('repository_name').notNull(),
+    branch: text('branch').notNull(),
+
+    // Blueprint Data
+    blueprint: text('blueprint', { mode: 'json' }).notNull(),
+    completenessPercentage: integer('completeness_percentage').notNull(),
+
+    // BYOP File Storage
+    fileContentsR2Key: text('file_contents_r2_key'), // R2 key for imported repository files
+
+    // Metadata
+    fileCount: integer('file_count'),
+    totalLinesOfCode: integer('total_lines_of_code'),
+    framework: text('framework'),
+
+    // Cache Management
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    accessCount: integer('access_count').default(0),
+    lastAccessedAt: integer('last_accessed_at', { mode: 'timestamp' }),
+}, (table) => ({
+    userIdx: index('blueprint_cache_user_idx').on(table.userId),
+    repositoryIdx: index('blueprint_cache_repository_idx').on(table.repositoryUrl, table.branch),
+    expiresAtIdx: index('blueprint_cache_expires_at_idx').on(table.expiresAt),
+}));
+
+// ========================================
 // OAUTH AND EXTERNAL INTEGRATIONS
 // ========================================
 
@@ -615,3 +698,10 @@ export type NewUserModelProvider = typeof userModelProviders.$inferInsert;
 
 export type Star = typeof stars.$inferSelect;
 export type NewStar = typeof stars.$inferInsert;
+
+// BYOP types
+export type GitHubToken = typeof githubTokens.$inferSelect;
+export type NewGitHubToken = typeof githubTokens.$inferInsert;
+
+export type BlueprintCache = typeof blueprintCache.$inferSelect;
+export type NewBlueprintCache = typeof blueprintCache.$inferInsert;
