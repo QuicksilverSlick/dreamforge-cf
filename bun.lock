@@ -6,7 +6,7 @@
       "name": "vibesdk",
       "dependencies": {
         "@cloudflare/containers": "^0.0.28",
-        "@cloudflare/sandbox": "0.1.3",
+        "@cloudflare/sandbox": "0.5.6",
         "@noble/ciphers": "^1.3.0",
         "@octokit/rest": "^22.0.1",
         "@radix-ui/react-accordion": "^1.2.12",
@@ -222,7 +222,7 @@
 
     "@cloudflare/kv-asset-handler": ["@cloudflare/kv-asset-handler@0.5.0", "", {}, "sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg=="],
 
-    "@cloudflare/sandbox": ["@cloudflare/sandbox@0.1.3", "", { "dependencies": { "@cloudflare/containers": "^0.0.25" } }, "sha512-j6LB3Ynz2pBlxlwdhaoip72GZmE8TZYRb9yIlAw+pKd4SoKK26OojyXRrTzeBlUqWGuEM8CWp8XMY82MRShRBA=="],
+    "@cloudflare/sandbox": ["@cloudflare/sandbox@0.5.6", "", { "dependencies": { "@cloudflare/containers": "^0.0.30" }, "peerDependencies": { "@openai/agents": "^0.3.3" }, "optionalPeers": ["@openai/agents"] }, "sha512-N4mdUY5lVWQHQcAZnTecJne95uSyf7KVPbJGMr3G6jS7oyphriw6Hxa5I/HlDUdMWjaTBgeOuDEb4m3wo2IyOg=="],
 
     "@cloudflare/unenv-preset": ["@cloudflare/unenv-preset@2.16.1", "", { "peerDependencies": { "unenv": "2.0.0-rc.24", "workerd": ">1.20260305.0 <2.0.0-0" }, "optionalPeers": ["workerd"] }, "sha512-ECxObrMfyTl5bhQf/lZCXwo5G6xX9IAUo+nDMKK4SZ8m4Jvvxp52vilxyySSWh2YTZz8+HQ07qGH/2rEom1vDw=="],
 

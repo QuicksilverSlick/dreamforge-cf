@@ -1,4 +1,4 @@
-import { getSandbox, Sandbox, ExecuteResponse, parseSSEStream, LogEvent } from '@cloudflare/sandbox';
+import { getSandbox, Sandbox, ExecResult, parseSSEStream, LogEvent } from '@cloudflare/sandbox';
 
 import {
     TemplateDetailsResponse,
@@ -67,7 +67,7 @@ interface InstanceMetadata {
     redacted_files: string[];
 }
 
-type SandboxType = DurableObjectStub<Sandbox<Env>>;
+type SandboxType = Sandbox;
 
 /**
  * Streaming event for enhanced command execution
@@ -168,7 +168,7 @@ export class SandboxSdkClient extends BaseSandboxService {
         return `${instanceId}-metadata.json`;
     }
 
-    private async executeCommand(instanceId: string, command: string, timeout?: number): Promise<ExecuteResponse> {
+    private async executeCommand(instanceId: string, command: string, timeout?: number): Promise<ExecResult> {
         return await this.getSandbox().exec(`cd ${instanceId} && ${command}`, { timeout });
         // return await this.getSandbox().exec(command, { cwd: instanceId, timeout });
     }
