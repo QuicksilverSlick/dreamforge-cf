@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 .tmp
+*.tsbuildinfo
 *.local
 
 # Editor directories and files
@@ -52,9 +53,15 @@ debugging.ipynb
 #*.lock
 
 debug-tools/*.json
+debug-tools/extracted
+debug-tools/presentation-tester
 # Sentry Config File
 .env.sentry-build-plugin
 data-dump
+
+# Upstream-sync additions (Phase E PR 2a)
+.test-data
+cli
 
 # Development artifacts (root directory only)
 /*.PNG
