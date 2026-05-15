@@ -21,6 +21,13 @@
 	"observability": {
 		"enabled": true,
         "head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": true
+		}
 	},
     "unsafe": {
         "bindings": [
@@ -203,6 +210,11 @@
         "DISPATCH_NAMESPACE": "vibesdk-default-namespace",
         "ENABLE_READ_REPLICAS": "true",
         "CLOUDFLARE_AI_GATEWAY": "vibesdk-gateway",
+        "PLATFORM_CAPABILITIES": {
+            "app": true,
+            "presentation": true,
+            "general": true
+        },
         "CUSTOM_DOMAIN": "app.getdreamforge.com",
         "CUSTOM_PREVIEW_DOMAIN": "app.getdreamforge.com",
         "MAX_SANDBOX_INSTANCES": "10",
