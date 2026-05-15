@@ -6,19 +6,19 @@
 import { eq, and, lt, gt } from 'drizzle-orm';
 import { blueprintCache, type BlueprintCache, type NewBlueprintCache } from '../schema';
 import { BaseService } from './BaseService';
+import type { GeneratedBlueprint } from '../../services/blueprint/BlueprintGenerationService';
 
 /**
  * Storage-boundary type for cached blueprint payloads.
  *
  * The full domain type with codebase-analysis metadata and Cloudflare-migration
  * insights (`GeneratedBlueprint`) lives in `worker/services/blueprint/
- * BlueprintGenerationService.ts` — which ships in PR 20d. This service only
- * persists/retrieves the JSON representation, so it accepts the minimal
- * structurally-typed shape declared here. When 20d lands, the analyzer-side
- * `GeneratedBlueprint` is structurally a superset of this interface and
- * assignment is type-safe in both directions.
+ * BlueprintGenerationService.ts` (shipped in PR 20d). This service persists
+ * `GeneratedBlueprint` directly — accepted via the union below so the original
+ * pre-20d structural-subset shape continues to typecheck for any non-BYOP
+ * callers that still construct a plain payload object.
  */
-interface BlueprintPayload {
+type BlueprintPayload = GeneratedBlueprint | {
     projectName: string;
     description: string;
     currentState: {
@@ -33,9 +33,8 @@ interface BlueprintPayload {
     nextSteps: string[];
     technicalDebt: string[];
     completionPhases: unknown[];
-    // Forward-compat for `cloudflareMigration` and any future fields PR 20d adds.
     [key: string]: unknown;
-}
+};
 
 export class BlueprintCacheService extends BaseService {
 

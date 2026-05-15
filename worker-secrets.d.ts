@@ -43,6 +43,8 @@ declare namespace Cloudflare {
         CLOUDFLARE_ACCOUNT_ID: string;
         CLOUDFLARE_AI_GATEWAY_URL: string;
         CLOUDFLARE_AI_GATEWAY_TOKEN: string;
+        CF_ACCOUNT_ID: string;
+        CF_AI_GATEWAY_ID: string;
 
         // Sandbox / runner service
         SANDBOX_SERVICE_API_KEY: string;

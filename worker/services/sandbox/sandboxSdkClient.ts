@@ -2388,4 +2388,304 @@ export class SandboxSdkClient extends BaseSandboxService {
             };
         }
     }
+
+    // ==========================================
+    // REPOSITORY CLONING (BYOP FEATURE)
+    // ==========================================
+
+    /**
+     * Clone a GitHub repository into the sandbox container
+     */
+    async cloneGitHubRepository(options: {
+        repositoryUrl: string;
+        accessToken: string;
+        targetPath?: string;
+        branch?: string;
+    }): Promise<{
+        success: boolean;
+        clonePath: string;
+        error?: string;
+        repositoryName?: string;
+        filesCount?: number;
+    }> {
+        try {
+            const {
+                repositoryUrl,
+                accessToken,
+                targetPath = '/app/imported-repo',
+                branch
+            } = options;
+
+            const sandbox = this.getSandbox();
+
+            const repoName = this.extractRepositoryName(repositoryUrl);
+            if (!repoName) {
+                return {
+                    success: false,
+                    clonePath: targetPath,
+                    error: 'Invalid repository URL'
+                };
+            }
+
+            // Validate repository URL to prevent injection attacks
+            if (!this.validateRepositoryUrl(repositoryUrl)) {
+                return {
+                    success: false,
+                    clonePath: targetPath,
+                    error: 'Invalid repository URL format'
+                };
+            }
+
+            // Create credential helper script to avoid token exposure in command line
+            const credHelperPath = '/tmp/git-credential-helper.sh';
+
+            this.logger.info('Starting git clone process', {
+                repository: repoName,
+                targetPath,
+                branch: branch || 'default'
+            });
+
+            // Write credential helper script using printf to avoid shell expansion issues
+            this.logger.info('Creating credential helper script');
+
+            // Escape the access token for safe embedding in the printf command
+            const escapedToken = accessToken.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+
+            const writeResult = await sandbox.exec(
+                `printf '#!/bin/sh\\n' > ${credHelperPath} && ` +
+                `printf '# Git credential helper for GitHub authentication\\n' >> ${credHelperPath} && ` +
+                `printf 'echo "[CRED_HELPER] Called with: $1" >&2\\n' >> ${credHelperPath} && ` +
+                `printf 'case "$1" in\\n' >> ${credHelperPath} && ` +
+                `printf '  *Username*|*username*)\\n' >> ${credHelperPath} && ` +
+                `printf '    echo "[CRED_HELPER] Username: token" >&2\\n' >> ${credHelperPath} && ` +
+                `printf '    echo "token"\\n' >> ${credHelperPath} && ` +
+                `printf '    ;;\\n' >> ${credHelperPath} && ` +
+                `printf '  *Password*|*password*)\\n' >> ${credHelperPath} && ` +
+                `printf '    echo "[CRED_HELPER] Password: (${accessToken.length} chars)" >&2\\n' >> ${credHelperPath} && ` +
+                `printf '    echo "${escapedToken}"\\n' >> ${credHelperPath} && ` +
+                `printf '    ;;\\n' >> ${credHelperPath} && ` +
+                `printf '  *)\\n' >> ${credHelperPath} && ` +
+                `printf '    echo "[CRED_HELPER] ERROR: Unknown prompt: $1" >&2\\n' >> ${credHelperPath} && ` +
+                `printf '    exit 1\\n' >> ${credHelperPath} && ` +
+                `printf '    ;;\\n' >> ${credHelperPath} && ` +
+                `printf 'esac\\n' >> ${credHelperPath}`,
+                { timeout: 10000 }
+            );
+
+            if (writeResult.exitCode !== 0) {
+                this.logger.error('Failed to create credential helper', { stderr: writeResult.stderr });
+                return {
+                    success: false,
+                    clonePath: targetPath,
+                    error: 'Failed to setup authentication'
+                };
+            }
+
+            // Make script executable
+            this.logger.info('Making credential helper executable');
+            await sandbox.exec(`chmod +x ${credHelperPath}`, { timeout: 5000 });
+
+            // Test network connectivity
+            this.logger.info('Testing GitHub connectivity');
+            const pingResult = await sandbox.exec('curl -I https://github.com', { timeout: 10000 });
+            this.logger.info('GitHub connectivity test result', {
+                exitCode: pingResult.exitCode,
+                stdout: pingResult.stdout.substring(0, 200)
+            });
+
+            // Normalize repository URL (no token embedded)
+            const cleanUrl = this.normalizeRepositoryUrl(repositoryUrl);
+
+            // Build clone command with credential helper
+            let cloneCommand = `GIT_ASKPASS=${credHelperPath} git clone --depth=1 --single-branch`;
+            if (branch) {
+                cloneCommand += ` --branch ${branch}`;
+            }
+            cloneCommand += ` "${cleanUrl}" "${targetPath}"`;
+
+            this.logger.info('Executing git clone command', {
+                repository: repoName,
+                targetPath,
+                branch: branch || 'default'
+            });
+
+            const cloneResult = await sandbox.exec(cloneCommand, { timeout: 120000 });
+
+            this.logger.info('Git clone command completed', {
+                exitCode: cloneResult.exitCode,
+                hasStdout: !!cloneResult.stdout,
+                hasStderr: !!cloneResult.stderr
+            });
+
+            // Clean up credential helper immediately
+            await sandbox.exec(`rm -f ${credHelperPath}`, { timeout: 5000 });
+
+            if (cloneResult.exitCode !== 0) {
+                // Sanitize error message to remove any potential token leaks
+                const errorMessage = this.sanitizeGitError(cloneResult.stderr || 'Clone failed');
+                this.logger.error('Repository clone failed', {
+                    repository: repoName,
+                    exitCode: cloneResult.exitCode,
+                    stderr: errorMessage
+                });
+
+                return {
+                    success: false,
+                    clonePath: targetPath,
+                    error: errorMessage
+                };
+            }
+
+            const countResult = await sandbox.exec(
+                `find "${targetPath}" -type f ! -path "*/.git/*" | wc -l`,
+                { timeout: 30000 }
+            );
+            const filesCount = countResult.exitCode === 0
+                ? parseInt(countResult.stdout.trim(), 10) || 0
+                : 0;
+
+            this.logger.info('Repository cloned successfully', {
+                repository: repoName,
+                clonePath: targetPath,
+                filesCount
+            });
+
+            return {
+                success: true,
+                clonePath: targetPath,
+                filesCount,
+                repositoryName: repoName
+            };
+
+        } catch (error) {
+            this.logger.error('Error cloning repository', error);
+            return {
+                success: false,
+                clonePath: options.targetPath || '/app/imported-repo',
+                error: error instanceof Error ? error.message : 'Unknown error'
+            };
+        }
+    }
+
+    /**
+     * Extract repository name from GitHub URL
+     */
+    private extractRepositoryName(url: string): string | null {
+        try {
+            const httpsMatch = url.match(/github\.com[/:]([\w-]+\/[\w-]+?)(\.git)?$/);
+            if (httpsMatch) {
+                return httpsMatch[1];
+            }
+            return null;
+        } catch (error) {
+            this.logger.error('Failed to extract repository name', error);
+            return null;
+        }
+    }
+
+    /**
+     * Validate repository URL to prevent injection attacks
+     */
+    private validateRepositoryUrl(url: string): boolean {
+        try {
+            // Allow github.com URLs only
+            const pattern = /^(https:\/\/github\.com\/|git@github\.com:)[\w-]+\/[\w.-]+(\.git)?$/;
+            return pattern.test(url);
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Normalize repository URL (remove credentials, standardize format)
+     */
+    private normalizeRepositoryUrl(url: string): string {
+        // Convert SSH to HTTPS
+        if (url.startsWith('git@github.com:')) {
+            url = url.replace('git@github.com:', 'https://github.com/');
+        }
+
+        // Ensure HTTPS protocol
+        if (!url.startsWith('https://')) {
+            url = 'https://github.com/' + url;
+        }
+
+        // Remove any embedded credentials
+        url = url.replace(/\/\/[^@]+@/, '//');
+
+        // Ensure .git suffix
+        if (!url.endsWith('.git')) {
+            url = url + '.git';
+        }
+
+        return url;
+    }
+
+    /**
+     * Sanitize git error messages to remove potential token leaks
+     */
+    private sanitizeGitError(errorMessage: string): string {
+        // Remove any URLs that might contain tokens
+        let sanitized = errorMessage.replace(/https:\/\/[^@]*@github\.com/g, 'https://github.com');
+
+        // Remove any base64-looking strings that might be tokens
+        sanitized = sanitized.replace(/[A-Za-z0-9+/=]{30,}/g, '[REDACTED]');
+
+        // Remove anything that looks like an OAuth token
+        sanitized = sanitized.replace(/gh[ps]_[A-Za-z0-9]{30,}/g, '[REDACTED]');
+
+        return sanitized;
+    }
+
+    /**
+     * Read a file as a string
+     */
+    async readFileAsString(filePath: string): Promise<string | null> {
+        try {
+            const result = await this.getSandbox().readFile(filePath);
+            return result.content ?? null;
+        } catch (error) {
+            this.logger.warn('Failed to read file as string', { filePath, error });
+            return null;
+        }
+    }
+
+    /**
+     * List files in a directory with optional pattern matching
+     */
+    async listRepositoryFiles(options: {
+        repositoryPath: string;
+        patterns?: string[];
+        maxFiles?: number;
+    }): Promise<string[]> {
+        const { repositoryPath, patterns = ['*.ts', '*.tsx', '*.js', '*.jsx', '*.json', '*.md'], maxFiles = 1000 } = options;
+
+        try {
+            const sandbox = this.getSandbox();
+
+            // Build find command to list files matching patterns
+            const patternArgs = patterns.map(p => `-name "${p}"`).join(' -o ');
+            const findCommand = `find "${repositoryPath}" -type f \\( ${patternArgs} \\) ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*/dist/*" ! -path "*/build/*" | head -n ${maxFiles}`;
+
+            const result = await sandbox.exec(findCommand, { timeout: 30000 });
+
+            if (result.exitCode !== 0) {
+                this.logger.warn('Failed to list repository files', {
+                    repositoryPath,
+                    stderr: result.stderr
+                });
+                return [];
+            }
+
+            const files = result.stdout
+                .trim()
+                .split('\n')
+                .filter(f => f.length > 0);
+
+            return files;
+        } catch (error) {
+            this.logger.error('Error listing repository files', { error });
+            return [];
+        }
+    }
 }

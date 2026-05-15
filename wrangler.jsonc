@@ -89,6 +89,13 @@
             {
                 "class_name": "DORateLimitStore",
                 "name": "DORateLimitStore"
+            },
+            {
+                "class_name": "CodebaseAnalyzer",
+                "name": "CodebaseAnalyzerObject",
+                "limits": {
+                    "cpu_ms": 300000
+                }
             }
 		]
 	},
@@ -171,6 +178,23 @@
                 "UserSecretsStore"
             ],
             "tag": "v5"
+        },
+        // v6 resurrects CodebaseAnalyzer. The class was deleted in v4 because
+        // the BYOP (Bring Your Own Project) feature it backed had been lost
+        // during a prior refactor and no source code referenced it. The
+        // feature has now been fully recovered (PRs 20a–20d), so the Durable
+        // Object class is needed again.
+        //
+        // Note: pre-v4 CodebaseAnalyzer instances were permanently destroyed
+        // by the v4 `deleted_classes` migration (CF docs: asynchronous and
+        // irreversible). This v6 migration creates a fresh class with no
+        // historical state — any in-flight analyses from before v4 are
+        // unrecoverable. New BYOP imports will create new instances cleanly.
+        {
+            "new_sqlite_classes": [
+                "CodebaseAnalyzer"
+            ],
+            "tag": "v6"
         }
     ],
 	"vars": {
