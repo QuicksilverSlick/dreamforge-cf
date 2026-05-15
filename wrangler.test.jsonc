@@ -1,0 +1,113 @@
+/**
+ * Wrangler config for the vitest workers pool.
+ *
+ * Mirrors the surface of `wrangler.jsonc` that production worker code reads
+ * at startup (bindings, DO class names, migrations) but strips anything that
+ * requires the Cloudflare API to materialize: remote AI / dispatch / R2 / KV
+ * references run as local stubs, custom domain routes are omitted, and the
+ * container image is not built. Migration tags v1–v6 are preserved verbatim
+ * so the DO classes resolve the way the runtime expects when test code
+ * touches them.
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "dreamforge-cf",
+	"main": "worker/index.ts",
+	"compatibility_date": "2025-08-10",
+	"compatibility_flags": ["nodejs_compat"],
+	"version_metadata": {
+		"binding": "CF_VERSION_METADATA"
+	},
+	"ai": {
+		"binding": "AI"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "vibesdk-db-test",
+			"database_id": "00000000-0000-0000-0000-000000000000",
+			"migrations_dir": "migrations"
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"class_name": "CodeGeneratorAgent",
+				"name": "CodeGenObject"
+			},
+			{
+				"class_name": "DORateLimitStore",
+				"name": "DORateLimitStore"
+			},
+			{
+				"class_name": "CodebaseAnalyzer",
+				"name": "CodebaseAnalyzerObject"
+			}
+		]
+	},
+	"r2_buckets": [
+		{
+			"binding": "TEMPLATES_BUCKET",
+			"bucket_name": "vibesdk-templates-test"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "VibecoderStore",
+			"id": "test-kv-namespace"
+		}
+	],
+	// Migration tags must match wrangler.jsonc so DO class identity lines up
+	// with what the worker code declares. The UserAppSandboxService container
+	// binding is omitted from the test config (containers can't run in the
+	// miniflare workers pool), so its v1 declaration is dropped to keep
+	// migrations consistent with the test-only DO surface.
+	"migrations": [
+		{
+			"new_sqlite_classes": ["CodeGeneratorAgent"],
+			"tag": "v1"
+		},
+		{
+			"new_sqlite_classes": ["DORateLimitStore"],
+			"tag": "v2"
+		},
+		{
+			"new_sqlite_classes": ["UserSecretsStore", "CodebaseAnalyzer"],
+			"tag": "v3"
+		},
+		{
+			"deleted_classes": ["CodebaseAnalyzer"],
+			"tag": "v4"
+		},
+		{
+			"deleted_classes": ["UserSecretsStore"],
+			"tag": "v5"
+		},
+		{
+			"new_sqlite_classes": ["CodebaseAnalyzer"],
+			"tag": "v6"
+		}
+	],
+	"vars": {
+		"TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
+		"ALLOWED_EMAIL": "",
+		"DISPATCH_NAMESPACE": "vibesdk-default-namespace",
+		"ENABLE_READ_REPLICAS": "false",
+		"CLOUDFLARE_AI_GATEWAY": "vibesdk-gateway",
+		"PLATFORM_CAPABILITIES": {
+			"app": true,
+			"presentation": true,
+			"general": true
+		},
+		"CUSTOM_DOMAIN": "app.getdreamforge.com",
+		"CUSTOM_PREVIEW_DOMAIN": "app.getdreamforge.com",
+		"MAX_SANDBOX_INSTANCES": "10",
+		"SANDBOX_INSTANCE_TYPE": "standard-3",
+		"USE_CLOUDFLARE_IMAGES": false,
+		"JWT_SECRET": "test-jwt-secret-do-not-use-in-production",
+		"WEBHOOK_SECRET": "test-webhook-secret",
+		"SECRETS_ENCRYPTION_KEY": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	},
+	"workers_dev": false,
+	"preview_urls": false
+}
