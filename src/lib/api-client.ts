@@ -55,7 +55,8 @@ import type{
     CodeGenArgs,
     AgentPreviewResponse,
     PlatformStatusData,
-    RateLimitError
+    RateLimitError,
+    CapabilitiesData
 } from '@/api-types';
 import {
 
@@ -1112,6 +1113,19 @@ class ApiClient {
 				method: 'POST'
 			}
 		);
+	}
+
+	// ===============================
+	// Platform Capabilities API Methods
+	// ===============================
+
+	/**
+	 * Get platform capabilities (project types, features, views).
+	 * Surfaces the feature registry shipped in worker/agents/core/features
+	 * for use by the frontend FeatureContextProvider.
+	 */
+	async getCapabilities(noToast: boolean = true): Promise<ApiResponse<CapabilitiesData>> {
+		return this.request<CapabilitiesData>('/api/capabilities', undefined, noToast);
 	}
 
 	// ===============================

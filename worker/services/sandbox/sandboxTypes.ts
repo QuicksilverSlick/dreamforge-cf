@@ -36,6 +36,7 @@ export const TemplateDetailsSchema = z.object({
     frameworks: z.array(z.string()).optional(),
     dontTouchFiles: z.array(z.string()),
     redactedFiles: z.array(z.string()),
+    slideDirectory: z.string().optional(),
 })
 export type TemplateDetails = z.infer<typeof TemplateDetailsSchema>
 
