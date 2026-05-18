@@ -18,7 +18,7 @@ These documents are the **architectural reference** that survived. They predate 
 | **20d** | `CodebaseAnalyzer` Durable Object + v6 `new_sqlite_classes` migration + binding + controller + routes + integration |
 | **20e** | `/import` React route registration + WebSocket handler wiring + tests |
 
-See `BYOP_RECOVERY_AUDIT.md` at the repo root for the file-level diff catalog and per-PR file lists.
+See `docs/archives/2026-05-phase-e-recovery/BYOP_RECOVERY_AUDIT.md` for the file-level diff catalog and per-PR file lists.
 
 ## Document index
 
