@@ -10,10 +10,19 @@
  * **never appear there**, because secrets are not part of the wrangler
  * config file.
  *
- * This file declares the additional `Cloudflare.Env` fields that the
- * worker runtime expects to exist via secrets. TypeScript merges these
- * declarations with the generated ones so `env.ANTHROPIC_API_KEY` etc.
- * are typed correctly without `(env as any)` casts.
+ * This file declares the additional fields that the worker runtime expects
+ * to exist via secrets. TypeScript merges these declarations with the
+ * generated ones so `env.ANTHROPIC_API_KEY` etc. are typed correctly
+ * without `(env as any)` casts.
+ *
+ * We declare the same shape on both `Cloudflare.Env` and the global `Env`
+ * interface. wrangler types ≥4.91 emit
+ * `interface Env extends __BaseEnv_Env {}` rather than
+ * `interface Env extends Cloudflare.Env {}`, so augmentations that only
+ * extend `Cloudflare.Env` no longer reach the global `Env` symbol that
+ * `env` parameters and `cloudflare:workers`' exported `env` are typed
+ * against. Declaration-merging on both keeps the typing complete across
+ * the wrangler version range.
  *
  * Maintaining this file:
  *  - When you add a new secret via `wrangler secret put FOO`, add a
@@ -92,8 +101,65 @@ declare namespace Cloudflare {
     }
 }
 
-// NOTE: do NOT add `export {}` here. `declare namespace Cloudflare`
-// merges with the wrangler-generated declarations only when this file
-// is treated as a global script (no imports/exports). Adding `export`
-// makes it a module and breaks the merge — TypeScript will then
-// complain that `env.ANTHROPIC_API_KEY` etc. don't exist.
+// Mirror the same augmentation onto the global `Env` interface. The
+// wrangler-generated `worker-configuration.d.ts` declares
+// `interface Env extends __BaseEnv_Env {}` at the top level (since
+// wrangler 4.91), so secrets need to be merged here too — augmenting only
+// `Cloudflare.Env` no longer flows through to the `env` parameter types.
+interface Env {
+    ANTHROPIC_API_KEY: string;
+    OPENAI_API_KEY: string;
+    GOOGLE_AI_STUDIO_API_KEY: string;
+    OPENROUTER_API_KEY: string;
+    CEREBRAS_API_KEY: string;
+    GROQ_API_KEY: string;
+    SERPAPI_KEY: string;
+
+    CLOUDFLARE_API_TOKEN: string;
+    CLOUDFLARE_ACCOUNT_ID: string;
+    CLOUDFLARE_AI_GATEWAY_URL: string;
+    CLOUDFLARE_AI_GATEWAY_TOKEN: string;
+    CF_ACCOUNT_ID: string;
+    CF_AI_GATEWAY_ID: string;
+
+    SANDBOX_SERVICE_API_KEY: string;
+    SANDBOX_SERVICE_TYPE: string;
+    SANDBOX_SERVICE_URL: string;
+
+    GOOGLE_CLIENT_ID: string;
+    GOOGLE_CLIENT_SECRET: string;
+    GITHUB_CLIENT_ID: string;
+    GITHUB_CLIENT_SECRET: string;
+    GITHUB_EXPORTER_CLIENT_ID: string;
+    GITHUB_EXPORTER_CLIENT_SECRET: string;
+
+    ENABLE_CLOUDFLARE_LIMITS?: string;
+    CLOUDFLARE_OAUTH_CLIENT_ID?: string;
+    CLOUDFLARE_OAUTH_CLIENT_SECRET?: string;
+    CLOUDFLARE_OAUTH_AUTH_URL?: string;
+    CLOUDFLARE_OAUTH_TOKEN_URL?: string;
+    CLOUDFLARE_OAUTH_USERINFO_URL?: string;
+    CLOUDFLARE_OAUTH_SCOPES?: string;
+    CF_OAUTH_ENCRYPTION_KEY?: string;
+
+    JWT_SECRET: string;
+    AI_PROXY_JWT_SECRET: string;
+    ENTROPY_KEY: string;
+    SECRETS_ENCRYPTION_KEY: string;
+
+    CF_ACCESS_ID: string;
+    CF_ACCESS_SECRET: string;
+
+    ENVIRONMENT: string;
+    ALLOCATION_STRATEGY: string;
+    USE_TUNNEL_FOR_PREVIEW: boolean;
+
+    SENTRY_DSN: string;
+}
+
+// NOTE: do NOT add `export {}` here. `declare namespace Cloudflare` and
+// the global `interface Env` augmentations merge with the wrangler-
+// generated declarations only when this file is treated as a global
+// script (no imports/exports). Adding `export` makes it a module and
+// breaks the merge — TypeScript will then complain that
+// `env.ANTHROPIC_API_KEY` etc. don't exist.
