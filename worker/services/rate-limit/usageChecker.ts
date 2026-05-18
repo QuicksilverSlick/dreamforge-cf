@@ -80,6 +80,7 @@ export async function checkUsageAndBalance(
 	request?: Request,
 	encryptedToken?: string | null,
 	originUrl?: string,
+	ctx?: ExecutionContext,
 ): Promise<UsageCheckResult> {
 	// If Cloudflare limits feature is disabled, always allow (self-deployed instances)
 	if (!isCloudflareGatewayLimitsEnabled(env)) {
@@ -131,7 +132,7 @@ export async function checkUsageAndBalance(
 	// Get Cloudflare balance if user has a usable access token
 	let cloudflareBalance: number | null = null;
 	if (activeAccessToken) {
-		cloudflareBalance = await getCloudflareBalance(env, userId, activeAccessToken);
+		cloudflareBalance = await getCloudflareBalance(env, userId, activeAccessToken, ctx);
 	}
 
 	// If the user has connected Cloudflare AND the LLM config excludes connected users, bypass limits entirely.
@@ -248,7 +249,7 @@ async function resolveAccessToken(
 /**
  * Get Cloudflare AI Gateway balance for a user
  */
-async function getCloudflareBalance(env: Env, userId: string, token: string): Promise<number | null> {
+async function getCloudflareBalance(env: Env, userId: string, token: string, ctx?: ExecutionContext): Promise<number | null> {
 	try {
 		const accountService = new CloudflareAccountService(env);
 		const selected = await accountService.getSelectedGatewayWithAccount(userId);
@@ -283,8 +284,13 @@ async function getCloudflareBalance(env: Env, userId: string, token: string): Pr
 			return selected.gateway.creditsRemaining ?? null;
 		}
 
-		// Update cached credits (fire and forget)
-		accountService.saveGateway(
+		// Update cached credits without blocking the response. When the
+		// caller supplies an ExecutionContext we wire the work through
+		// ctx.waitUntil so the isolate stays alive long enough for the
+		// D1 write to complete. Callers without a ctx (legacy paths)
+		// keep the prior fire-and-forget semantics — the catch handler
+		// is the same either way.
+		const saveCreditsPromise = accountService.saveGateway(
 			userId,
 			selected.account.id,
 			selected.gateway.gatewayId,
@@ -293,6 +299,9 @@ async function getCloudflareBalance(env: Env, userId: string, token: string): Pr
 			selected.gateway.autoCreated || false,
 			credits
 		).catch(err => logger.error('Failed to update cached credits', err));
+		if (ctx) {
+			ctx.waitUntil(saveCreditsPromise);
+		}
 
 		return credits;
 	} catch (error) {

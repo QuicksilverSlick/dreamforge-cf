@@ -19,7 +19,7 @@ export class LimitsController extends BaseController {
 	static async getUsage(
 		request: Request,
 		env: Env,
-		_ctx: ExecutionContext,
+		ctx: ExecutionContext,
 		context: RouteContext,
 	): Promise<Response> {
 		const user = context.user;
@@ -29,9 +29,11 @@ export class LimitsController extends BaseController {
 
 		try {
 			// Token is read from the HttpOnly cookie inside checkUsageAndBalance.
+			// Forward ctx so the cached-credits D1 write inside the call uses
+			// ctx.waitUntil instead of pure fire-and-forget.
 			const accountService = new CloudflareAccountService(env);
 			const [usageResult, selectedGateway] = await Promise.all([
-				checkUsageAndBalance(env, user.id, request),
+				checkUsageAndBalance(env, user.id, request, undefined, undefined, ctx),
 				accountService.getSelectedGatewayWithAccount(user.id),
 			]);
 			const hasCfConfigured = !!selectedGateway;

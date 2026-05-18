@@ -453,7 +453,7 @@ export class BYOPController extends BaseController {
     static async getBlueprint(
         _request: Request,
         env: Env,
-        _ctx: ExecutionContext,
+        ctx: ExecutionContext,
         routeContext: RouteContext
     ): Promise<Response> {
         try {
@@ -500,21 +500,26 @@ export class BYOPController extends BaseController {
                 0
             );
 
-            // Save to cache (fire and forget - don't block response)
-            cacheService.set({
-                userId: user.id,
-                repositoryUrl,
-                repositoryName,
-                branch: 'main',
-                blueprint,
-                fileContentsR2Key: state.fileContentsR2Key,
-                fileCount: sourceFiles.length,
-                totalLinesOfCode,
-                framework: state.analysisResult.framework,
-                ttlDays: 7
-            }).catch((error) => {
-                logger.error('Failed to cache blueprint (non-blocking)', { error });
-            });
+            // Save to cache without blocking the response. ctx.waitUntil
+            // keeps the isolate alive past the response flush so the D1 write
+            // reliably completes — without it the runtime may tear down
+            // before the cache insert lands.
+            ctx.waitUntil(
+                cacheService.set({
+                    userId: user.id,
+                    repositoryUrl,
+                    repositoryName,
+                    branch: 'main',
+                    blueprint,
+                    fileContentsR2Key: state.fileContentsR2Key,
+                    fileCount: sourceFiles.length,
+                    totalLinesOfCode,
+                    framework: state.analysisResult.framework,
+                    ttlDays: 7
+                }).catch((error) => {
+                    logger.error('Failed to cache blueprint (non-blocking)', { error });
+                })
+            );
 
             return this.createSuccessResponse({
                 blueprint: state.analysisResult.blueprint,
