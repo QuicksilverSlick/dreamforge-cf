@@ -332,13 +332,13 @@ type ArrowProps = {
 
 type Point = { x: number; y: number };
 
-export const CurvedArrow: React.FC<ArrowProps> = ({
+export function CurvedArrow({
 	sourceRef,
 	target,
 	curvature = 0.5,
 	sourceOffset = 6,
 	hideWhenInvalid = true,
-}) => {
+}: ArrowProps) {
 	const [start, setStart] = useState<Point | null>(null);
 	const [end, setEnd] = useState<Point | null>(null);
 

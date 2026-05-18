@@ -39,11 +39,11 @@ const SORT_CONFIGURATIONS: Record<AppSortOption, SortOption> = {
   },
 };
 
-export const AppSortTabs: React.FC<AppSortTabsProps> = ({
+export function AppSortTabs({
   value,
   onValueChange,
   availableSorts = ['recent', 'popular', 'trending'],
-}) => {
+}: AppSortTabsProps) {
   const sortOptions = availableSorts.map((sortKey) => SORT_CONFIGURATIONS[sortKey]);
 
   return (<div className="grid grid-cols-1">

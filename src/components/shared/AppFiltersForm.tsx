@@ -31,14 +31,14 @@ interface AppFiltersFormProps {
 }
 
 
-export const AppFiltersForm: React.FC<AppFiltersFormProps> = ({
+export function AppFiltersForm({
   searchQuery,
   onSearchChange,
   onSearchSubmit,
   searchPlaceholder = 'Search apps...',
   showSearchButton = false,
   className = ''
-}) => {
+}: AppFiltersFormProps) {
 
   return (
     <div className={`max-w-4xl mb-8 ${className}`}>
