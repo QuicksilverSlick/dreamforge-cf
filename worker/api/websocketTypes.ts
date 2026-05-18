@@ -328,7 +328,7 @@ type DeterministicCodeFixCompletedMessage = {
     issues: CodeIssue[];
 };
 
-type ModelConfigsInfoMessage = {
+export type ModelConfigsInfoMessage = {
 	type: 'model_configs_info';
 	message: string;
 	configs: {
@@ -336,6 +336,10 @@ type ModelConfigsInfoMessage = {
 			key: string;
 			name: string;
 			description: string;
+			constraint?: {
+				enabled: boolean;
+				allowedModels: string[];
+			};
 		}>;
 		userConfigs: Record<string, {
 			name?: string;
@@ -354,6 +358,9 @@ type ModelConfigsInfoMessage = {
 		}>;
 	};
 };
+
+export type AgentDisplayConfig = ModelConfigsInfoMessage['configs']['agents'][number];
+export type ModelConfigsInfo = ModelConfigsInfoMessage['configs'];
 
 type TerminalCommandMessage = {
 	type: 'terminal_command';

@@ -111,10 +111,13 @@ export type {
 } from 'worker/api/controllers/agent/types';
 
 // WebSocket Types
-export type { 
-  WebSocketMessage, 
+export type {
+  WebSocketMessage,
   WebSocketMessageData,
-  CodeFixEdits 
+  CodeFixEdits,
+  ModelConfigsInfo,
+  ModelConfigsInfoMessage,
+  AgentDisplayConfig
 } from 'worker/api/websocketTypes';
 
 // Database/Schema Types commonly used in frontend
@@ -271,3 +274,31 @@ export type {
     GitHubExportOptions,
     GitHubExportResult,
 } from 'worker/services/github/types';
+
+// Platform Capabilities (PR 10a)
+export type { CapabilitiesData } from 'worker/api/controllers/capabilities/types';
+
+// Project / behavior taxonomy + export options (worker/agents/core/types)
+export type {
+  ProjectType,
+  BehaviorType,
+  ExportOptions
+} from 'worker/agents/core/types';
+
+// Feature registry types + defaults (worker/agents/core/features)
+export type {
+  ViewMode,
+  FeatureCapabilities,
+  FeatureDefinition,
+  ViewDefinition,
+  PlatformCapabilities,
+  PlatformCapabilitiesConfig
+} from 'worker/agents/core/features';
+
+export {
+  DEFAULT_FEATURE_DEFINITIONS,
+  getBehaviorTypeForProject
+} from 'worker/agents/core/features';
+
+// Sandbox template details (used by features/core/types)
+export type { TemplateDetails } from 'worker/services/sandbox/sandboxTypes';
