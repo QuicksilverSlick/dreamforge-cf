@@ -526,6 +526,68 @@ export const auditLogs = sqliteTable('audit_logs', {
 }));
 
 // ========================================
+// CLOUDFLARE ACCOUNT AND GATEWAY MANAGEMENT
+// ========================================
+
+/**
+ * Cloudflare Accounts table - Store user's connected Cloudflare accounts
+ * Populated when a user completes the CF OAuth Connect flow (PR 10a). Holds
+ * directory metadata only; access/refresh tokens never live in D1.
+ */
+export const cloudflareAccounts = sqliteTable('cloudflare_accounts', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+    // Account details mirrored from the Cloudflare API
+    accountId: text('account_id').notNull(),
+    accountName: text('account_name').notNull(),
+    accountEmail: text('account_email'),
+
+    // Metadata
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    lastSyncedAt: integer('last_synced_at', { mode: 'timestamp' }),
+}, (table) => ({
+    userIdx: index('cloudflare_accounts_user_idx').on(table.userId),
+    accountIdIdx: index('cloudflare_accounts_account_id_idx').on(table.accountId),
+    userAccountIdx: uniqueIndex('cloudflare_accounts_user_account_idx').on(table.userId, table.accountId),
+}));
+
+/**
+ * AI Gateways table - Store AI Gateways for each Cloudflare account.
+ * Cached credit balance is updated opportunistically by the usage checker.
+ */
+export const aiGateways = sqliteTable('ai_gateways', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    cloudflareAccountId: text('cloudflare_account_id').notNull().references(() => cloudflareAccounts.id, { onDelete: 'cascade' }),
+
+    // Gateway identifiers from the Cloudflare API
+    gatewayId: text('gateway_id').notNull(),
+    gatewayName: text('gateway_name').notNull(),
+    gatewaySlug: text('gateway_slug').notNull(),
+
+    // Cached credit balance (USD); null until first successful fetch
+    creditsRemaining: real('credits_remaining').default(0),
+    creditsLastUpdated: integer('credits_last_updated', { mode: 'timestamp' }),
+
+    // True when this gateway was auto-provisioned during OAuth callback
+    autoCreated: integer('auto_created', { mode: 'boolean' }).default(false),
+
+    // Only one gateway per user is `isActive` at a time
+    isActive: integer('is_active', { mode: 'boolean' }).default(false),
+
+    // Metadata
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    userIdx: index('ai_gateways_user_idx').on(table.userId),
+    accountIdx: index('ai_gateways_account_idx').on(table.cloudflareAccountId),
+    userAccountIdx: index('ai_gateways_user_account_idx').on(table.userId, table.cloudflareAccountId),
+    gatewayIdIdx: uniqueIndex('ai_gateways_gateway_id_idx').on(table.cloudflareAccountId, table.gatewayId),
+}));
+
+// ========================================
 // USER SECRETS AND API KEYS
 // ========================================
 

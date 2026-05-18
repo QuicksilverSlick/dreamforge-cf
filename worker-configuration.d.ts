@@ -18,7 +18,7 @@ declare namespace Cloudflare {
 		DISPATCH_NAMESPACE: "vibesdk-default-namespace";
 		ENABLE_READ_REPLICAS: "true";
 		CLOUDFLARE_AI_GATEWAY: "vibesdk-gateway";
-		PLATFORM_CAPABILITIES: {"app":true,"presentation":true,"general":true};
+		PLATFORM_CAPABILITIES: {"features":{"app":{"enabled":true},"presentation":{"enabled":false},"general":{"enabled":false}},"version":"1.0.0"};
 		CUSTOM_DOMAIN: "app.getdreamforge.com";
 		CUSTOM_PREVIEW_DOMAIN: "app.getdreamforge.com";
 		MAX_SANDBOX_INSTANCES: "10";

@@ -59,6 +59,19 @@ declare namespace Cloudflare {
         GITHUB_EXPORTER_CLIENT_ID: string;
         GITHUB_EXPORTER_CLIENT_SECRET: string;
 
+        // Cloudflare OAuth Connect (used by PR 10a CF account/gateway linking).
+        // When ENABLE_CLOUDFLARE_LIMITS !== 'true' the feature is disabled and
+        // these values are unused at runtime; they're typed as optional so the
+        // worker can boot without them in self-hosted deployments.
+        ENABLE_CLOUDFLARE_LIMITS?: string;
+        CLOUDFLARE_OAUTH_CLIENT_ID?: string;
+        CLOUDFLARE_OAUTH_CLIENT_SECRET?: string;
+        CLOUDFLARE_OAUTH_AUTH_URL?: string;
+        CLOUDFLARE_OAUTH_TOKEN_URL?: string;
+        CLOUDFLARE_OAUTH_USERINFO_URL?: string;
+        CLOUDFLARE_OAUTH_SCOPES?: string;
+        CF_OAUTH_ENCRYPTION_KEY?: string;
+
         // Auth + crypto
         JWT_SECRET: string;
         AI_PROXY_JWT_SECRET: string;

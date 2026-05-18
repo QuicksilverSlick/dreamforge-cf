@@ -234,6 +234,49 @@ export class RateLimitService {
 		}
 	}
 
+	/**
+	 * Get remaining LLM credits for a user without incrementing. Used for
+	 * pre-flight checks (e.g. `/api/limits/usage`) where we want a snapshot of
+	 * the user's free-tier capacity but don't want to consume a credit.
+	 */
+	static async getRemainingCredits(
+		env: Env,
+		config: RateLimitSettings,
+		userId: string
+	): Promise<{ remaining: number; limit: number; dailyLimit?: number }> {
+		const identifier = `user:${userId}`;
+		const key = this.buildRateLimitKey(RateLimitType.LLM_CALLS, identifier);
+		const llmConfig = config[RateLimitType.LLM_CALLS];
+
+		try {
+			const stub = env.DORateLimitStore.getByName(key);
+			const remaining = await stub.getRemainingLimit(key, {
+				limit: llmConfig.limit,
+				period: llmConfig.period,
+				dailyLimit: llmConfig.dailyLimit,
+				bucketSize: llmConfig.bucketSize,
+				calendarDaily: llmConfig.calendarDaily,
+			});
+
+			return {
+				remaining,
+				limit: llmConfig.limit,
+				dailyLimit: llmConfig.dailyLimit,
+			};
+		} catch (error) {
+			this.logger.error('Failed to get remaining credits', {
+				key,
+				error: error instanceof Error ? error.message : 'Unknown error'
+			});
+			// Fail open - return full limit
+			return {
+				remaining: llmConfig.limit,
+				limit: llmConfig.limit,
+				dailyLimit: llmConfig.dailyLimit,
+			};
+		}
+	}
+
 	static async enforceLLMCallsRateLimit(
         env: Env,
 		config: RateLimitSettings,

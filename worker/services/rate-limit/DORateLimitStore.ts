@@ -17,6 +17,13 @@ export interface RateLimitConfig {
     burstWindow?: number; // in seconds
     bucketSize?: number; // in seconds
     dailyLimit?: number; // max requests in a rolling 24h window
+    /**
+     * If true, the main window is treated as a UTC calendar-day window. Reserved
+     * for future use; the current sliding-bucket impl honors only `period`, so
+     * callers that opt-in still get rolling behavior. Wired here so the public
+     * API matches the LLM config shape consumed by `usageChecker`.
+     */
+    calendarDaily?: boolean;
 }
 
 export interface RateLimitResult {

@@ -3,7 +3,7 @@
  * Abstract base class for OAuth provider implementations
  */
 
-import { OAuthProvider, OAuthUserInfo } from '../../types/auth-types';
+import { OAuthUserInfo } from '../../types/auth-types';
 import { createLogger } from '../../logger';
 
 const logger = createLogger('OAuthProvider');
@@ -20,15 +20,25 @@ export interface OAuthTokens {
 }
 
 /**
+ * How client credentials are presented when calling the token endpoint.
+ * - `body`: include `client_id`/`client_secret` in the form body (RFC 6749 default).
+ * - `basic`: send credentials via HTTP Basic Authorization header
+ *   (required by some providers, e.g. Cloudflare's OAuth).
+ */
+export type OAuthClientAuthMethod = 'body' | 'basic';
+
+/**
  * Base OAuth Provider class
  */
 export abstract class BaseOAuthProvider {
-    protected abstract readonly provider: OAuthProvider;
+    protected abstract readonly provider: string;
     protected abstract readonly authorizationUrl: string;
     protected abstract readonly tokenUrl: string;
     protected abstract readonly userInfoUrl: string;
     protected abstract readonly scopes: string[];
-    
+    /** Providers may override to use HTTP Basic auth for token requests. */
+    protected readonly clientAuthMethod: OAuthClientAuthMethod = 'body';
+
     constructor(
         protected clientId: string,
         protected clientSecret: string,
@@ -60,6 +70,53 @@ export abstract class BaseOAuthProvider {
     }
     
     /**
+     * POST to the token endpoint with the configured client-auth method and parse
+     * the standard OAuth token response. Subclasses pick `clientAuthMethod` to
+     * either include client credentials in the form body (RFC 6749 default) or
+     * send them via HTTP Basic Authorization (required by Cloudflare OAuth).
+     */
+    protected async postTokenRequest(
+        params: URLSearchParams,
+        context: 'exchange' | 'refresh'
+    ): Promise<{
+        access_token: string;
+        refresh_token?: string;
+        expires_in?: number;
+        token_type?: string;
+    }> {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+        };
+
+        if (this.clientAuthMethod === 'basic') {
+            headers.Authorization = `Basic ${btoa(`${this.clientId}:${this.clientSecret}`)}`;
+        } else {
+            params.set('client_id', this.clientId);
+            params.set('client_secret', this.clientSecret);
+        }
+
+        const response = await fetch(this.tokenUrl, {
+            method: 'POST',
+            headers,
+            body: params.toString(),
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            logger.error(`Token ${context} failed`, { provider: this.provider, error });
+            throw new Error(`Token ${context} failed: ${error}`);
+        }
+
+        return await response.json() as {
+            access_token: string;
+            refresh_token?: string;
+            expires_in?: number;
+            token_type?: string;
+        };
+    }
+
+    /**
      * Exchange authorization code for tokens
      */
     async exchangeCodeForTokens(
@@ -70,38 +127,15 @@ export abstract class BaseOAuthProvider {
             const params = new URLSearchParams({
                 grant_type: 'authorization_code',
                 code,
-                client_id: this.clientId,
-                client_secret: this.clientSecret,
-                redirect_uri: this.redirectUri
+                redirect_uri: this.redirectUri,
             });
-            
-            // Add PKCE verifier if provided
+
             if (codeVerifier) {
                 params.append('code_verifier', codeVerifier);
             }
-            
-            const response = await fetch(this.tokenUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Accept': 'application/json'
-                },
-                body: params.toString()
-            });
-            
-            if (!response.ok) {
-                const error = await response.text();
-                logger.error('Token exchange failed', { provider: this.provider, error });
-                throw new Error(`Token exchange failed: ${error}`);
-            }
-            
-            const data = await response.json() as {
-                access_token: string;
-                refresh_token?: string;
-                expires_in?: number;
-                token_type?: string;
-            };
-            
+
+            const data = await this.postTokenRequest(params, 'exchange');
+
             return {
                 accessToken: data.access_token,
                 refreshToken: data.refresh_token,
@@ -113,12 +147,12 @@ export abstract class BaseOAuthProvider {
             throw error;
         }
     }
-    
+
     /**
      * Get user info from provider
      */
     abstract getUserInfo(accessToken: string): Promise<OAuthUserInfo>;
-    
+
     /**
      * Refresh access token
      */
@@ -127,32 +161,10 @@ export abstract class BaseOAuthProvider {
             const params = new URLSearchParams({
                 grant_type: 'refresh_token',
                 refresh_token: refreshToken,
-                client_id: this.clientId,
-                client_secret: this.clientSecret
             });
-            
-            const response = await fetch(this.tokenUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Accept': 'application/json'
-                },
-                body: params.toString()
-            });
-            
-            if (!response.ok) {
-                const error = await response.text();
-                logger.error('Token refresh failed', { provider: this.provider, error });
-                throw new Error(`Token refresh failed: ${error}`);
-            }
-            
-            const data = await response.json() as {
-                access_token: string;
-                refresh_token?: string;
-                expires_in?: number;
-                token_type?: string;
-            };
-            
+
+            const data = await this.postTokenRequest(params, 'refresh');
+
             return {
                 accessToken: data.access_token,
                 refreshToken: data.refresh_token || refreshToken, // Some providers don't return new refresh token
