@@ -34,10 +34,14 @@ export interface DORateLimitConfig extends RateLimitConfigBase {
 	burstWindow?: number; // burst window in seconds (default: 60)
 	bucketSize?: number; // time bucket size in seconds (default: 10)
 	dailyLimit?: number; // optional rolling 24h limit
+	/** If true, the main window aligns to the UTC calendar day instead of rolling. */
+	calendarDaily?: boolean;
 }
 
 export type LLMCallsRateLimitConfig = (DORateLimitConfig) & {
 	excludeBYOKUsers: boolean;
+	/** When true, users with a connected Cloudflare account + gateway bypass LLM rate limits. */
+	excludeCloudflareConnected?: boolean;
 };
 
 export type RateLimitConfig =

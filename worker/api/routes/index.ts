@@ -11,6 +11,10 @@ import { setupCodegenRoutes } from './codegenRoutes';
 import { setupScreenshotRoutes } from './imagesRoutes';
 import { setupSentryRoutes } from './sentryRoutes';
 import { setupBYOPRoutes } from './byopRoutes';
+import { setupCloudflareAccountRoutes } from './cloudflareAccountRoutes';
+import { setupCloudflareConnectRoutes } from './cloudflareConnectRoutes';
+import { setupLimitsRoutes } from './limitsRoutes';
+import { setupCapabilitiesRoutes } from './capabilitiesRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
 import { setupStatusRoutes } from './statusRoutes';
@@ -62,4 +66,16 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // BYOP (Bring Your Own Project) routes
     setupBYOPRoutes(app);
+
+    // Cloudflare account + gateway management (PR 10a)
+    setupCloudflareAccountRoutes(app);
+
+    // Cloudflare OAuth Connect (initiate + callback) (PR 10a)
+    setupCloudflareConnectRoutes(app);
+
+    // Usage limits readout (PR 10a)
+    setupLimitsRoutes(app);
+
+    // Platform capabilities / feature registry (PR 10a)
+    setupCapabilitiesRoutes(app);
 }

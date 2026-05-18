@@ -1,5 +1,5 @@
 
-import type { RuntimeError, StaticAnalysisResponse } from '../../services/sandbox/sandboxTypes';
+import type { RuntimeError, StaticAnalysisResponse, GitHubPushRequest } from '../../services/sandbox/sandboxTypes';
 import type { ClientReportedErrorType, FileOutputType, PhaseConceptType } from '../schemas';
 import type { ConversationMessage } from '../inferutils/common';
 import type { InferenceContext } from '../inferutils/config.types';
@@ -7,6 +7,31 @@ import type { TemplateDetails } from '../../services/sandbox/sandboxTypes';
 import { TemplateSelection } from '../schemas';
 import { CurrentDevState } from './state';
 import { ProcessedImageAttachment } from 'worker/types/image-attachment';
+
+/**
+ * Project category that the agent is generating. Drives feature gating in
+ * the platform capabilities registry (worker/agents/core/features).
+ */
+export type ProjectType = 'app' | 'workflow' | 'presentation' | 'general';
+
+/**
+ * Generation behavior. Phasic agents iterate phase-by-phase; agentic agents
+ * run a single open-ended loop. Determined per project type via the
+ * features registry.
+ */
+export type BehaviorType = 'phasic' | 'agentic';
+
+/**
+ * Options for project export / deployment. The `kind` enumerates the
+ * supported export targets exposed through the features registry.
+ */
+export interface ExportOptions {
+    kind: 'github' | 'pdf' | 'pptx' | 'googleslides' | 'workflow';
+    format?: string;
+    token?: string;
+    github?: GitHubPushRequest;
+    metadata?: Record<string, unknown>;
+}
 
 export interface AgentInitArgs {
     query: string;
