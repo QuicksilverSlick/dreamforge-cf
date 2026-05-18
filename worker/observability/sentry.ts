@@ -2,6 +2,10 @@ import * as Sentry from '@sentry/cloudflare';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { AppEnv } from '../types/appenv';
+import { errorResponse } from '../api/responses';
+import { createLogger } from '../logger';
+
+const logger = createLogger('HonoOnError');
 
 export function sentryOptions(env: Env) : Sentry.CloudflareOptions {
     const transportOptions : Sentry.CloudflareOptions['transportOptions'] = {};
@@ -27,13 +31,37 @@ export function sentryOptions(env: Env) : Sentry.CloudflareOptions {
 }
 
 export function initHonoSentry(app: Hono<AppEnv>): void {
-	// Report unhandled exceptions from routes/middleware
+	// Top-level error handler — last line of defence for anything thrown by
+	// routes or middleware that wasn't caught locally. HTTPException carries
+	// its own status + body; everything else becomes a structured 500 in the
+	// project's standard `errorResponse` shape so clients can parse it
+	// consistently with intentional error returns elsewhere.
 	app.onError((err, c) => {
-		Sentry.captureException(err);
+		const url = new URL(c.req.url);
+		const cfRay = c.req.header('cf-ray');
+
+		Sentry.withScope((scope) => {
+			scope.setTag('http.method', c.req.method);
+			scope.setTag('http.path', url.pathname);
+			if (cfRay) scope.setTag('cf_ray', cfRay);
+			Sentry.captureException(err);
+		});
+
 		if (err instanceof HTTPException) {
 			return err.getResponse();
 		}
-		return c.json({ error: 'Internal server error' }, 500);
+
+		// Log the underlying error locally; the response body intentionally
+		// does NOT include the message (could leak internals). cf-ray plus
+		// the Sentry capture is what support correlates against.
+		logger.error('Unhandled error in Hono pipeline', {
+			method: c.req.method,
+			path: url.pathname,
+			cfRay,
+			error: err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : err,
+		});
+
+		return errorResponse(new Error('Internal server error'), 500);
 	});
 
 	// Light context binding for better traces
