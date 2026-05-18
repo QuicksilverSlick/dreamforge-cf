@@ -72,6 +72,7 @@ import type {
     BlueprintResponse,
     StartBuildingResponse,
 } from '@/api-types-byop';
+import type { UsageSummary } from '@/hooks/use-limits';
 import { toast } from 'sonner';
 
 /**
@@ -1126,6 +1127,48 @@ class ApiClient {
 	 */
 	async getCapabilities(noToast: boolean = true): Promise<ApiResponse<CapabilitiesData>> {
 		return this.request<CapabilitiesData>('/api/capabilities', undefined, noToast);
+	}
+
+	// ===============================
+	// Usage Limits API Methods
+	// ===============================
+
+	/**
+	 * Get the current user's usage summary against configured rate limits
+	 * (LLM calls, app builds, daily caps, Cloudflare-Connect balance, etc.).
+	 * Consumed by `LimitsProvider` (src/contexts/limits-context.tsx) and the
+	 * `useLimitsContext` hook.
+	 */
+	async getLimitsUsage(): Promise<ApiResponse<UsageSummary>> {
+		return this.request<UsageSummary>('/api/limits/usage');
+	}
+
+	// ===============================
+	// Cloudflare Account API Methods
+	// ===============================
+
+	/**
+	 * Select an active Cloudflare account + AI gateway for the authenticated
+	 * user. Used by `CloudflareAccountSelector` after the user authorizes via
+	 * the Cloudflare-Connect OAuth flow and we've cached account/gateway data
+	 * in D1 (see `worker/services/cloudflare/CloudflareAccountService.ts`).
+	 */
+	async setCloudflareSelection(accountId: string, gatewayId: string): Promise<ApiResponse<{ message: string }>> {
+		return this.request<{ message: string }>('/api/cloudflare/selection', {
+			method: 'PUT',
+			body: { accountId, gatewayId },
+		});
+	}
+
+	/**
+	 * Disconnect the user's Cloudflare account — clears stored tokens and
+	 * removes the active selection. Used by `CloudflareAccountSelector`'s
+	 * disconnect action.
+	 */
+	async disconnectCloudflare(): Promise<ApiResponse<{ message: string }>> {
+		return this.request<{ message: string }>('/api/cloudflare/connection', {
+			method: 'DELETE',
+		});
 	}
 
 	// ===============================
