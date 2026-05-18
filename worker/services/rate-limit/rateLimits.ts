@@ -52,6 +52,7 @@ export class RateLimitService {
         env: Env,
         key: string,
         config: DORateLimitConfig,
+        limitType: RateLimitType,
         incrementBy: number = 1
     ): Promise<boolean> {
         try {
@@ -70,9 +71,13 @@ export class RateLimitService {
         } catch (error) {
             this.logger.error('Failed to enforce DO rate limit', {
                 key,
+                limitType,
                 error: error instanceof Error ? error.message : 'Unknown error'
             });
-            return true; // Fail open
+            // Fail-closed for auth (security gate); fail-open for read-only paths.
+            // If the DO is unreachable, we'd rather block auth attempts than allow
+            // them unchecked.
+            return limitType !== RateLimitType.AUTH_RATE_LIMIT;
         }
     }
     
@@ -102,7 +107,7 @@ export class RateLimitService {
                 break;
             }
             case RateLimitStore.DURABLE_OBJECT:
-                success = await this.enforceDORateLimit(env, key, rateLimitConfig as DORateLimitConfig, incrementBy);
+                success = await this.enforceDORateLimit(env, key, rateLimitConfig as DORateLimitConfig, limitType, incrementBy);
                 break;
             default:
                 return false;
