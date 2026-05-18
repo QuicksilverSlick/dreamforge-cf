@@ -26,14 +26,20 @@ export interface XmlParsingState extends ParsingState {
     
     // Configuration for which elements to extract
     targetElements: Set<string>;
-    
+
     // Callbacks for streaming element content
     streamingElements: Set<string>;
-    
+
+    // Whether tag-name matching is case sensitive
+    caseSensitive: boolean;
+
+    // Maximum buffer size before trimming to prevent unbounded growth
+    maxBufferSize: number;
+
     // Error handling
     hasParsingErrors: boolean;
     errorMessages: string[];
-    
+
     // Raw XML buffer for fallback parsing
     rawXmlBuffer: string;
 }
@@ -152,11 +158,13 @@ IMPORTANT:
      * Finalize XML parsing and return all extracted elements
      */
     finalizeXmlParsing(state: XmlParsingState): Map<string, XmlElement[]> {
-        // Try final parsing attempt on remaining buffer
-        if (state.contentBuffer.length > 0) {
-            this.attemptFallbackExtraction(state);
-        }
-        
+        // Always attempt fallback at finalization so target elements that were
+        // opened but never closed (incomplete LLM output, malformed XML) can
+        // still be extracted from the raw buffer. attemptFallbackExtraction is
+        // idempotent — it only fills in target elements that aren't already
+        // extracted from structured parsing.
+        this.attemptFallbackExtraction(state);
+
         return state.extractedElements;
     }
     
@@ -213,6 +221,8 @@ IMPORTANT:
             potentialTagBuffer: '',
             targetElements: new Set((config.targetElements || []).map(t => config.caseSensitive ? t : t.toLowerCase())),
             streamingElements: new Set((config.streamingElements || []).map(t => config.caseSensitive ? t : t.toLowerCase())),
+            caseSensitive: config.caseSensitive ?? false,
+            maxBufferSize: config.maxBufferSize ?? 10000,
             hasParsingErrors: false,
             errorMessages: [],
             rawXmlBuffer: ''
@@ -246,15 +256,9 @@ IMPORTANT:
             }
         }
         
-        // Prevent buffer from growing too large.
-        // Bug fix: original was `length > maxBufferSize || 10000`, which due to
-        // operator precedence means `(length > maxBufferSize) || 10000` — the
-        // OR-with-truthy always evaluates true and the buffer was trimmed on
-        // EVERY call. Intent is to use a 10000 default when maxBufferSize is
-        // unset, then compare length against that.
-        const maxBufferSize = (state as any).maxBufferSize || 10000;
-        if (state.contentBuffer.length > maxBufferSize) {
-            // Keep last portion in case we have partial tags
+        // Prevent buffer from growing too large. maxBufferSize is captured at
+        // initializeXmlState time from the supplied config (default 10000).
+        if (state.contentBuffer.length > state.maxBufferSize) {
             const keepSize = Math.min(2000, state.contentBuffer.length);
             state.contentBuffer = state.contentBuffer.substring(state.contentBuffer.length - keepSize);
         }
@@ -366,15 +370,18 @@ IMPORTANT:
         state: XmlParsingState,
         callbacks: XmlStreamingCallbacks
     ): boolean {
-        const normalizedTagName = tagName.toLowerCase();
-        
+        const normalizedTagName = state.caseSensitive ? tagName : tagName.toLowerCase();
+        const normalizedCurrentTag = state.caseSensitive
+            ? state.currentElement?.tagName
+            : state.currentElement?.tagName.toLowerCase();
+
         if (!state.currentElement) {
             this.handleParsingError(state, `Unexpected closing tag: ${tagName}`, callbacks);
             return false;
         }
-        
-        // Verify tag matching (case insensitive)
-        if (state.currentElement.tagName.toLowerCase() !== normalizedTagName) {
+
+        // Verify tag matching (honors caseSensitive setting)
+        if (normalizedCurrentTag !== normalizedTagName) {
             this.handleParsingError(state, `Mismatched closing tag: expected ${state.currentElement.tagName}, got ${tagName}`, callbacks);
             return false;
         }
@@ -447,15 +454,19 @@ IMPORTANT:
         state.currentElement.content += content;
         
         // Stream content if configured
-        const normalizedTagName = state.currentElement.tagName.toLowerCase();
+        const normalizedTagName = state.caseSensitive
+            ? state.currentElement.tagName
+            : state.currentElement.tagName.toLowerCase();
         if (state.streamingElements.has(normalizedTagName) && callbacks.onElementContent) {
             callbacks.onElementContent(state.currentElement.tagName, content, false);
         }
     }
-    
+
     private handlePartialContent(state: XmlParsingState, callbacks: XmlStreamingCallbacks): void {
-        // If we have a current element and significant content, it might be partial content
-        if (state.currentElement && state.contentBuffer.length > 50) {
+        // Flush any partial content buffered for the current element so streaming
+        // consumers see chunks in real time. Content before the last `<` is safe
+        // to emit (the `<` may be the start of an incoming partial tag).
+        if (state.currentElement && state.contentBuffer.length > 0) {
             // Check if buffer might end with partial tag
             const hasPartialTag = state.contentBuffer.includes('<');
             
@@ -476,8 +487,10 @@ IMPORTANT:
     }
     
     private storeElement(state: XmlParsingState, element: XmlElement): void {
-        const normalizedTagName = element.tagName.toLowerCase();
-        
+        const normalizedTagName = state.caseSensitive
+            ? element.tagName
+            : element.tagName.toLowerCase();
+
         // Store if it's a target element or if no targets specified
         if (state.targetElements.size === 0 || state.targetElements.has(normalizedTagName)) {
             if (!state.extractedElements.has(normalizedTagName)) {
@@ -505,10 +518,12 @@ IMPORTANT:
     
     private attemptFallbackExtraction(state: XmlParsingState): void {
         try {
-            // Try to extract elements using lenient regex
+            // Try to extract elements using lenient regex. The 's' flag lets `.` span
+            // newlines; the 'i' flag is only added when caseSensitive is false.
+            const flags = state.caseSensitive ? 's' : 'is';
             for (const targetElement of state.targetElements) {
                 if (!state.extractedElements.has(targetElement)) {
-                    const regex = new RegExp(`<${targetElement}[^>]*>(.*?)(?:<\\/${targetElement}>|$)`, 'is');
+                    const regex = new RegExp(`<${targetElement}[^>]*>(.*?)(?:<\\/${targetElement}>|$)`, flags);
                     const match = state.rawXmlBuffer.match(regex);
                     
                     if (match) {
