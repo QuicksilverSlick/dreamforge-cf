@@ -76,7 +76,7 @@ const getEmptyStateDefaults = (sortBy: AppSortOption, totalCount: number) => {
   }
 };
 
-export const AppListContainer: React.FC<AppListContainerProps> = ({
+export function AppListContainer({
   apps,
   loading,
   loadingMore,
@@ -94,7 +94,7 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
   infiniteScroll = true,
   emptyState,
   className = ""
-}) => {
+}: AppListContainerProps) {
   const defaultEmptyState = getEmptyStateDefaults(sortBy, totalCount);
   
   const { triggerRef } = useInfiniteScroll({

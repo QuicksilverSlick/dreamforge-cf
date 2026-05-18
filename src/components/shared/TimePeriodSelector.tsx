@@ -1,4 +1,3 @@
-import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from 'lucide-react';
 import type { TimePeriod } from '@/api-types';
@@ -22,13 +21,13 @@ const TIME_PERIODS: Array<{
   { value: 'all', label: 'All Time', shortLabel: 'All' },
 ];
 
-export const TimePeriodSelector: React.FC<TimePeriodSelectorProps> = ({
+export function TimePeriodSelector({
   value,
   onValueChange,
   className,
   disabled,
   showForSort = 'all'
-}) => {
+}: TimePeriodSelectorProps) {
   // Don't show the selector for 'recent' sort - it doesn't make sense
   if (showForSort !== 'all' && showForSort !== 'popular' && showForSort !== 'trending') {
     return null;

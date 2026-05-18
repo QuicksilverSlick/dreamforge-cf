@@ -1,4 +1,3 @@
-import React from 'react';
 import { Globe, Lock, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -33,11 +32,11 @@ const visibilityOptions = [
   },
 ];
 
-export const VisibilityFilter: React.FC<VisibilityFilterProps> = ({
+export function VisibilityFilter({
   value,
   onChange,
   className
-}) => {
+}: VisibilityFilterProps) {
   return (
     <div className={cn(
       "inline-flex items-center rounded-lg bg-bg-4 p-0.5",
