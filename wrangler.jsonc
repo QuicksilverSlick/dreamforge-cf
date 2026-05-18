@@ -29,22 +29,26 @@
 			"enabled": true
 		}
 	},
-    "unsafe": {
-        "bindings": [
-            {
-                "name": "API_RATE_LIMITER",
-                "type": "ratelimit",
-                "namespace_id": "2101",
-                "simple": { "limit": 10000, "period": 60 }
-            },
-            {
-                "name": "AUTH_RATE_LIMITER",
-                "type": "ratelimit",
-                "namespace_id": "2102",
-                "simple": { "limit": 1000, "period": 60 }
-            }
-        ]
-    },
+    // Rate Limiting bindings — first-class `ratelimits` form (GA 2025).
+    // The legacy `unsafe.bindings` shape with `"type": "ratelimit"` is no
+    // longer recommended by Cloudflare; the bindings are still typed as
+    // `RateLimit` in the generated worker-configuration.d.ts and the
+    // worker-side API (`env.API_RATE_LIMITER.limit({ key })`) is unchanged.
+    // The `namespace_id` values map to the same rate-limiter namespaces the
+    // worker already used under the unsafe binding, so existing counters
+    // continue tracking across the migration.
+    "ratelimits": [
+        {
+            "name": "API_RATE_LIMITER",
+            "namespace_id": "2101",
+            "simple": { "limit": 10000, "period": 60 }
+        },
+        {
+            "name": "AUTH_RATE_LIMITER",
+            "namespace_id": "2102",
+            "simple": { "limit": 1000, "period": 60 }
+        }
+    ],
 	/**
 	 * Bindings
 	 * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
