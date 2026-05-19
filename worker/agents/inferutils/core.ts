@@ -340,6 +340,25 @@ export class InferError extends Error {
     }
 }
 
+/**
+ * Signals an explicit early-abort from an inference operation — most
+ * commonly thrown from a tool callback that wants to short-circuit the
+ * loop rather than continue producing output. Carries the partial
+ * response (which is also the abort message) so callers can render it
+ * to the user as the operation's final output.
+ *
+ * Upstream's signature accepts a third `toolCallContext` argument that
+ * the fork's `InferError` doesn't yet model (no tool-loop
+ * infrastructure here yet). When the tool loop lands in a later M3
+ * slice, this constructor signature widens to match upstream.
+ */
+export class AbortError extends InferError {
+    constructor(response: string) {
+        super(response, response);
+        this.name = 'AbortError';
+    }
+}
+
 const claude_thinking_budget_tokens = {
     medium: 8000,
     high: 16000,
