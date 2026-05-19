@@ -383,6 +383,46 @@ type ServerLogMessage = {
 	source?: string;
 };
 
+// ---------------------------------------------------------------------------
+// M3 commit 2b — wire-protocol additions consumed by upstream's ported
+// `codingAgent.ts` + `behaviors/base.ts`. Frontend's
+// `handle-websocket-message.ts` default branch silently ignores unknown
+// types, so these can land server-side without coordinated frontend changes.
+// Payloads are typed permissively (`Record<string, unknown>`) until the
+// frontend consumers stabilize and demand stricter shapes — a follow-up
+// frontend commit can narrow these.
+// ---------------------------------------------------------------------------
+
+type PreviewForceRefreshMessage = {
+	type: 'preview_force_refresh';
+	data?: Record<string, unknown>;
+};
+
+type BlueprintUpdatedMessage = {
+	type: 'blueprint_updated';
+	data?: Record<string, unknown>;
+};
+
+type ProjectNameUpdatedMessage = {
+	type: 'project_name_updated';
+	data?: Record<string, unknown>;
+};
+
+type TemplateUpdatedMessage = {
+	type: 'template_updated';
+	data?: Record<string, unknown>;
+};
+
+type AgentConnectedMessage = {
+	type: 'agent_connected';
+	data?: Record<string, unknown>;
+};
+
+type UsageUpdatedMessage = {
+	type: 'usage_updated';
+	data?: Record<string, unknown>;
+};
+
 export type WebSocketMessage =
 	| StateMessage
 	| ConversationStateMessage
@@ -431,7 +471,13 @@ export type WebSocketMessage =
 	| ModelConfigsInfoMessage
 	| TerminalCommandMessage
 	| TerminalOutputMessage
-	| ServerLogMessage;
+	| ServerLogMessage
+	| PreviewForceRefreshMessage
+	| BlueprintUpdatedMessage
+	| ProjectNameUpdatedMessage
+	| TemplateUpdatedMessage
+	| AgentConnectedMessage
+	| UsageUpdatedMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)
 export type WebSocketMessageType = WebSocketMessage['type'];

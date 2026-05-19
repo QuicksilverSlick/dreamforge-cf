@@ -68,6 +68,19 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
     // Terminal messages
     TERMINAL_OUTPUT: 'terminal_output',
     SERVER_LOG: 'server_log',
+
+    // M3 commit 2b — wire-protocol additions consumed by upstream's
+    // ported `codingAgent.ts` + `behaviors/base.ts`. Server-side surface
+    // landed first; the frontend's `handle-websocket-message.ts` default
+    // branch silently ignores unknown types, so these can land without
+    // coordinated frontend changes. A follow-up frontend commit can wire
+    // real handlers when the consumer experiences are ready.
+    PREVIEW_FORCE_REFRESH: 'preview_force_refresh',
+    BLUEPRINT_UPDATED: 'blueprint_updated',
+    PROJECT_NAME_UPDATED: 'project_name_updated',
+    TEMPLATE_UPDATED: 'template_updated',
+    AGENT_CONNECTED: 'agent_connected',
+    USAGE_UPDATED: 'usage_updated',
 }
 
 // WebSocket message types
