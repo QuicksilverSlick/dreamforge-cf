@@ -34,7 +34,11 @@ interface ToolCallStatusArgs {
     status: 'start' | 'success' | 'error';
     args?: Record<string, unknown>
 }
-type RenderToolCall = ( args: ToolCallStatusArgs ) => void;
+// `RenderToolCall` and `buildToolCallRenderer` are exported for the
+// ported behaviors that land in later M3 slices — they need to call
+// the renderer from outside this module. `ConversationResponseCallback`
+// stays internal because nothing outside references it.
+export type RenderToolCall = ( args: ToolCallStatusArgs ) => void;
 
 type ConversationResponseCallback = (
     message: string,
@@ -43,7 +47,7 @@ type ConversationResponseCallback = (
     tool?: ToolCallStatusArgs
 ) => void;
 
-function buildToolCallRenderer(callback: ConversationResponseCallback, conversationId: string): RenderToolCall {
+export function buildToolCallRenderer(callback: ConversationResponseCallback, conversationId: string): RenderToolCall {
     return (args: ToolCallStatusArgs) => {
         callback('', conversationId, false, args);
     }
