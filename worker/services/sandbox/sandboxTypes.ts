@@ -37,6 +37,27 @@ export const TemplateDetailsSchema = z.object({
     dontTouchFiles: z.array(z.string()),
     redactedFiles: z.array(z.string()),
     slideDirectory: z.string().optional(),
+    /**
+     * Upstream-shape fields (M3 commit 2b.1). The fork historically
+     * carried only `files: TemplateFile[]` and derived "important" /
+     * "all" subsets at consumer call sites. Upstream's ported utilities
+     * (`worker/services/sandbox/utils.ts`,
+     * `worker/agents/utils/templates.ts`) read these as flat collections.
+     *
+     * `importantFiles`: file-path patterns the agent should prioritize.
+     * Strings here are either exact filePath matches or prefix patterns
+     * (a pattern matches any file whose path startsWith it).
+     *
+     * `allFiles`: every template file's path → contents. A flat
+     * Record<path, contents> mirror of `files` for O(1) lookup.
+     *
+     * Both populated at the single construction site
+     * (`worker/services/sandbox/sandboxSdkClient.ts` `getTemplateDetails`).
+     * Optional so legacy persisted `TemplateDetails` payloads that
+     * predate this widening still satisfy the schema on hydration.
+     */
+    importantFiles: z.array(z.string()).optional(),
+    allFiles: z.record(z.string(), z.string()).optional(),
 })
 export type TemplateDetails = z.infer<typeof TemplateDetailsSchema>
 
