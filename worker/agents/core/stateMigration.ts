@@ -10,9 +10,10 @@
  * `AgentState` shape.
  *
  * Ported from upstream `cloudflare/vibesdk` `worker/agents/core/
- * stateMigration.ts` with a fork-local `generateProjectName` fallback
- * inlined (upstream's helper lives in `worker/agents/utils/
- * templateCustomizer.ts`, a file we have not ported yet).
+ * stateMigration.ts`. `generateProjectName` is imported from the ported
+ * `worker/agents/utils/templateCustomizer.ts` (M3 commit 2b.4) — the
+ * inline fallback that lived here in commits 1 through 2b.3 has been
+ * removed now that the real helper is available.
  */
 
 import type { TemplateDetails } from '../../services/sandbox/sandboxTypes';
@@ -20,31 +21,8 @@ import type { InferenceMetadata } from '../inferutils/config.types';
 import { generateNanoId } from '../../utils/idGenerator';
 import { MAX_AGENT_QUERY_LENGTH } from '../../api/controllers/agent/types';
 import type { StructuredLogger } from '../../logger';
+import { generateProjectName } from '../utils/templateCustomizer';
 import type { AgentState, FileState } from './state';
-
-// ---------------------------------------------------------------------------
-// Local fallbacks
-// ---------------------------------------------------------------------------
-
-/**
- * Trims an arbitrary seed string into a kebab-shaped project slug.
- * Inlined fork-local stand-in for upstream's
- * `worker/agents/utils/templateCustomizer.ts#generateProjectName` until
- * we port that utility (slated for a follow-on cleanup pass).
- */
-function generateProjectName(
-    seed: string,
-    suffix: string,
-    maxLength: number,
-): string {
-    const slug =
-        seed
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '')
-            .slice(0, Math.max(8, maxLength - suffix.length - 1)) || 'project';
-    return `${slug}-${suffix}`.slice(0, maxLength);
-}
 
 // ---------------------------------------------------------------------------
 // Legacy detection helpers
