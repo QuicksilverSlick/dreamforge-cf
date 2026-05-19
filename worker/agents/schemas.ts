@@ -145,6 +145,21 @@ export const ScreenshotAnalysisSchema = z.object({
 
 export type TemplateSelection = z.infer<typeof TemplateSelectionSchema>;
 export type Blueprint = z.infer<typeof BlueprintSchema>;
+
+/**
+ * Discriminated-blueprint aliases for the post-M3 single-agent topology.
+ *
+ * Upstream `cloudflare/vibesdk` ships distinct `PhasicBlueprint` and
+ * `AgenticBlueprint` schemas to support the two behavior strategies. The
+ * M3 port lands the discriminated `AgentState` union in commit 1; the
+ * proper schema port (which adds runtime-validation surface area for each
+ * variant) lands in commit 6 as part of the prompts + schemas rebase. In
+ * the meantime these structural aliases let the state-shape commits land
+ * without touching schemas.ts beyond this shim.
+ */
+export type PhasicBlueprint = Blueprint;
+export type AgenticBlueprint = Blueprint;
+
 export type FileConceptType = z.infer<typeof FileConceptSchema>;
 export type PhaseConceptType = z.infer<typeof PhaseConceptSchema>;
 export type PhaseConceptLiteType = z.infer<typeof PhaseConceptLiteSchema>;
