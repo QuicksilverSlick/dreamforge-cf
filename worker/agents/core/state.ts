@@ -157,6 +157,42 @@ export interface BaseProjectState {
      * strips it from canonical state on hydration.
      */
     templateDetails?: TemplateDetails;
+
+    // -------------------------------------------------------------------
+    // Deprecated fields — kept optional only while the legacy
+    // `simpleGeneratorAgent.ts` + `smartGeneratorAgent.ts` files still
+    // exist. Commit 4 of the M3 sequence deletes those files; this block
+    // is removed in the same commit. They exist here so every commit in
+    // the M3 sequence is typecheck-clean (atomic-green-commits is best
+    // practice for multi-commit PRs — bisectability, meaningful CI
+    // signal, partial-revert safety). The runtime canonical field for
+    // each is in the parent block above; the migration in
+    // `stateMigration.ts` translates legacy persisted payloads to the
+    // canonical names.
+    // -------------------------------------------------------------------
+
+    /**
+     * @deprecated Use `metadata` (canonical) — removed in M3 commit 4.
+     * Required (not optional) during the transition so legacy callsites
+     * in `simpleGeneratorAgent.ts` can read `.agentId` / `.userId`
+     * without null-guards. New code (commits 2+) mirrors this from
+     * `metadata` on every state write.
+     */
+    inferenceContext: import('../inferutils/config.types').InferenceContext;
+
+    /**
+     * @deprecated Use `behaviorType` (canonical) — removed in M3 commit 4.
+     * Required during the transition; mirrored from `behaviorType` on
+     * every state write by new code.
+     */
+    agentMode: 'deterministic' | 'smart';
+
+    /**
+     * @deprecated Transient generation handle, never persisted. The new
+     * agent topology tracks in-flight generation via behavior-internal
+     * state. Removed in M3 commit 4.
+     */
+    generationPromise?: Promise<void>;
 }
 
 /** Phasic-behavior state. */

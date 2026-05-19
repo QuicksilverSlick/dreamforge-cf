@@ -300,7 +300,13 @@ export class StateMigration {
                 delete stateWithDeprecated.templateDetails;
             }
             if (isStateWithAgentMode(state)) {
-                delete stateWithDeprecated.agentMode;
+                // During the M3 transition `agentMode` is a required (mirrored)
+                // field on BaseProjectState rather than legacy-only. We rewrite
+                // it to match the new `behaviorType` rather than deleting it.
+                // Once M3 commit 4 drops the legacy generators and removes
+                // `agentMode` from the type, this branch becomes a delete again.
+                stateWithDeprecated.agentMode =
+                    migratedBehaviorType === 'agentic' ? 'smart' : 'deterministic';
             }
 
             return newState;
