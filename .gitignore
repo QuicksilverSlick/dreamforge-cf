@@ -23,6 +23,9 @@ dist-ssr
 # Claude Code worktrees and local settings
 .claude/worktrees/
 .claude/settings.local.json
+# Local-only orchestration / coordination notes (multi-agent session details
+# that don't belong in the production repo)
+.claude/*.md
 
 # Local-only review folder used during landing-page comparison
 landing-previews/
