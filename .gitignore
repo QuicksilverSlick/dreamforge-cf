@@ -69,3 +69,5 @@ cli
 screencapture-*.png
 SANDBOX_*.md
 deploy*.log
+# Cross-session-comms: local pointer to current M3 lead Claude Code session
+.m3-lead-session
