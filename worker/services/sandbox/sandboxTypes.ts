@@ -34,27 +34,16 @@ export const TemplateDetailsSchema = z.object({
     language: z.string().optional(),
     deps: z.record(z.string(), z.string()),
     frameworks: z.array(z.string()).optional(),
+    projectType: z.enum(['app', 'workflow', 'presentation', 'general']).optional(),
+    renderMode: z.enum(['sandbox', 'browser']).optional(),
+    disabled: z.boolean().optional(),
     dontTouchFiles: z.array(z.string()),
     redactedFiles: z.array(z.string()),
     slideDirectory: z.string().optional(),
     /**
-     * Upstream-shape fields (M3 commit 2b.1). The fork historically
-     * carried only `files: TemplateFile[]` and derived "important" /
-     * "all" subsets at consumer call sites. Upstream's ported utilities
-     * (`worker/services/sandbox/utils.ts`,
-     * `worker/agents/utils/templates.ts`) read these as flat collections.
-     *
-     * `importantFiles`: file-path patterns the agent should prioritize.
-     * Strings here are either exact filePath matches or prefix patterns
-     * (a pattern matches any file whose path startsWith it).
-     *
-     * `allFiles`: every template file's path → contents. A flat
-     * Record<path, contents> mirror of `files` for O(1) lookup.
-     *
-     * Both populated at the single construction site
-     * (`worker/services/sandbox/sandboxSdkClient.ts` `getTemplateDetails`).
-     * Optional so legacy persisted `TemplateDetails` payloads that
-     * predate this widening still satisfy the schema on hydration.
+     * Flat lookup mirrors of `files`, populated at construction time
+     * (see `sandboxSdkClient.getTemplateDetails`). Optional for backward
+     * compat with persisted state that predates this widening.
      */
     importantFiles: z.array(z.string()).optional(),
     allFiles: z.record(z.string(), z.string()).optional(),
@@ -123,10 +112,14 @@ export const TemplateInfoSchema = z.object({
     name: z.string(),
     language: z.string().optional(),
     frameworks: z.array(z.string()).optional(),
+    projectType: z.enum(['app', 'workflow', 'presentation', 'general']).optional(),
     description: z.object({
         selection: z.string(),
         usage: z.string(),
-    })
+    }),
+    renderMode: z.enum(['sandbox', 'browser']).optional(),
+    slideDirectory: z.string().optional(),
+    disabled: z.boolean().optional(),
 })
 export type TemplateInfo = z.infer<typeof TemplateInfoSchema>
 

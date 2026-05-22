@@ -342,9 +342,13 @@ export class SandboxSdkClient extends BaseSandboxService {
                 files: filesResponse.files,
                 language: catalogInfo?.language,
                 deps: dependencies,
+                projectType: catalogInfo?.projectType,
+                renderMode: catalogInfo?.renderMode,
+                disabled: catalogInfo?.disabled,
                 dontTouchFiles,
                 redactedFiles,
                 frameworks: catalogInfo?.frameworks || [],
+                slideDirectory: catalogInfo?.slideDirectory,
                 importantFiles,
                 allFiles,
             };
