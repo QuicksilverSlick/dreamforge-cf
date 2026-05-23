@@ -49,8 +49,106 @@ function getMimeByExtension(file: string): string | undefined {
         default: return undefined;
     }
 }
+// -------------------------
+// Validators specific to the generated-image serve path. These are intentionally
+// looser than the screenshot validators (which use a single-segment `:id/:file`
+// pattern) because generated-image R2 keys can be either 1-segment
+// (`generated/<filename>`, legacy uploads) or 2-segment
+// (`generated/<id>/<filename>`, current upload code at worker/utils/images.ts:142).
+// The validator below sanitises the full suffix in one pass.
+// -------------------------
+const ALLOWED_GENERATED_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
+
+function validateGeneratedSuffix(suffix: string): { ok: true; filename: string; ext: string } | { ok: false } {
+    if (!suffix) return { ok: false };
+    if (suffix.length > 256) return { ok: false };
+    if (suffix.includes('..') || suffix.includes('\\') || suffix.includes('\0')) return { ok: false };
+    // URL-safe characters only: alphanumerics, dot, hyphen, underscore, forward slash
+    if (!/^[A-Za-z0-9._/-]+$/.test(suffix)) return { ok: false };
+    // No leading or trailing slash, no double slashes
+    if (suffix.startsWith('/') || suffix.endsWith('/') || suffix.includes('//')) return { ok: false };
+    const lastSlash = suffix.lastIndexOf('/');
+    const filename = lastSlash >= 0 ? suffix.slice(lastSlash + 1) : suffix;
+    if (filename.startsWith('.')) return { ok: false };
+    const extIndex = filename.lastIndexOf('.');
+    if (extIndex <= 0 || extIndex === filename.length - 1) return { ok: false };
+    const ext = filename.slice(extIndex + 1).toLowerCase();
+    if (!ALLOWED_GENERATED_EXTENSIONS.has(ext)) return { ok: false };
+    return { ok: true, filename, ext };
+}
+
+const GENERATED_MIME_BY_EXT: Record<string, string> = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+    gif: 'image/gif',
+};
+
 export class ScreenshotsController extends BaseController {
     static logger = createLogger('ScreenshotsController');
+
+    /**
+     * Serve AI-generated images stored in R2 under `generated/<key>`.
+     *
+     * Public route, no auth. Mounted at `/api/generated/*`. Pairs with the
+     * upload code path in `worker/utils/images.ts` (`uploadImageToR2` +
+     * `getPublicUrlForR2Image`) which writes to `generated/<id>/<filename>`
+     * and emits URLs of the form `https://<CUSTOM_DOMAIN>/api/<r2Key>`.
+     *
+     * Also supports the legacy 1-segment pattern (`generated/<filename>`)
+     * that pre-dates the current upload code — the two homepage hero images
+     * referenced by `28dayreset.com` use that pattern.
+     *
+     * The route handler reads the suffix directly from the request URL
+     * rather than depending on Hono path params, so both `/:file` and
+     * `/:id/:file` registrations route to the same logic.
+     */
+    static async serveGeneratedImage(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        _context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<never>>> {
+        try {
+            const url = new URL(request.url);
+            const prefix = '/api/generated/';
+            if (!url.pathname.startsWith(prefix)) {
+                return ScreenshotsController.createErrorResponse('Not found', 404);
+            }
+            const suffix = url.pathname.slice(prefix.length);
+
+            const validation = validateGeneratedSuffix(suffix);
+            if (!validation.ok) {
+                return ScreenshotsController.createErrorResponse('Not found', 404);
+            }
+
+            const key = `generated/${suffix}`;
+            const obj = await env.TEMPLATES_BUCKET.get(key);
+            if (!obj || !obj.body) {
+                return ScreenshotsController.createErrorResponse('Image not found', 404);
+            }
+
+            const contentType =
+                obj.httpMetadata?.contentType ||
+                GENERATED_MIME_BY_EXT[validation.ext] ||
+                'application/octet-stream';
+            const headers = new Headers({
+                'Content-Type': contentType,
+                // Generated images are immutable once uploaded under a stable key,
+                // so we can cache aggressively. 1 day at the edge with revalidation
+                // matches the screenshot route's prior posture.
+                'Cache-Control': 'public, max-age=86400, immutable',
+                'X-Content-Type-Options': 'nosniff',
+            });
+
+            return new Response(obj.body, { headers }) as unknown as ControllerResponse<ApiResponse<never>>;
+        } catch (error) {
+            this.logger.error('Error serving generated image', { error });
+            return ScreenshotsController.createErrorResponse('Internal server error', 500);
+        }
+    }
+
     static async serveScreenshot(
         request: Request,
         env: Env,
