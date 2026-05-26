@@ -8,6 +8,21 @@ This document is the bootstrap for anyone (human contributor or Claude session) 
 
 ---
 
+## 0. Update — 2026-05-26 (read first)
+
+Since the 2026-05-22 anchor:
+
+- **`main` advanced**: PR [#50](https://github.com/QuicksilverSlick/dreamforge-cf/pull/50) merged as `acdfc43` — `fix(routes): restore /api/generated/* handler for AI-generated images`. Pure hotfix; does not touch agent code. M3 branch is **untouched** by it; no rebase needed for slice 2b.13. Plan a rebase before the eventual PR #49 merge.
+- **Strategic probe completed**: cloned `cloudflare/vibesdk` HEAD into a sibling dir, ran `bun install` clean (1223 packages). Confirmed:
+  - Upstream HEAD pins **identical** sandbox/containers/agents versions to ours (`@cloudflare/sandbox 0.5.6`, `@cloudflare/containers 0.0.28`, `agents ^0.2.32`).
+  - Upstream `worker/agents/core/` already has the target shape: `codingAgent.ts`, `behaviors/`, `objectives/`, `features/`, `AgentCore.ts`, `AgentComponent.ts`.
+  - The production sandbox-lifecycle bug is **decoupled** from M3 — same dep pin upstream. Sandbox fix is its own work item (M4 PR 6: bump past 0.5.6 + lifecycle refactor) and happens AFTER M3 closes.
+- **Decision: Option A — finish M3.** Fresh-start (Option B) would not fix sandbox and would force re-applying our auth/BYOP/Sentry/AI-Gateway/routing hardening. Probe dir deleted.
+
+**Next slice is 2b.13** per design doc `fe45091` (`docs/m3/ICodingBehavior-design.md`).
+
+---
+
 ## 1. What's landed in M3 commit 2b
 
 12 atomic-green slices plus a design doc, in order:
