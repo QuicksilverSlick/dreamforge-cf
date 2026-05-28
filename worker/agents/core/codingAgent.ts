@@ -52,6 +52,7 @@ import { getMimeType } from 'hono/utils/mime';
 import type { Blueprint } from '../schemas';
 import { FileOutputType } from '../schemas';
 import {
+    AgenticState,
     AgentState,
     BaseProjectState,
     CurrentDevState,
@@ -98,6 +99,8 @@ import { ConversationMessage, ConversationState } from '../inferutils/common';
 import { ImageAttachment } from '../../types/image-attachment';
 import { RateLimitExceededError } from 'shared/types/errors';
 import { ProjectObjective } from './objectives/base';
+import { PhasicCodingBehavior } from './behaviors/phasic';
+import { AgenticCodingBehavior } from './behaviors/agentic';
 import { StateMigration } from './stateMigration';
 import { readTokenCookie } from '../../utils/oauthCookie';
 import { generateId } from '../../utils/idGenerator';
@@ -275,21 +278,33 @@ export class CodeGeneratorAgent
             agentProps?.projectType ?? this.state.projectType ?? 'app';
 
         // Objective is project-type driven and does not depend on the
-        // behavior — wire it up so behaviors (when ported) can call into
-        // it without an additional bootstrap step.
+        // behavior — wire it up first so behaviors can call into it.
         this.objective = this.createObjective(projectType);
 
-        // Behavior factory — STUBBED. The `PhasicCodingBehavior` and
-        // `AgenticCodingBehavior` classes are not yet ported (items 11 /
-        // 12 of M3_COMMIT2_DEPMAP.md §8). This DO class is not wired
-        // into `worker/index.ts` yet, so the throw is a forward-looking
-        // marker, not a regression — the live runtime path continues to
-        // be `SimpleCodeGeneratorAgent` until M3 commit 4.
-        throw new Error(
-            `CodeGeneratorAgent.onStart: behavior factory not yet wired ` +
-                `(behaviorType=${behaviorType}, projectType=${projectType}). ` +
-                `Pending items 11 / 12 of M3_COMMIT2_DEPMAP.md §8.`,
-        );
+        // Behavior factory — wired in slice 2b.16 (sub-slice C).
+        // PhasicCodingBehavior and AgenticCodingBehavior structurally
+        // satisfy `ICodingBehavior<TState>`; their `build()` is still
+        // a "not yet ported" stub pending the follow-on slice that
+        // lands the phase state machine + the agentic loop. This DO
+        // class is not yet exported as the `CodeGenObject` Durable
+        // Object — `SimpleCodeGeneratorAgent` remains the live
+        // runtime path until M3 commit 4.
+        if (behaviorType === 'phasic') {
+            this.behavior = new PhasicCodingBehavior(
+                this as AgentInfrastructure<PhasicState>,
+                projectType,
+            ) as ICodingBehavior<AgentState>;
+        } else {
+            this.behavior = new AgenticCodingBehavior(
+                this as AgentInfrastructure<AgenticState>,
+                projectType,
+            ) as ICodingBehavior<AgentState>;
+        }
+
+        this.logger().info(`Constructed ${behaviorType} behavior`, {
+            behaviorType,
+            projectType,
+        });
     }
 
     onConnect(connection: Connection, ctx: ConnectionContext) {

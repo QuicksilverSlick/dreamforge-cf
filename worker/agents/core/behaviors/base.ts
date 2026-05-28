@@ -84,6 +84,7 @@ import type { FileOutputType } from '../../schemas';
 import {
     type AgenticState,
     type BaseProjectState,
+    type PhasicState,
 } from '../state';
 import type {
     AgentInitArgs,
@@ -258,7 +259,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
      * ensures details are loaded.
      */
     async initialize(
-        initArgs: AgentInitArgs,
+        initArgs: AgentInitArgs<PhasicState | AgenticState>,
         ..._args: unknown[]
     ): Promise<TState> {
         this.logger.info('Initializing behavior');
