@@ -96,7 +96,8 @@ import {
     WebSocketMessageData,
     WebSocketMessageType,
 } from '../../api/websocketTypes';
-import { PreviewType, TemplateDetails, TemplateFile } from '../../services/sandbox/sandboxTypes';
+import { PreviewType, TemplateDetails, TemplateFile, type GitHubPushRequest } from '../../services/sandbox/sandboxTypes';
+import type { GitHubExportResult } from '../../services/github/types';
 import { WebSocketMessageResponses } from '../constants';
 import { AppService } from '../../database';
 import { ConversationMessage, ConversationState } from '../inferutils/common';
@@ -438,6 +439,24 @@ export class CodeGeneratorAgent
 
     exportProject(options: ExportOptions): Promise<ExportResult> {
         return this.objective.export(options);
+    }
+
+    /**
+     * GitHub-export entry point invoked by the `githubExporter`
+     * controller (`agentStub.pushToGitHub(...)`). Bridges the controller's
+     * `GitHubPushRequest`/`GitHubExportResult` shapes onto the objective's
+     * generic `export({ kind: 'github', github })` flow. Kept as a
+     * dedicated method (rather than changing the controller to call
+     * `exportProject`) so the live `SimpleCodeGeneratorAgent` — which
+     * exposes its own `pushToGitHub` — keeps working until commit 4.
+     */
+    async pushToGitHub(options: GitHubPushRequest): Promise<GitHubExportResult> {
+        const result = await this.exportProject({ kind: 'github', github: options });
+        return {
+            success: result.success,
+            error: result.error,
+            repositoryUrl: result.url,
+        };
     }
 
     importTemplate(
