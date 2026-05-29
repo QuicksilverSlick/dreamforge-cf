@@ -26,11 +26,21 @@ Since the 2026-05-22 anchor:
 Slices 2b.13 → 2b.16 all landed. Gates verified green at HEAD `dc33191`:
 - typecheck 0 / lint 0 / test 191 passed / 1 skipped / 2 pre-existing BYOP file-level failures (baseline).
 
-**Items 10, 11, 12, 15 are now ✅ done** (codingAgent + ICodingBehavior + BaseCodingBehavior sub-slices A/B/C + Phasic/Agentic behavior factory wired). The behavior factory in `CodeGeneratorAgent.onStart` is end-to-end constructible; `simpleGeneratorAgent.ts` remains the live runtime path (commit 4 will flip it).
+**Topology landed (items 13, 14, 15 fully done; items 10, 11, 12 structurally done).** Slice 2b.13 added `ICodingBehavior<TState>` to `AgentCore.ts` and ported `codingAgent.ts`. Slices 2b.14 + 2b.15 landed `BaseCodingBehavior` sub-slices A and B (scaffolding/lifecycle/accessors + 5 concrete action methods). Slice 2b.16 landed `PhasicCodingBehavior` (411 LoC) + `AgenticCodingBehavior` (342 LoC) and wired the factory in `CodeGeneratorAgent.onStart`. `simpleGeneratorAgent.ts` remains the live runtime path (commit 4 will flip it).
 
-**OQ-P resolved (2026-05-29) — add as explicit production deps.** Evidence: our fork's `worker/services/code-fixer/utils/ast.ts:6-9` already imports `@babel/parser`, `@babel/traverse`, `@babel/generator`, `@babel/types`; they ship in the worker bundle today as **transitive** deps (not declared in `package.json`). preDeploySafetyGate uses the same four packages → zero new bundle weight. Making them explicit also fixes a latent fragility (a transitive change could currently break the worker bundle silently).
+**Deferred runtime work still inside commit 2b** (per 2b.15 + 2b.16 commit messages):
+- `BaseCodingBehavior` execution helpers — `executeCommands`, `saveExecutedCommands`, `syncPackageJsonFromSandbox`, `runStaticAnalysisCode`, `applyDeterministicCodeFixes`, screenshot capture, deep-debug machinery, file regeneration internals, the `onAfterSetupCommands` hook.
+- `PhasicCodingBehavior.build()` — phase state machine — currently throws `"not yet ported"`.
+- `AgenticCodingBehavior.build()` — agentic loop — currently throws `"not yet ported"`. Depends on a real `AgenticProjectBuilderOperation` (today only a stub from 2b.12); the real operation is likely M4 territory, so `build()` here probably stays as a documented stub for commit 2b.
+- `initializeAsync` (upstream's parallel deploy + setup commands + README gen) — depends on `executeCommands` + `generateReadme`.
 
-**Only commit-2b item remaining is item 5** (`preDeploySafetyGate.ts`, ~448 LoC). Slice it as **2b.17** — see §3 below (rewritten).
+**Two slices remain in commit 2b:**
+- **Slice 2b.17 — build() port + execution helpers** (see rewritten §3 below). The big runtime slice that takes `PhasicCodingBehavior.build()` from stub to real and lands the deferred base-class helpers it depends on.
+- **Slice 2b.18 — `preDeploySafetyGate.ts` (item 5, ~448 LoC)** + four explicit Babel deps (see rewritten §8 below). Standalone utility; consumed by `build()`.
+
+**OQ-P resolved (2026-05-29) — add as explicit production deps.** Evidence: our fork's `worker/services/code-fixer/utils/ast.ts:6-9` already imports `@babel/parser`, `@babel/traverse`, `@babel/generator`, `@babel/types`; they ship in the worker bundle today as **transitive** deps (not declared in `package.json`). preDeploySafetyGate uses the same four packages → zero new bundle weight. Making them explicit also fixes a latent fragility (a transitive change could currently break the worker bundle silently). Applies to slice 2b.18.
+
+**Sequencing note:** the next session can either (a) land 2b.18 first so 2b.17's `build()` can call the real safety gate, or (b) land 2b.17 first with an inline safety-gate stub and wire to the real impl in 2b.18. (a) keeps each slice atomic-green with clean call surfaces; (b) front-loads the bigger slice. The implementing session should choose based on the build() port's actual call shape — read the upstream `behaviors/phasic.ts:build()` first.
 
 ---
 
@@ -70,47 +80,69 @@ Plus various supporting commits (atomic-green fixes, production-reality diagnost
 | 2 | `utils/templates.ts` `createScratchTemplateDetails` | ✅ done (2b.8) |
 | 3 | `utils/packageSyncer.ts` | ✅ done (2b.1) |
 | 4 | `utils/templateCustomizer.ts` | ✅ done (2b.4) |
-| 5 | `utils/preDeploySafetyGate.ts` | 🔲 **next — slice 2b.17** (OQ-P resolved 2026-05-29) |
+| 5 | `utils/preDeploySafetyGate.ts` | 🔲 **slice 2b.18** (OQ-P resolved 2026-05-29) |
 | 6 | `operations/SimpleCodeGeneration.ts` | ✅ done (2b.5) |
 | 7 | `operations/DeepDebugger.ts` stub | ✅ done (2b.9) |
-| 8 | `operations/AgenticProjectBuilder.ts` stub | ✅ done (2b.12) |
+| 8 | `operations/AgenticProjectBuilder.ts` stub | ✅ done (2b.12) — real impl is M4 |
 | 9 | `services/implementations/DeploymentManager.ts` | ✅ done (2b.10) |
-| 10 | `behaviors/base.ts` (~1936 LoC) | ✅ done (2b.14 A + 2b.15 B + 2b.16 C) |
-| 11 | `behaviors/phasic.ts` (~728 LoC) | ✅ done (2b.16) |
-| 12 | `behaviors/agentic.ts` (~393 LoC) | ✅ done (2b.16) |
+| 10 | `behaviors/base.ts` (~1936 LoC) | 🟡 structural ✅ done (2b.14 A + 2b.15 B); execution helpers deferred to slice **2b.17** |
+| 11 | `behaviors/phasic.ts` (~728 LoC) | 🟡 structural ✅ done (2b.16); `build()` phase state machine in slice **2b.17** |
+| 12 | `behaviors/agentic.ts` (~393 LoC) | 🟡 structural ✅ done (2b.16); `build()` agentic loop → documented stub for commit 2b (real loop is M4 — see §3) |
 | 13 | `objectives/base.ts` + GitHub adapter | ✅ done (2b.11) |
 | 14 | `objectives/strategies/*` | ✅ done (2b.6) |
 | 15 | `core/codingAgent.ts` (~838 LoC) + `ICodingBehavior` interface | ✅ done (2b.13) |
 
-**Remaining for commit 2b:** item 5 only (~448 LoC). After 2b.17 lands, commit 2b is complete — M3 advances to commit 3 (wire-up: `CodeGenObject` switches from `SimpleCodeGeneratorAgent` → `CodeGeneratorAgent`) per `M3_PORT_PLAN_v2.md`.
+**Remaining for commit 2b:** slice **2b.17** (`build()` port + execution helpers — items 10/11 runtime completion, item 12 documented stub) and slice **2b.18** (item 5 — preDeploySafetyGate, ~448 LoC). After both land, commit 2b is complete — M3 advances to commit 3 (wire-up: `CodeGenObject` switches from `SimpleCodeGeneratorAgent` → `CodeGeneratorAgent`) per `M3_PORT_PLAN_v2.md`.
 
 ---
 
-## 3. Next slice: 2b.17 — preDeploySafetyGate.ts (item 5, last of commit 2b)
+## 3. Next slice: 2b.17 — `build()` port + `BaseCodingBehavior` execution helpers
 
-**Upstream source:** `cloudflare/vibesdk` `main` `worker/agents/utils/preDeploySafetyGate.ts` (14,527 bytes / ~448 LoC). Fetch via `gh api repos/cloudflare/vibesdk/contents/worker/agents/utils/preDeploySafetyGate.ts` and base64-decode `.content`.
+This is the big runtime slice. It takes `PhasicCodingBehavior.build()` from "not yet ported" stub to real phase state machine, lands the deferred `BaseCodingBehavior` execution helpers that `build()` depends on, and decides how to handle `AgenticCodingBehavior.build()` for commit 2b.
 
-### OQ-P decision recap
+### Upstream sources
 
-The four Babel packages (`@babel/parser`, `@babel/traverse`, `@babel/generator`, `@babel/types`) are **already in the worker bundle today** via transitive resolution (`worker/services/code-fixer/utils/ast.ts:6-9` imports them and they resolve at build time). Slice 2b.17 makes the transitive deps explicit — same packages, same bundle, more durable.
+| Slice target | Upstream file | Approximate scope |
+|---|---|---|
+| `BaseCodingBehavior` deferred helpers | `cloudflare/vibesdk` `worker/agents/core/behaviors/base.ts` — the portions of the file not landed in 2b.14/2b.15 | execution helpers + static analysis + screenshot + deep-debug + regeneration internals |
+| `PhasicCodingBehavior.build()` | `cloudflare/vibesdk` `worker/agents/core/behaviors/phasic.ts` `build()` method + adjacent helpers | phase state machine |
+| `AgenticCodingBehavior.build()` | `cloudflare/vibesdk` `worker/agents/core/behaviors/agentic.ts` `build()` + agentic loop | agentic loop (likely deferred — see below) |
 
-### Suggested scope (single commit)
+Fetch each via `gh api repos/cloudflare/vibesdk/contents/<path>` and base64-decode the `content`.
 
-1. **Declare deps explicitly** in `package.json` `dependencies`:
-   - `@babel/parser`, `@babel/traverse`, `@babel/generator`, `@babel/types` — pin to the versions transitively resolved today. Run `"C:/Users/PC owner/.bun/bin/bun.exe" pm ls @babel/traverse @babel/types @babel/parser @babel/generator` first to capture the exact versions to pin.
-2. **Port `worker/agents/utils/preDeploySafetyGate.ts`** from upstream verbatim where possible. Reuses fork's existing `worker/services/code-fixer/utils/ast.ts` (parseCode/generateCode) — same import that upstream uses, so no adapter layer.
-3. **Verify call sites** in landed M3 code. Likely consumers: `behaviors/phasic.ts` (`PhasicCodingBehavior.build()` is currently a stub — does it need `runPreDeploySafetyGate` before deploy?). Grep first: `Grep "runPreDeploySafetyGate|preDeploySafetyGate" worker/agents/`. If no call sites yet, the port adds the utility without wiring it; sub-slice wiring lands later when `build()` is implemented.
-4. **Test gate must stay green** at baseline (191 / 1 / 2 BYOP).
-5. **`simpleGeneratorAgent.ts` MUST NOT regress** — still the live runtime path until commit 4.
-6. One commit. Message format matches prior slices: `feat(m3): slice 2b.17 — preDeploySafetyGate + explicit Babel deps (item 5)`.
+### Suggested scope
+
+This may need to **sub-slice further** depending on actual LoC and dependency closure. The implementing session should evaluate after reading the upstream files. Tentative breakdown:
+
+1. **2b.17 (sub-slice A) — BaseCodingBehavior execution helpers.** Port the deferred helpers from upstream `behaviors/base.ts`: `executeCommands`, `saveExecutedCommands`, `syncPackageJsonFromSandbox`, `runStaticAnalysisCode`, `applyDeterministicCodeFixes`, screenshot capture, deep-debug machinery, file regeneration internals, the `onAfterSetupCommands` hook. No call-site wiring yet beyond what already exists.
+2. **2b.17 (sub-slice B) — `PhasicCodingBehavior.build()` phase state machine.** Port the upstream `build()` method using the helpers from sub-slice A. The deep-debug + regeneration helpers from sub-slice A are now consumed.
+3. **2b.17 (sub-slice C) — `AgenticCodingBehavior.build()` decision.**
+   - The upstream agentic loop calls `AgenticProjectBuilderOperation.execute()`. Our fork has only the **stub** from 2b.12 (`{transcript: '[stub] AgenticProjectBuilderOperation not yet ported'}`). A real port is M4 territory.
+   - **Recommendation:** keep `AgenticCodingBehavior.build()` as a documented stub for commit 2b (`throw new Error('Agentic mode requires real AgenticProjectBuilderOperation — see M3_PORT_PLAN_v2.md commit ?')`). Wire-up will only ever route to `PhasicCodingBehavior` until M4 ports the real operation.
+   - If the implementing session disagrees, justify in the commit message — `PhasicCodingBehavior` is the live agentic path post-commit 4 either way.
+
+If sub-slice A alone exceeds ~600 LoC, land it as its own commit (`2b.17a`) and recurse the same A/B/C boundaries for B and C.
+
+### Sequencing vs slice 2b.18 (preDeploySafetyGate)
+
+`PhasicCodingBehavior.build()` calls `runPreDeploySafetyGate`. Two options:
+
+- **(a) Land 2b.18 first** (small, standalone). Then 2b.17 sub-slice B calls the real `runPreDeploySafetyGate`. Simpler call surface, each slice atomic-green.
+- **(b) Land 2b.17 first** with an inline safety-gate stub at the call site, then 2b.18 replaces the stub. Bigger 2b.17 risk; cleaner if the build() port turns out NOT to call the safety gate after all.
+
+**Recommendation: (a).** 2b.18 is standalone, ~448 LoC, single-session. Land it first to give 2b.17 a real safety-gate call surface from the start. The implementing session should read upstream `phasic.ts:build()` first to confirm `runPreDeploySafetyGate` is actually called — if not, (b) is fine.
+
+### Discipline (applies to every sub-slice)
+
+- Test gate must stay green at baseline (191 / 1 / 2 BYOP) after each sub-slice commit.
+- `simpleGeneratorAgent.ts` MUST NOT regress — still the live runtime path until commit 4.
+- Commit message format matches prior slices: `feat(m3): slice 2b.17 — <sub-slice scope> (item 10/11 runtime)`.
 
 ### Lite-port traps to watch
 
-- Upstream imports `RealtimeCodeFixer` from `'../assistants/realtimeCodeFixer'`. Confirm fork has this file. If absent or shape-divergent → adapt-not-port.
-- Upstream imports `InferenceContext` from `'../inferutils/config.types'`. Confirm this is the same shape in the fork.
-- Per §4.5: always fetch the upstream file and inspect imports BEFORE deciding port-vs-adapt.
-
-This is one focused session. After it lands, commit 2b is **complete** and M3 advances to commit 3 (the DO wire-up).
+- Upstream `executeCommands` / `runStaticAnalysisCode` / `applyDeterministicCodeFixes` may depend on sandbox-tool types (`AgentOperationWithTools`, `ToolSession`, `ToolCallbacks`) the fork doesn't have. Per §4.5: if so, adapt with fork's `AgentOperation<I, O>` or downgrade to thin pass-through.
+- Static-analysis cache lifecycle (per 2b.15 deferred notes: `staticAnalysisCache`) — check whether the cache is per-behavior-instance or per-state. Upstream likely has the answer in `base.ts`.
+- Per §4.5: always fetch the upstream file and inspect imports + state-coupling BEFORE deciding port-vs-adapt.
 
 ---
 
@@ -207,13 +239,13 @@ Re-run `git log --oneline -10` and `git status` at the start of every meaningful
    ```
 
 4. **Read the planning docs in order:**
-   1. This doc (`M3_AGENT_HANDOFF.md`)
-   2. `docs/m3/ICodingBehavior-design.md` — the spec for slice 2b.13
+   1. This doc (`M3_AGENT_HANDOFF.md`) — focus on §0 update, §3 (slice 2b.17), §8 (slice 2b.18)
+   2. `docs/m3/ICodingBehavior-design.md` — landed in slice 2b.13; still useful context for the behavior interface surface
    3. `M3_PRODUCTION_REALITY.md` — why production is broken; smoke-test discipline
    4. `M3_COMMIT2_DEPMAP.md` §8 — dep-map shopping list
    5. (Optional) `M3_PORT_PLAN_v2.md` — the overall 9-commit M3 sequence beyond commit 2b
 
-5. **Execute slice 2b.17.** Atomic-green discipline. The §3 scope + OQ-P resolution are your spec.
+5. **Execute slice 2b.17** (`build()` port + execution helpers) per §3, or **slice 2b.18** (preDeploySafetyGate) per §8 if you're going (a) per §3's sequencing note. Atomic-green discipline. Each sub-slice of 2b.17 commits separately.
 
 6. **After commit lands and pushes, verify CI on PR #49.**
 
@@ -232,14 +264,38 @@ Re-run `git log --oneline -10` and `git status` at the start of every meaningful
 
 ---
 
-## 8. Post-2b.17 plan
+## 8. Slice 2b.18 — `preDeploySafetyGate.ts` (item 5, closes commit 2b)
 
-Slices 2b.13 → 2b.16 have landed (items 15, 10, 11, 12 done — see §1). The behavior factory in `CodeGeneratorAgent.onStart` is constructible; `PhasicCodingBehavior.build()` and `AgenticCodingBehavior.build()` remain stubs by design (phase state machine + agentic loop are commit 3+ work).
+**Upstream source:** `cloudflare/vibesdk` `main` `worker/agents/utils/preDeploySafetyGate.ts` (14,527 bytes / ~448 LoC). Fetch via `gh api repos/cloudflare/vibesdk/contents/worker/agents/utils/preDeploySafetyGate.ts` and base64-decode `.content`.
 
-**Commit 2b closes when 2b.17 lands** (item 5 — preDeploySafetyGate). After that, M3 advances to commit 3 (the DO wire-up):
+### OQ-P decision recap (resolved 2026-05-29)
 
-- **Commit 3** — flip `CodeGenObject` Durable Object class from `SimpleCodeGeneratorAgent` → `CodeGeneratorAgent`. Implement `PhasicCodingBehavior.build()` (phase state machine), `AgenticCodingBehavior.build()` (agentic loop), the WS-message routing widening, and the GitVersionControl + Vault adaptations that 2b.13 marked as transitional.
-- **Commit 4** — delete `simpleGeneratorAgent.ts`. The deprecated-required-field pattern (§4.2) gets cleaned up alongside the file deletion.
+The four Babel packages (`@babel/parser`, `@babel/traverse`, `@babel/generator`, `@babel/types`) are **already in the worker bundle today** via transitive resolution (`worker/services/code-fixer/utils/ast.ts:6-9` imports them and they resolve at build time). Slice 2b.18 makes the transitive deps explicit — same packages, same bundle, more durable. See §7 OQ-P for the full evidence.
+
+### Suggested scope (single commit)
+
+1. **Declare deps explicitly** in `package.json` `dependencies`:
+   - `@babel/parser`, `@babel/traverse`, `@babel/generator`, `@babel/types` — pin to the versions transitively resolved today. Run `"C:/Users/PC owner/.bun/bin/bun.exe" pm ls @babel/traverse @babel/types @babel/parser @babel/generator` first to capture the exact versions to pin.
+2. **Port `worker/agents/utils/preDeploySafetyGate.ts`** from upstream verbatim where possible. Reuses fork's existing `worker/services/code-fixer/utils/ast.ts` (parseCode/generateCode) — same import that upstream uses, so no adapter layer.
+3. **Verify call sites.** Grep first: `Grep "runPreDeploySafetyGate|preDeploySafetyGate" worker/agents/`. If 2b.17 already landed and wired through to a stub, replace the stub with the real `runPreDeploySafetyGate` call. If 2b.17 hasn't landed, the port adds the utility for 2b.17 to consume.
+4. **Test gate must stay green** at baseline (191 / 1 / 2 BYOP).
+5. **`simpleGeneratorAgent.ts` MUST NOT regress** — still the live runtime path until commit 4.
+6. One commit. Message format: `feat(m3): slice 2b.18 — preDeploySafetyGate + explicit Babel deps (item 5, closes commit 2b)`.
+
+### Lite-port traps to watch
+
+- Upstream imports `RealtimeCodeFixer` from `'../assistants/realtimeCodeFixer'`. Confirm fork has this file. If absent or shape-divergent → adapt-not-port.
+- Upstream imports `InferenceContext` from `'../inferutils/config.types'`. Confirm this is the same shape in the fork.
+- Per §4.5: always fetch the upstream file and inspect imports BEFORE deciding port-vs-adapt.
+
+---
+
+## 9. Post-commit-2b plan (commits 3 → 9)
+
+After slices 2b.17 + 2b.18 land, **commit 2b is complete** and M3 advances:
+
+- **Commit 3** — flip `CodeGenObject` Durable Object class from `SimpleCodeGeneratorAgent` → `CodeGeneratorAgent`. WS-message routing widening, GitVersionControl + Vault adaptations that 2b.13 marked as transitional, and any remaining wire-up surface revealed once the new agent goes live behind the binding.
+- **Commit 4** — delete `simpleGeneratorAgent.ts`. The deprecated-required-field pattern (§4.2) gets cleaned up alongside the file deletion. This is the moment the new architecture goes live in production.
 - **Commits 5–9** — per `M3_PORT_PLAN_v2.md`. Includes BYOP test unblock (task #11), the CF May-2026 substrate improvements (Sentry RPC trace propagation, compat-date bump, streamGenAiSpans), and final consolidation.
 
-The big milestone is commit 4 — the moment the new agent architecture goes live in production.
+The big milestone is commit 4. After that, the M4 work begins: sandbox local-proxy refactor (PR 6), real `AgenticProjectBuilderOperation`, etc.
