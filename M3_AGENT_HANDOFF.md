@@ -315,4 +315,35 @@ After slices 2b.17 + 2b.18 land, **commit 2b is complete** and M3 advances:
 - **Commit 4** — delete `simpleGeneratorAgent.ts`. The deprecated-required-field pattern (§4.2) gets cleaned up alongside the file deletion. This is the moment the new architecture goes live in production.
 - **Commits 5–9** — per `M3_PORT_PLAN_v2.md`. Includes BYOP test unblock (task #11), the CF May-2026 substrate improvements (Sentry RPC trace propagation, compat-date bump, streamGenAiSpans), and final consolidation.
 
+---
+
+## 10. Commit 3 — detailed plan + recon (IN PROGRESS, started 2026-05-29)
+
+**Decision recorded:** commit 3 proceeds as **DO-surface groundwork with the live binding flip HELD for explicit user sign-off** (the flip is an outward-facing production cutover). `simpleGeneratorAgent.ts` stays the live path throughout commit-3 groundwork.
+
+### Recon findings (upstream model — fetched & inspected 2026-05-29)
+
+Cache the upstream reference files locally (gitignored `.upstream-*.ts`): `gh api repos/cloudflare/vibesdk/contents/worker/agents/core/{codingAgent,websocket}.ts` and `worker/agents/core/behaviors/base.ts`.
+
+- **Current binding**: `worker/index.ts:2,17` exports `CodeGeneratorAgent = Sentry.instrumentDurableObjectWithSentry(..., SmartCodeGeneratorAgent)`. `SmartCodeGeneratorAgent extends SimpleCodeGeneratorAgent` (thin subclass, empty `builderLoop`). So the live DO is effectively SimpleCodeGeneratorAgent. The flip retargets this export to the **new** `CodeGeneratorAgent` class in `worker/agents/core/codingAgent.ts`.
+- **New `CodeGeneratorAgent`** (`codingAgent.ts:123`, `extends Agent<Env, AgentState> implements AgentInfrastructure`): already has `onStart`, `onConnect` (captures CF token cookie + sends `AGENT_CONNECTED`), `saveToDatabase`, `clearConversation`, `deployProject`, `getBehavior`, `getConversationState`, `getWebSockets`, `handleUserInput`, `broadcast`. `setState` is inherited from `Agent`. **Gaps:** `onMessage` is a no-op STUB; `onClose` is a no-op; **no `fetch`/`handleWebhook`**; missing `executeTerminalCommand`, `handleVaultLocked`, `handleVaultUnlocked`.
+- **WS routing model** (the lynchpin): upstream `websocket.ts` (340 LoC) is typed against the new `CodeGeneratorAgent` directly and calls a SLIM surface: `agent.{setState,state,getBehavior,deployProject,handleUserInput,clearConversation,handleVaultUnlocked,handleVaultLocked,getConversationState}` + `agent.getBehavior().{isCodeGenerating,generateAllFiles,deployToSandbox,captureScreenshot,cancelCurrentInference,getModelConfigsInfo,getDeepDebugSessionState}`. The fork's LIVE `websocket.ts` is typed against `SimpleCodeGeneratorAgent` and calls a different/older surface — **so the two handlers must COEXIST**; port upstream's as a separate module (e.g. don't overwrite the live one), wire only the new agent's `onMessage`/`onClose` to it, and delete the old one in commit 4.
+- **Webhooks**: upstream `codingAgent.ts` has no explicit `fetch`/`handleWebhook` (the `agents` SDK routes). The fork's `simpleGeneratorAgent.ts` DOES (`fetch` 2075, `handleWebhook` 2102). Determine during the slice whether the new agent needs explicit `fetch`/webhook or whether the SDK + worker routing covers it.
+
+### Gated dependency order (port deferred BaseCodingBehavior helpers FIRST, then WS)
+
+The WS handler port is gated on these still-deferred behavior helpers (from the 2b.17 deferral list). Port them as atomic-green slices in roughly this order, then wire the handler:
+
+1. ✅ **Slice 1 (`a3d466c`) — deep-debug subsystem**: `executeDeepDebug` + `isDeepDebugging` + `getDeepDebugSessionState` + `waitForDeepDebug` + 2 fields. DONE.
+2. 🔲 **getModelConfigsInfo** — **NOT a verbatim port.** Upstream base delegates to `modelService.getModelConfigsInfo(userId)`, but **the fork's `ModelConfigService` has no such method**. simpleGen has the logic inline (`simpleGeneratorAgent.ts:1070`) but it uses `Record<string, any>` (**banned**). Either add a properly-typed `getModelConfigsInfo` to `ModelConfigService` (preferred — matches upstream) or type simpleGen's inline version. Uses `getInferenceContext().userId` + `AGENT_CONFIG`/`AgentActionKey`.
+3. 🔲 **Screenshot subsystem** — `captureScreenshot` + `executeScreenshotCapture` + `processAndStoreScreenshot` (simpleGen ~2547). Closure: `detectBlankScreenshot` + `ImageType`/`uploadImage` (already imported in base) + `ScreenshotSecurity` (`worker/utils/screenshot-security.ts`, exists) + R2 storage. Larger slice.
+4. 🔲 **Agent vault methods** — `handleVaultLocked` / `handleVaultUnlocked` (+ maybe `executeTerminalCommand`, or leave terminal disabled as upstream comments it out) on `codingAgent.ts`. Check upstream `codingAgent.ts` + fork Vault subsystem. 2b.13 flagged Vault as transitional.
+5. 🔲 **Port upstream `websocket.ts` as a coexisting module + wire new agent `onMessage`/`onClose`**. Adapt imports: `CredentialsPayload` (config.types), `checkUsageAndBalance` (services/rate-limit), the slim agent surface. Needs `state.shouldBeGenerating` (verify on AgentState). This is the "WS-routing widening" §9 names.
+6. 🔲 **`fetch`/`handleWebhook`** on the new agent if needed (runtime-error webhook path).
+7. 🔲 Other deferred base helpers the new live agent reveals it needs: `saveExecutedCommands`, `syncPackageJsonFromSandbox`, `regenerateFile`/`regenerateFileByPath`/`generateFiles`/`updateSlideManifest`, `listFiles`/`readFiles`, `updateProjectName`/`updateBlueprint`, `deployPreview`, `generateReadme`, `initializeAsync`, `updateBootstrapScript`, base `getLogs`.
+8. 🔲 GitVersionControl + Vault adaptations 2b.13 marked transitional.
+9. 🛑 **HELD — flip `worker/index.ts` binding** `SmartCodeGeneratorAgent` → new `CodeGeneratorAgent`. Outward-facing production cutover; **requires explicit user sign-off** before pushing. Rebase onto `main` (`6756f7b`, 1 clean non-conflicting commit — touches `imagesRoutes.ts`/`screenshots/controller.ts`, NOT agent code) before/around this.
+
+**Discipline reminder:** every helper is lift-vs-port-vs-adapt per §4.5 — the fork diverges from upstream (sandbox-service static analysis, no `InMemoryAnalyzer`, 3-arg async `fixProjectIssues`, single-arg `saveGeneratedFiles`, missing `ModelConfigService.getModelConfigsInfo`, `any` ban). Always read both the upstream `base.ts`/`codingAgent.ts` version AND the simpleGen fork-proven version before each slice.
+
 The big milestone is commit 4. After that, the M4 work begins: sandbox local-proxy refactor (PR 6), real `AgenticProjectBuilderOperation`, etc.
