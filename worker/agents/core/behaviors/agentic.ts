@@ -4,14 +4,16 @@
  * `BaseCodingBehavior` (dep-map item 12).
  *
  * Ported from upstream `cloudflare/vibesdk` `worker/agents/core/
- * behaviors/agentic.ts` (393 LoC). M3 slice 2b.16 (sub-slice C) lands
- * the STRUCTURAL port — the abstract `build()` is a thin
- * "not-yet-ported" stub. The full agentic loop (`executeGeneration`
- * + `handleMessageCompletion` + `compactifyIfNeeded`) depends on the
- * fork's `AgenticProjectBuilderOperation` being a real tool-driven
- * implementation; that operation is a stub today (slice 2b.12) and
- * its real port is gated on `AgentOperationWithTools` + the toolkit
- * (M4 territory).
+ * behaviors/agentic.ts` (393 LoC). M3 slice 2b.16 landed the structural
+ * shell; slice 2b.17c made the deliberate decision to keep `build()` a
+ * documented stub for the entirety of commit 2b. The full agentic loop
+ * (`executeGeneration` + `handleMessageCompletion` +
+ * `compactifyIfNeeded`) depends on the fork's
+ * `AgenticProjectBuilderOperation` being a real tool-driven
+ * implementation; that operation is a no-op stub today (slice 2b.12)
+ * and its real port is gated on `AgentOperationWithTools` + the toolkit
+ * (M4 territory). Porting the loop against the stub would silently
+ * generate nothing, so the explicit throw is preferred.
  *
  * **What this slice delivers:**
  *   - `initialize()` — synthesize project name from the user query,
@@ -25,17 +27,18 @@
  *     `agent: CodingAgentInterface` wrapping this behavior.
  *   - `getLogs(reset?)` — `ICodingAgent` satisfaction; routes through
  *     `getSandboxServiceClient().getLogs(...)`.
- *   - `build()` — STUB; throws with a clear "not yet ported" marker.
- *     The factory in `codingAgent.onStart` can construct this class,
- *     but a runtime attempt to generate code surfaces the error.
+ *   - `build()` — DOCUMENTED STUB (slice 2b.17c decision); throws a
+ *     clear, actionable error. The factory in `codingAgent.onStart`
+ *     can construct this class, but generation routes through
+ *     `PhasicCodingBehavior` until M4.
  *
  * **Wiring state.** Slice 2b.16 wires the behavior factory in
  * `codingAgent.onStart` to construct this class for `behaviorType ===
- * 'agentic'`. The throw in `build()` means the new
- * `CodeGeneratorAgent` cannot complete agentic generation yet; the
- * live runtime path remains `SimpleCodeGeneratorAgent` until M3
- * commit 4 (and full agentic flow lands once
- * `AgenticProjectBuilderOperation` is real).
+ * 'agentic'`. Until M4 ports the real `AgenticProjectBuilderOperation`,
+ * the factory only ever routes to `PhasicCodingBehavior` (the live
+ * agentic path post-commit-4), so the `build()` throw is never hit in
+ * practice; the live runtime path remains `SimpleCodeGeneratorAgent`
+ * until M3 commit 4.
  *
  * **Adaptations vs upstream:**
  *   - Fork's `Blueprint` schema is strict and has many required
@@ -316,27 +319,34 @@ export class AgenticCodingBehavior
     // ==========================================
 
     /**
-     * The agentic LLM-driven generation loop. STUB until the follow-
-     * on slice lands `executeGeneration` + the tool-call
-     * conversation sync + `compactifyIfNeeded`. The real flow depends
-     * on `AgenticProjectBuilderOperation` being a real tool-driven
-     * operation; the fork's stub (slice 2b.12) returns a no-op
-     * pending M4 (`AgentOperationWithTools` + toolkit).
+     * The agentic LLM-driven generation loop. DOCUMENTED STUB for the
+     * entirety of M3 commit 2b — this is the slice 2b.17c decision.
      *
-     * Throwing here is intentional: the abstract `build()` from
-     * `BaseCodingBehavior` is satisfied, the behavior factory in
-     * `codingAgent.onStart` can construct this class, but a runtime
-     * attempt surfaces a clear "not yet wired" message.
+     * The real loop (`executeGeneration` + tool-call conversation sync
+     * + `compactifyIfNeeded`) depends on `AgenticProjectBuilderOperation`
+     * being a real tool-driven operation. The fork has only the no-op
+     * stub from slice 2b.12, and a real port requires
+     * `AgentOperationWithTools` + `tools/toolkit/*`, which is M4
+     * territory. Porting an agentic `build()` against the stub operation
+     * would produce a loop that silently generates nothing, which is
+     * worse than an explicit throw.
+     *
+     * Until M4 lands the real operation, the behavior factory in
+     * `codingAgent.onStart` only ever routes to `PhasicCodingBehavior`
+     * (the live agentic path post-commit-4), so this throw is never hit
+     * in practice. It exists so the abstract `build()` contract is
+     * satisfied and any premature `behaviorType === 'agentic'` routing
+     * surfaces a clear, actionable error rather than a silent no-op.
      */
     async build(): Promise<void> {
         throw new Error(
-            'AgenticCodingBehavior.build: agentic loop not yet ported ' +
-                '(slice 2b.16 lands the structural shell; the executeGeneration ' +
-                'loop + handleMessageCompletion + compactifyIfNeeded land in a ' +
-                'follow-on slice once AgenticProjectBuilderOperation is real — ' +
-                'depends on AgentOperationWithTools + tools/toolkit/* which is M4 ' +
-                'territory). Live runtime path remains SimpleCodeGeneratorAgent ' +
-                'until M3 commit 4.',
+            'AgenticCodingBehavior.build: agentic loop intentionally deferred ' +
+                'past M3 commit 2b (slice 2b.17c decision). The executeGeneration ' +
+                'loop + handleMessageCompletion + compactifyIfNeeded require a real ' +
+                'AgenticProjectBuilderOperation (AgentOperationWithTools + ' +
+                'tools/toolkit/*), which is M4 territory; the fork has only the ' +
+                'slice 2b.12 no-op stub. Generation routes through ' +
+                'PhasicCodingBehavior until M4 ports the real operation.',
         );
     }
 }
