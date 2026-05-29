@@ -116,6 +116,8 @@ import { FastCodeFixerOperation } from '../../operations/FastCodeFixer';
 import { SimpleCodeGenerationOperation } from '../../operations/SimpleCodeGeneration';
 import { fixProjectIssues, type FileFetcher } from '../../../services/code-fixer';
 import { looksLikeCommand } from '../../utils/common';
+import { ModelConfigService } from '../../../database/services/ModelConfigService';
+import { AGENT_CONFIG } from '../../inferutils/config';
 import { ImageType, uploadImage } from '../../../utils/images';
 import type { ImageAttachment, ProcessedImageAttachment } from '../../../types/image-attachment';
 import type { OperationOptions } from '../../operations/common';
@@ -129,6 +131,7 @@ import type {
     ICodingBehavior,
 } from '../AgentCore';
 import type {
+    ModelConfigsInfo,
     WebSocketMessageData,
     WebSocketMessageType,
 } from '../../../api/websocketTypes';
@@ -1330,6 +1333,66 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 this.deepDebugPromise = null;
             }
         }
+    }
+
+    // ==========================================
+    // Model configuration surface
+    // ==========================================
+
+    /**
+     * Build the model-configuration info surfaced to the frontend
+     * (defaults merged with per-user overrides). Lifted from
+     * `SimpleCodeGeneratorAgent` and properly typed against
+     * `ModelConfigsInfo` — the fork's `ModelConfigService` has no
+     * `getModelConfigsInfo` method (upstream `behaviors/base.ts`
+     * delegates to one that doesn't exist here), and simpleGen's
+     * inline version used `Record<string, any>` (banned).
+     */
+    async getModelConfigsInfo(): Promise<ModelConfigsInfo> {
+        const userId = this.getInferenceContext().userId;
+        if (!userId) {
+            throw new Error('No user session available for model configurations');
+        }
+
+        const modelConfigService = new ModelConfigService(this.env);
+        const userConfigsRecord = await modelConfigService.getUserModelConfigs(userId);
+
+        const agents: ModelConfigsInfo['agents'] = Object.entries(AGENT_CONFIG).map(
+            ([key, config]) => ({
+                key,
+                name: config.name,
+                description: config.description,
+            }),
+        );
+
+        const userConfigs: ModelConfigsInfo['userConfigs'] = {};
+        const defaultConfigs: ModelConfigsInfo['defaultConfigs'] = {};
+
+        for (const [actionKey, mergedConfig] of Object.entries(userConfigsRecord)) {
+            if (mergedConfig.isUserOverride) {
+                userConfigs[actionKey] = {
+                    name: mergedConfig.name,
+                    max_tokens: mergedConfig.max_tokens,
+                    temperature: mergedConfig.temperature,
+                    reasoning_effort: mergedConfig.reasoning_effort ?? undefined,
+                    fallbackModel: mergedConfig.fallbackModel,
+                    isUserOverride: true,
+                };
+            }
+
+            const defaultConfig = AGENT_CONFIG[actionKey as AgentActionKey];
+            if (defaultConfig) {
+                defaultConfigs[actionKey] = {
+                    name: defaultConfig.name,
+                    max_tokens: defaultConfig.max_tokens,
+                    temperature: defaultConfig.temperature,
+                    reasoning_effort: defaultConfig.reasoning_effort ?? undefined,
+                    fallbackModel: defaultConfig.fallbackModel,
+                };
+            }
+        }
+
+        return { agents, userConfigs, defaultConfigs };
     }
 
     // ==========================================
