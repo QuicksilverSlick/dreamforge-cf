@@ -23,6 +23,7 @@
 
 import type { StructuredLogger } from '../../logger';
 import type {
+    ModelConfigsInfo,
     WebSocketMessageData,
     WebSocketMessageType,
 } from '../../api/websocketTypes';
@@ -264,6 +265,36 @@ export interface ICodingBehavior<
      * aggressively.
      */
     generateAllFiles(): Promise<void>;
+
+    // ===== WebSocket-handler surface (called via agent.getBehavior()) =====
+
+    /**
+     * Called from the WS handler's STOP_GENERATION path. Aborts the
+     * in-flight inference operation; returns true if one was cancelled.
+     */
+    cancelCurrentInference(): boolean;
+
+    /**
+     * Called from the WS handler's CAPTURE_SCREENSHOT path. Captures a
+     * screenshot of `url` via the Browser Rendering API and returns a
+     * signed URL.
+     */
+    captureScreenshot(
+        url: string,
+        viewport?: { width: number; height: number },
+    ): Promise<string>;
+
+    /**
+     * Called from the WS handler's GET_MODEL_CONFIGS path. Returns the
+     * merged default + per-user model configuration surface.
+     */
+    getModelConfigsInfo(): Promise<ModelConfigsInfo>;
+
+    /**
+     * Called from the WS handler's GET_CONVERSATION_STATE path. Returns
+     * the active deep-debug session id, or null when none is running.
+     */
+    getDeepDebugSessionState(): { conversationId: string } | null;
 }
 
 // ---------------------------------------------------------------------------

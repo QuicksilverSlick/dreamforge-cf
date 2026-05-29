@@ -89,6 +89,10 @@ import {
     sendToConnection,
 } from './websocket';
 import {
+    handleWebSocketMessage,
+    handleWebSocketClose,
+} from './codingAgentWebsocket';
+import {
     WebSocketMessageData,
     WebSocketMessageType,
 } from '../../api/websocketTypes';
@@ -652,27 +656,18 @@ export class CodeGeneratorAgent
     // ==========================================
 
     /**
-     * WebSocket message handler — STUB. The shared `handleWebSocketMessage`
-     * (websocket.ts:10) is typed against `SimpleCodeGeneratorAgent`;
-     * widening it to accept `CodeGeneratorAgent` happens once behaviors
-     * own the message routing. Until then this class isn't wired as the
-     * `CodeGenObject` DO, so the stub is unreachable in production.
+     * WebSocket message handler. Delegates to the centralized handler in
+     * `codingAgentWebsocket.ts` (ported from upstream `websocket.ts`),
+     * which routes each message type to the behavior + agent surface.
+     * Coexists with the legacy `SimpleCodeGeneratorAgent` handler
+     * (`./websocket.ts`) until M3 commit 4 retires simpleGen.
      */
-    async onMessage(_connection: Connection, _message: string): Promise<void> {
-        this.logger().warn(
-            'CodeGeneratorAgent.onMessage: WS routing not yet wired in this class — ' +
-                'live path remains SimpleCodeGeneratorAgent until M3 commit 4.',
-        );
-        this.broadcastError(
-            'WebSocket routing not yet wired on the new agent class',
-            new Error('Pending behavior port (items 11 / 12) and commit 4 cutover'),
-        );
+    async onMessage(connection: Connection, message: string): Promise<void> {
+        await handleWebSocketMessage(this, connection, message);
     }
 
-    async onClose(_connection: Connection): Promise<void> {
-        // No-op; the `partyserver` runtime cleans up the connection.
-        // The legacy `handleWebSocketClose` was a no-op too — see
-        // `websocket.ts:260`.
+    async onClose(connection: Connection): Promise<void> {
+        handleWebSocketClose(connection);
     }
 
     /**
