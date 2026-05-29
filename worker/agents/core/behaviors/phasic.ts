@@ -57,9 +57,10 @@
  *     fork's signature is single-arg. The commit message + hash-only
  *     flag are lost (git is stubbed on the fork anyway; cleanup lands
  *     when the wider `IFileManager` is rebased).
- *   - `runPreDeploySafetyGate` (item 5) is not in the fork; the
- *     `implementPhase` path that calls it is in the deferred
- *     state-machine block.
+ *   - `runPreDeploySafetyGate` (item 5) landed in slice 2b.18 at
+ *     `worker/agents/utils/preDeploySafetyGate.ts`; the
+ *     `implementPhase` path that calls it is still in the deferred
+ *     state-machine block (slice 2b.17).
  *   - `initializeAsync()` is omitted from this slice — depends on
  *     `executeCommands` + `generateReadme` (deferred).
  */
