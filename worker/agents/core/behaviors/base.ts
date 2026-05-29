@@ -92,12 +92,14 @@ import type {
     AgentSummary,
     AllIssues,
     BehaviorType,
+    DeepDebugResult,
     DeploymentTarget,
     ProjectType,
 } from '../types';
 import { WebSocketMessageResponses } from '../../constants';
 import { ProjectSetupAssistant } from '../../assistants/projectsetup';
-import { UserConversationProcessor } from '../../operations/UserConversationProcessor';
+import { UserConversationProcessor, type RenderToolCall } from '../../operations/UserConversationProcessor';
+import { DeepDebuggerOperation, type DeepDebuggerInputs } from '../../operations/DeepDebugger';
 import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 import { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import { getSandboxService } from '../../../services/sandbox/factory';
@@ -170,6 +172,15 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
     protected generationPromise: Promise<void> | null = null;
     protected currentAbortController?: AbortController;
+
+    /**
+     * In-flight deep-debug session promise + its conversation id. Null
+     * when no deep-debug session is running. The conversation id is set
+     * by the `deep_debug` conversation tool; `executeDeepDebug` only
+     * reads/clears it.
+     */
+    protected deepDebugPromise: Promise<DeepDebugResult> | null = null;
+    protected deepDebugConversationId: string | null = null;
 
     private sandboxReadyPromise: Promise<void>;
     private resolveSandboxReady!: () => void;
@@ -1233,6 +1244,91 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             this.logger.info(`Deleted ${filePaths.length} files: ${filePaths.join(', ')}`);
         } catch (error) {
             this.logger.error('Error deleting files:', error);
+        }
+    }
+
+    // ==========================================
+    // Deep-debug session
+    // ==========================================
+
+    /**
+     * Run a deep-debug session over the project, optionally scoped to
+     * `focusPaths`. Drives the (M3-stub) `DeepDebuggerOperation`,
+     * persists the resulting transcript for the next session, and
+     * tracks the in-flight promise so `isDeepDebugging` /
+     * `waitForDeepDebug` can observe it. Ported from upstream
+     * `behaviors/base.ts`.
+     */
+    async executeDeepDebug(
+        issue: string,
+        toolRenderer: RenderToolCall,
+        streamCb: (chunk: string) => void,
+        focusPaths?: string[],
+    ): Promise<DeepDebugResult> {
+        const debugPromise = (async (): Promise<DeepDebugResult> => {
+            try {
+                const previousTranscript = this.state.lastDeepDebugTranscript ?? undefined;
+                const operationOptions = this.getOperationOptions();
+                const filesIndex = operationOptions.context.allFiles.filter(
+                    (f) => !focusPaths?.length || focusPaths.some((p) => f.filePath.includes(p)),
+                );
+
+                const runtimeErrors = await this.fetchRuntimeErrors(false);
+
+                const inputs: DeepDebuggerInputs = {
+                    issue,
+                    previousTranscript,
+                    filesIndex,
+                    runtimeErrors,
+                    streamCb,
+                    toolRenderer,
+                };
+
+                const operation = new DeepDebuggerOperation();
+                const result = await operation.execute(inputs, operationOptions);
+                const transcript = result.transcript;
+
+                this.setState({
+                    ...this.state,
+                    lastDeepDebugTranscript: transcript,
+                });
+
+                return { success: true, transcript };
+            } catch (e) {
+                this.logger.error('Deep debugger failed', e);
+                return { success: false, error: `Deep debugger failed: ${String(e)}` };
+            } finally {
+                this.deepDebugPromise = null;
+                this.deepDebugConversationId = null;
+            }
+        })();
+
+        this.deepDebugPromise = debugPromise;
+
+        return await debugPromise;
+    }
+
+    isDeepDebugging(): boolean {
+        return this.deepDebugPromise !== null;
+    }
+
+    getDeepDebugSessionState(): { conversationId: string } | null {
+        if (this.deepDebugConversationId && this.deepDebugPromise) {
+            return { conversationId: this.deepDebugConversationId };
+        }
+        return null;
+    }
+
+    async waitForDeepDebug(): Promise<void> {
+        if (this.deepDebugPromise) {
+            try {
+                await this.deepDebugPromise;
+                this.logger.info('Deep debug session completed successfully');
+            } catch (error) {
+                this.logger.error('Error during deep debug session:', error);
+            } finally {
+                this.deepDebugPromise = null;
+            }
         }
     }
 
