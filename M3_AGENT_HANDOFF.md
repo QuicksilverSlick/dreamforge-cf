@@ -2,7 +2,7 @@
 
 **Anchor date:** 2026-05-22
 **Branch:** `chore/phase-e-m3-single-agent-collapse` (draft PR [#49](https://github.com/QuicksilverSlick/dreamforge-cf/pull/49))
-**Status:** 14 commits ahead of `main`, CI all-green, test gate at **191 passed / 1 skipped / 2 pre-existing BYOP file-level failures** throughout
+**Status:** commit 2b **COMPLETE** at HEAD `9be5cc0` (see §0 "commit 2b COMPLETE" update); test gate at **191 passed / 1 skipped / 2 pre-existing BYOP file-level failures** throughout. Next: commit 3 (flip `CodeGenObject` binding). Rebase onto `main` before the commit-3 work.
 
 This document is the bootstrap for anyone (human contributor or Claude session) picking up M3 commit 2b work. It covers what's landed, what remains, and the foundational discipline that's been learned. **Always run `git log --oneline -10` first** — the doc may be stale by the time you read it; the repo is the source of truth.
 
@@ -42,6 +42,23 @@ Slices 2b.13 → 2b.16 all landed. Gates verified green at HEAD `dc33191`:
 
 **Sequencing note:** the next session can either (a) land 2b.18 first so 2b.17's `build()` can call the real safety gate, or (b) land 2b.17 first with an inline safety-gate stub and wire to the real impl in 2b.18. (a) keeps each slice atomic-green with clean call surfaces; (b) front-loads the bigger slice. The implementing session should choose based on the build() port's actual call shape — read the upstream `behaviors/phasic.ts:build()` first.
 
+### Update — 2026-05-29 (continued) — **commit 2b COMPLETE**
+
+Slices 2b.18 + 2b.17 (a/b/c) all landed via sequencing option (a). Gates verified green at HEAD `9be5cc0`: typecheck 0 / lint 0 / test 191 passed / 1 skipped / 2 pre-existing BYOP file-level failures (baseline held after every commit).
+
+Commits since `0093fa1`:
+- `c49c4cc` **2b.18** — `worker/agents/utils/preDeploySafetyGate.ts` (448 LoC, verbatim port — all five fork import targets matched upstream shapes, no adapter needed) + the four Babel packages declared as explicit prod deps, **pinned to exact resolved versions** (`@babel/parser` 7.28.4, `@babel/traverse` 7.28.4, `@babel/generator` 7.28.3, `@babel/types` 7.28.4). Note: `^`-ranges drift to 7.29.x and change the worker bundle — exact pins are required to honor OQ-P's "zero bundle weight" intent.
+- `5c657ba` chore — untrack the `.upstream-*.ts` port-reference scratch files (accidentally staged into 2b.17a via `git add -A`) + gitignore the pattern.
+- `98cf804` **2b.17a** — the five `BaseCodingBehavior` execution helpers on the `build()` critical path: `runStaticAnalysisCode`, `applyDeterministicCodeFixes`, `fetchAllIssues`, `executeCommands` (protected), `deleteFiles`. **Lifted from `simpleGeneratorAgent.ts`, not upstream `behaviors/base.ts`** — the upstream versions depend on a `deploymentManager` member, a `staticAnalysisCache` field, the **missing `InMemoryAnalyzer`**, and a 2-arg synchronous `fixProjectIssues`. The fork's are sandbox-service-backed with 3-arg async `fixProjectIssues(files, issues, fileFetcher)`.
+- `73fa23c` **2b.17b** — `PhasicCodingBehavior.build()` flipped from stub to the real upstream phase state machine (`launchStateMachine` + 4 `execute*` + `generateNextPhase` + `implementPhase` + `applyFastSmartCodeFixes` + `createNewIncompletePhase`/`markPhaseComplete`). Runs `runPreDeploySafetyGate` over each phase's files before deploy.
+- `9be5cc0` **2b.17c** — `AgenticCodingBehavior.build()` formalized as a documented stub for all of commit 2b (real `AgenticProjectBuilderOperation` is M4; factory only ever routes to phasic until then).
+
+**Read-build()-first paid off (key learning for the next session).** Reading upstream `phasic.ts:build()` before porting revealed the *minimal* base-helper closure is only FIVE methods. The other ~25 deferred `base.ts` helpers (screenshots, deep-debug, `generateFiles`, regeneration internals, `saveExecutedCommands`, `syncPackageJsonFromSandbox`, `getModelConfigsInfo`, `generateReadme`, `deployPreview`, `initializeAsync`, …) serve **WS handlers that still route through the live `simpleGeneratorAgent` until commit 3/4** — they are NOT on the phasic `build()` path, so deferring them kept 2b.17 tight. Port them as commit-3 reveals what the live `CodeGeneratorAgent` actually needs.
+
+**Adaptation decisions captured in commit messages** (read them — they document the fork-vs-upstream divergences for each method): fork `PhaseGenerationInputs` has no `isFinal`; `getInferenceContext().enableRealtimeCodeFix`/`enableFastSmartCodeFix`; single-arg `saveGeneratedFiles`; 4-arg `deployToSandbox`; `getAllFiles()` not `getAllRelevantFiles()`; `executeFinalizing` ported verbatim preserving upstream's (quirky-but-identical) `setMVPGenerated()` guard.
+
+**Next: commit 3** — flip `CodeGenObject` DO class from `SimpleCodeGeneratorAgent` → `CodeGeneratorAgent` (see §9). This is where the deferred base helpers + WS-routing widening get revealed. Rebase onto `main` first (PR [#50](https://github.com/QuicksilverSlick/dreamforge-cf/pull/50) `acdfc43` is in `main`; the branch hasn't been rebased yet).
+
 ---
 
 ## 1. What's landed in M3 commit 2b
@@ -80,19 +97,19 @@ Plus various supporting commits (atomic-green fixes, production-reality diagnost
 | 2 | `utils/templates.ts` `createScratchTemplateDetails` | ✅ done (2b.8) |
 | 3 | `utils/packageSyncer.ts` | ✅ done (2b.1) |
 | 4 | `utils/templateCustomizer.ts` | ✅ done (2b.4) |
-| 5 | `utils/preDeploySafetyGate.ts` | 🔲 **slice 2b.18** (OQ-P resolved 2026-05-29) |
+| 5 | `utils/preDeploySafetyGate.ts` | ✅ done (2b.18 `c49c4cc`) |
 | 6 | `operations/SimpleCodeGeneration.ts` | ✅ done (2b.5) |
 | 7 | `operations/DeepDebugger.ts` stub | ✅ done (2b.9) |
 | 8 | `operations/AgenticProjectBuilder.ts` stub | ✅ done (2b.12) — real impl is M4 |
 | 9 | `services/implementations/DeploymentManager.ts` | ✅ done (2b.10) |
-| 10 | `behaviors/base.ts` (~1936 LoC) | 🟡 structural ✅ done (2b.14 A + 2b.15 B); execution helpers deferred to slice **2b.17** |
-| 11 | `behaviors/phasic.ts` (~728 LoC) | 🟡 structural ✅ done (2b.16); `build()` phase state machine in slice **2b.17** |
-| 12 | `behaviors/agentic.ts` (~393 LoC) | 🟡 structural ✅ done (2b.16); `build()` agentic loop → documented stub for commit 2b (real loop is M4 — see §3) |
+| 10 | `behaviors/base.ts` (~1936 LoC) | ✅ build()-critical done (2b.14 A + 2b.15 B + 2b.17a `98cf804`); ~25 non-build()-path helpers (screenshots, deep-debug, generateFiles, regeneration, etc.) deferred to **commit 3** as the live `CodeGeneratorAgent` reveals what it needs |
+| 11 | `behaviors/phasic.ts` (~728 LoC) | ✅ done — `build()` phase state machine landed (2b.16 shell + 2b.17b `73fa23c`) |
+| 12 | `behaviors/agentic.ts` (~393 LoC) | ✅ done — `build()` is a documented stub for commit 2b (2b.16 shell + 2b.17c `9be5cc0`); real agentic loop is M4 |
 | 13 | `objectives/base.ts` + GitHub adapter | ✅ done (2b.11) |
 | 14 | `objectives/strategies/*` | ✅ done (2b.6) |
 | 15 | `core/codingAgent.ts` (~838 LoC) + `ICodingBehavior` interface | ✅ done (2b.13) |
 
-**Remaining for commit 2b:** slice **2b.17** (`build()` port + execution helpers — items 10/11 runtime completion, item 12 documented stub) and slice **2b.18** (item 5 — preDeploySafetyGate, ~448 LoC). After both land, commit 2b is complete — M3 advances to commit 3 (wire-up: `CodeGenObject` switches from `SimpleCodeGeneratorAgent` → `CodeGeneratorAgent`) per `M3_PORT_PLAN_v2.md`.
+**Commit 2b is COMPLETE** (as of HEAD `9be5cc0`, 2026-05-29). All §8 dep-map items are landed: 2b.17 (a/b/c) and 2b.18 closed out items 5, 10 (build()-critical), 11, 12. M3 now advances to **commit 3** (wire-up: `CodeGenObject` switches from `SimpleCodeGeneratorAgent` → `CodeGeneratorAgent`) per `M3_PORT_PLAN_v2.md` and §9 below. See the "commit 2b COMPLETE" update under §0 for the full commit list, adaptation decisions, and the deferred non-build()-path base helpers.
 
 ---
 
