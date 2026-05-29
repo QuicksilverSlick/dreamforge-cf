@@ -77,6 +77,7 @@ import type {
 import type {
     PreviewType,
     RuntimeError,
+    StaticAnalysisResponse,
     TemplateDetails,
     TemplateFile,
 } from '../../../services/sandbox/sandboxTypes';
@@ -89,6 +90,7 @@ import {
 import type {
     AgentInitArgs,
     AgentSummary,
+    AllIssues,
     BehaviorType,
     DeploymentTarget,
     ProjectType,
@@ -110,6 +112,8 @@ import type {
 } from '../../inferutils/config.types';
 import { FastCodeFixerOperation } from '../../operations/FastCodeFixer';
 import { SimpleCodeGenerationOperation } from '../../operations/SimpleCodeGeneration';
+import { fixProjectIssues, type FileFetcher } from '../../../services/code-fixer';
+import { looksLikeCommand } from '../../utils/common';
 import { ImageType, uploadImage } from '../../../utils/images';
 import type { ImageAttachment, ProcessedImageAttachment } from '../../../types/image-attachment';
 import type { OperationOptions } from '../../operations/common';
@@ -857,6 +861,378 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                     rawOutput: message,
                 },
             ];
+        }
+    }
+
+    // ==========================================
+    // Static analysis + issue aggregation
+    // ==========================================
+
+    /**
+     * Run static analysis (lint + typecheck) against the generated
+     * files via the sandbox service. Lifted from
+     * `SimpleCodeGeneratorAgent` (the fork-proven, sandbox-backed path)
+     * rather than upstream `behaviors/base.ts`, which routes through an
+     * `InMemoryAnalyzer` the fork does not have. Returns an empty
+     * (`success: false`) result when no sandbox instance is available
+     * or the analysis throws.
+     */
+    async runStaticAnalysisCode(): Promise<StaticAnalysisResponse> {
+        const { sandboxInstanceId } = this.state;
+
+        if (!sandboxInstanceId) {
+            this.logger.warn('No sandbox instance ID available to lint code.');
+            return { success: false, lint: { issues: [] }, typecheck: { issues: [] } };
+        }
+
+        this.logger.info(`Linting code in sandbox instance ${sandboxInstanceId}`);
+
+        const files = this.fileManager.getGeneratedFilePaths();
+
+        try {
+            const analysisResponse = await this.getSandboxServiceClient().runStaticAnalysisCode(
+                sandboxInstanceId,
+                files,
+            );
+
+            if (!analysisResponse || analysisResponse.error) {
+                const errorMsg = `Code linting failed: ${analysisResponse?.error ?? 'Unknown error'}, full response: ${JSON.stringify(analysisResponse)}`;
+                this.logger.error(errorMsg);
+                this.broadcast(WebSocketMessageResponses.ERROR, { error: errorMsg, analysisResponse });
+                throw new Error(errorMsg);
+            }
+
+            const { lint, typecheck } = analysisResponse;
+            const { issues: lintIssues, summary: lintSummary } = lint;
+
+            this.logger.info(
+                `Linting found ${lintIssues.length} issues: ` +
+                    `${lintSummary?.errorCount ?? 0} errors, ` +
+                    `${lintSummary?.warningCount ?? 0} warnings, ` +
+                    `${lintSummary?.infoCount ?? 0} info`,
+            );
+
+            const { issues: typeCheckIssues, summary: typeCheckSummary } = typecheck;
+
+            this.logger.info(
+                `Typecheck found ${typeCheckIssues.length} issues: ` +
+                    `${typeCheckSummary?.errorCount ?? 0} errors, ` +
+                    `${typeCheckSummary?.warningCount ?? 0} warnings, ` +
+                    `${typeCheckSummary?.infoCount ?? 0} info`,
+            );
+
+            this.broadcast(WebSocketMessageResponses.STATIC_ANALYSIS_RESULTS, {
+                lint: { issues: lintIssues, summary: lintSummary },
+                typecheck: { issues: typeCheckIssues, summary: typeCheckSummary },
+            });
+
+            return analysisResponse;
+        } catch (error) {
+            this.logger.error('Error linting code:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.broadcast(WebSocketMessageResponses.ERROR, { error: `Failed to lint code: ${errorMessage}` });
+            return { success: false, lint: { issues: [] }, typecheck: { issues: [] } };
+        }
+    }
+
+    /**
+     * Apply deterministic code fixes for common TypeScript errors via
+     * the fork's `fixProjectIssues` (3-arg, async, with a sandbox file
+     * fetcher). Lifted from `SimpleCodeGeneratorAgent`; upstream's
+     * `behaviors/base.ts` calls a 2-arg synchronous `fixProjectIssues`
+     * shape that does not exist in the fork. Unfixable `TS2307` issues
+     * are translated into `bun install` commands so missing external
+     * modules get pulled in.
+     */
+    protected async applyDeterministicCodeFixes(): Promise<StaticAnalysisResponse | undefined> {
+        try {
+            const staticAnalysis = await this.runStaticAnalysisCode();
+            if (staticAnalysis.typecheck.issues.length === 0) {
+                this.logger.info('No typecheck issues found, skipping deterministic fixes');
+                return staticAnalysis;
+            }
+            const typeCheckIssues = staticAnalysis.typecheck.issues;
+            this.broadcast(WebSocketMessageResponses.DETERMINISTIC_CODE_FIX_STARTED, {
+                message: `Attempting to fix ${typeCheckIssues.length} TypeScript issues using deterministic code fixer`,
+                issues: typeCheckIssues,
+            });
+
+            this.logger.info(
+                `Attempting to fix ${typeCheckIssues.length} TypeScript issues using deterministic code fixer`,
+            );
+            const allFiles = this.fileManager.getAllFiles();
+
+            const fileFetcher: FileFetcher = async (filePath: string) => {
+                try {
+                    const result = await this.getSandboxServiceClient().getFiles(
+                        this.state.sandboxInstanceId!,
+                        [filePath],
+                    );
+                    if (result.success && result.files.length > 0) {
+                        this.logger.info(`Successfully fetched file: ${filePath}`);
+                        return {
+                            filePath,
+                            fileContents: result.files[0].fileContents,
+                            filePurpose: `Fetched file: ${filePath}`,
+                        };
+                    }
+                    this.logger.debug(`File not found: ${filePath}`);
+                } catch (error) {
+                    this.logger.debug(
+                        `Failed to fetch file ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    );
+                }
+                return null;
+            };
+
+            const fixResult = await fixProjectIssues(
+                allFiles.map((file) => ({
+                    filePath: file.filePath,
+                    fileContents: file.fileContents,
+                    filePurpose: '',
+                })),
+                typeCheckIssues,
+                fileFetcher,
+            );
+
+            this.broadcast(WebSocketMessageResponses.DETERMINISTIC_CODE_FIX_COMPLETED, {
+                message: `Fixed ${typeCheckIssues.length} TypeScript issues using deterministic code fixer`,
+                issues: typeCheckIssues,
+                fixResult,
+            });
+
+            if (fixResult) {
+                if (fixResult.unfixableIssues.length > 0) {
+                    const modulesNotFound = fixResult.unfixableIssues.filter(
+                        (issue) => issue.issueCode === 'TS2307',
+                    );
+                    const moduleNames = modulesNotFound.flatMap((issue) => {
+                        const match = issue.reason.match(/External package ["'](.+?)["']/);
+                        const name = match?.[1];
+                        return typeof name === 'string' &&
+                            name.trim().length > 0 &&
+                            !name.startsWith('@shared')
+                            ? [name]
+                            : [];
+                    });
+                    if (moduleNames.length > 0) {
+                        const installCommands = moduleNames.map((moduleName) => `bun install ${moduleName}`);
+                        await this.executeCommands(installCommands, false);
+                        this.logger.info(
+                            `Deterministic code fixer installed missing modules: ${moduleNames.join(', ')}`,
+                        );
+                    } else {
+                        this.logger.info(
+                            'Deterministic code fixer detected no external modules to install from unfixable TS2307 issues',
+                        );
+                    }
+                }
+                if (fixResult.modifiedFiles.length > 0) {
+                    this.logger.info(
+                        'Applying deterministic fixes to files, Fixes: ',
+                        JSON.stringify(fixResult, null, 2),
+                    );
+                    const fixedFiles = fixResult.modifiedFiles.map((file) => ({
+                        filePath: file.filePath,
+                        filePurpose: allFiles.find((f) => f.filePath === file.filePath)?.filePurpose ?? '',
+                        fileContents: file.fileContents,
+                    }));
+                    this.fileManager.saveGeneratedFiles(fixedFiles);
+                    await this.deployToSandbox(fixedFiles, false, 'fix: applied deterministic fixes');
+                    this.logger.info('Deployed deterministic fixes to sandbox');
+                }
+            }
+            this.logger.info(`Applied deterministic code fixes: ${JSON.stringify(fixResult, null, 2)}`);
+        } catch (error) {
+            this.broadcastError('Deterministic code fixer failed', error);
+        }
+        return undefined;
+    }
+
+    /**
+     * Aggregate the runtime errors, static-analysis findings, and
+     * client-reported errors that drive phase generation. Lifted from
+     * `SimpleCodeGeneratorAgent`. The fork's `AllIssues` carries
+     * `clientErrors`, sourced from `state.clientReportedErrors`.
+     */
+    async fetchAllIssues(resetIssues: boolean = false): Promise<AllIssues> {
+        const [runtimeErrors, staticAnalysis] = await Promise.all([
+            this.fetchRuntimeErrors(resetIssues),
+            this.runStaticAnalysisCode(),
+        ]);
+
+        const clientErrors = this.state.clientReportedErrors;
+        this.logger.info(
+            'Fetched all issues:',
+            JSON.stringify({ runtimeErrors, staticAnalysis, clientErrors }),
+        );
+
+        return { runtimeErrors, staticAnalysis, clientErrors };
+    }
+
+    // ==========================================
+    // Command execution
+    // ==========================================
+
+    /**
+     * Execute a batch of sandbox commands in chunks, retrying failed
+     * install commands via the project-setup assistant when
+     * `shouldRetry` is set. Lifted from `SimpleCodeGeneratorAgent`;
+     * successful commands are appended to `state.commandsHistory`.
+     */
+    protected async executeCommands(
+        commands: string[],
+        shouldRetry: boolean = true,
+        chunkSize: number = 5,
+    ): Promise<void> {
+        const state = this.state;
+        if (!state.sandboxInstanceId) {
+            this.logger.warn('No sandbox instance available for executing commands');
+            return;
+        }
+
+        commands = commands
+            .join('\n')
+            .split('\n')
+            .filter((cmd) => cmd.trim() !== '')
+            .filter((cmd) => looksLikeCommand(cmd) && !cmd.includes(' undefined'));
+        if (commands.length === 0) {
+            this.logger.warn('No commands to execute');
+            return;
+        }
+
+        commands = commands.map((cmd) =>
+            cmd.trim().replace(/^\s*-\s*/, '').replace(/^npm/, 'bun'),
+        );
+        this.logger.info(`AI suggested ${commands.length} commands to run: ${commands.join(', ')}`);
+
+        commands = Array.from(new Set(commands));
+
+        const commandChunks: string[][] = [];
+        for (let i = 0; i < commands.length; i += chunkSize) {
+            commandChunks.push(commands.slice(i, i + chunkSize));
+        }
+
+        const successfulCommands: string[] = [];
+
+        for (const chunk of commandChunks) {
+            let currentChunk = chunk;
+            let retryCount = 0;
+            const maxRetries = shouldRetry ? 3 : 1;
+
+            while (currentChunk.length > 0 && retryCount < maxRetries) {
+                try {
+                    this.broadcast(WebSocketMessageResponses.COMMAND_EXECUTING, {
+                        message:
+                            retryCount > 0
+                                ? `Retrying commands (attempt ${retryCount + 1}/${maxRetries})`
+                                : 'Executing commands',
+                        commands: currentChunk,
+                    });
+
+                    const resp = await this.getSandboxServiceClient().executeCommands(
+                        state.sandboxInstanceId,
+                        currentChunk,
+                    );
+                    if (!resp.results || !resp.success) {
+                        this.logger.error('Failed to execute commands', { response: resp });
+                        const status = await this.getSandboxServiceClient().getInstanceStatus(
+                            state.sandboxInstanceId,
+                        );
+                        if (!status.success || !status.isHealthy) {
+                            this.logger.error(`Instance ${state.sandboxInstanceId} is no longer running`);
+                            return;
+                        }
+                        break;
+                    }
+
+                    const successful = resp.results.filter((r) => r.success);
+                    const failures = resp.results.filter((r) => !r.success);
+
+                    if (successful.length > 0) {
+                        const successfulCmds = successful.map((r) => r.command);
+                        this.logger.info(
+                            `Successfully executed ${successful.length} commands: ${successfulCmds.join(', ')}`,
+                        );
+                        successfulCommands.push(...successfulCmds);
+                    }
+
+                    if (failures.length === 0) {
+                        this.logger.info('All commands in chunk executed successfully');
+                        break;
+                    }
+
+                    const failedCommands = failures.map((r) => r.command);
+                    this.logger.warn(`${failures.length} commands failed: ${failedCommands.join(', ')}`);
+
+                    if (!shouldRetry) {
+                        break;
+                    }
+
+                    retryCount++;
+
+                    const failedInstallCommands = failedCommands.filter(
+                        (cmd) => cmd.startsWith('bun') || cmd.startsWith('npm') || cmd.includes('install'),
+                    );
+
+                    if (failedInstallCommands.length > 0 && retryCount < maxRetries) {
+                        const newCommands = await this.getProjectSetupAssistant().generateSetupCommands(
+                            `The following install commands failed: ${JSON.stringify(failures, null, 2)}. Please suggest alternative commands.`,
+                        );
+
+                        if (newCommands?.commands && newCommands.commands.length > 0) {
+                            this.logger.info(`AI suggested ${newCommands.commands.length} alternative commands`);
+                            this.broadcast(WebSocketMessageResponses.COMMAND_EXECUTING, {
+                                message: 'Executing regenerated commands',
+                                commands: newCommands.commands,
+                            });
+                            currentChunk = newCommands.commands.filter(looksLikeCommand);
+                        } else {
+                            this.logger.warn('AI could not generate alternative commands');
+                            currentChunk = [];
+                        }
+                    } else {
+                        currentChunk = [];
+                    }
+                } catch (error) {
+                    this.logger.error('Error executing commands:', error);
+                    break;
+                }
+            }
+        }
+
+        const failedCommands = commands.filter((cmd) => !successfulCommands.includes(cmd));
+
+        if (failedCommands.length > 0) {
+            this.logger.warn(`Failed to execute commands: ${failedCommands.join(', ')}`);
+            this.broadcast(WebSocketMessageResponses.ERROR, {
+                error: `Failed to execute commands: ${failedCommands.join(', ')}`,
+            });
+        } else {
+            this.logger.info(`All commands executed successfully: ${successfulCommands.join(', ')}`);
+        }
+
+        this.setState({
+            ...this.state,
+            commandsHistory: [...(this.state.commandsHistory ?? []), ...successfulCommands],
+        });
+    }
+
+    /**
+     * Delete files from the file manager and remove them from the
+     * sandbox via `rm -rf`. Lifted from `SimpleCodeGeneratorAgent`.
+     */
+    async deleteFiles(filePaths: string[]): Promise<void> {
+        const deleteCommands: string[] = [];
+        for (const filePath of filePaths) {
+            deleteCommands.push(`rm -rf ${filePath}`);
+        }
+        this.fileManager.deleteFiles(filePaths);
+        try {
+            await this.executeCommands(deleteCommands, false);
+            this.logger.info(`Deleted ${filePaths.length} files: ${filePaths.join(', ')}`);
+        } catch (error) {
+            this.logger.error('Error deleting files:', error);
         }
     }
 
