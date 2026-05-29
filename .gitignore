@@ -74,3 +74,6 @@ SANDBOX_*.md
 deploy*.log
 # Cross-session-comms: local pointer to current M3 lead Claude Code session
 .m3-lead-session
+
+# M3 port scratch files (upstream reference, never commit)
+.upstream-*.ts
