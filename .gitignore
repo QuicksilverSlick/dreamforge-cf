@@ -23,6 +23,9 @@ dist-ssr
 # Claude Code worktrees and local settings
 .claude/worktrees/
 .claude/settings.local.json
+# Local-only orchestration / coordination notes (multi-agent session details
+# that don't belong in the production repo)
+.claude/*.md
 
 # Local-only review folder used during landing-page comparison
 landing-previews/
@@ -69,3 +72,8 @@ cli
 screencapture-*.png
 SANDBOX_*.md
 deploy*.log
+# Cross-session-comms: local pointer to current M3 lead Claude Code session
+.m3-lead-session
+
+# M3 port scratch files (upstream reference, never commit)
+.upstream-*.ts

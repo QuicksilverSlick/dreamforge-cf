@@ -34,9 +34,19 @@ export const TemplateDetailsSchema = z.object({
     language: z.string().optional(),
     deps: z.record(z.string(), z.string()),
     frameworks: z.array(z.string()).optional(),
+    projectType: z.enum(['app', 'workflow', 'presentation', 'general']).optional(),
+    renderMode: z.enum(['sandbox', 'browser']).optional(),
+    disabled: z.boolean().optional(),
     dontTouchFiles: z.array(z.string()),
     redactedFiles: z.array(z.string()),
     slideDirectory: z.string().optional(),
+    /**
+     * Flat lookup mirrors of `files`, populated at construction time
+     * (see `sandboxSdkClient.getTemplateDetails`). Optional for backward
+     * compat with persisted state that predates this widening.
+     */
+    importantFiles: z.array(z.string()).optional(),
+    allFiles: z.record(z.string(), z.string()).optional(),
 })
 export type TemplateDetails = z.infer<typeof TemplateDetailsSchema>
 
@@ -102,10 +112,14 @@ export const TemplateInfoSchema = z.object({
     name: z.string(),
     language: z.string().optional(),
     frameworks: z.array(z.string()).optional(),
+    projectType: z.enum(['app', 'workflow', 'presentation', 'general']).optional(),
     description: z.object({
         selection: z.string(),
         usage: z.string(),
-    })
+    }),
+    renderMode: z.enum(['sandbox', 'browser']).optional(),
+    slideDirectory: z.string().optional(),
+    disabled: z.boolean().optional(),
 })
 export type TemplateInfo = z.infer<typeof TemplateInfoSchema>
 

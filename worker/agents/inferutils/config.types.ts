@@ -80,6 +80,20 @@ export type InferenceMetadata = {
     // llmRateLimits: LLMCallsRateLimitConfig;
 }
 
+/**
+ * Runtime-only inference overrides — BYOK provider keys and AI-Gateway
+ * redirection. Ported from upstream as part of M3 commit 2b for parity
+ * with the new agent's `metadata.runtimeOverrides` field. The fork
+ * doesn't yet populate these (BYOK isn't a fork feature), but typing
+ * them now lets the ported codingAgent + behaviors compile cleanly.
+ */
+export type InferenceRuntimeOverrides = {
+    /** Provider API keys (BYOK) keyed by provider id, e.g. "openai" -> key. */
+    userApiKeys?: Record<string, string>;
+    /** Optional AI gateway override (baseUrl + token). */
+    aiGatewayOverride?: { baseUrl: string; token: string };
+};
+
 export interface InferenceContext extends InferenceMetadata {
     userModelConfigs?: Record<AgentActionKey, ModelConfig>;
     enableRealtimeCodeFix: boolean;

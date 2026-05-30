@@ -1,5 +1,5 @@
 import { createLogger } from './logger';
-import { SmartCodeGeneratorAgent } from './agents/core/smartGeneratorAgent';
+import { CodeGeneratorAgent as CodeGeneratorAgentDO } from './agents/core/codingAgent';
 import { proxyToSandbox } from '@cloudflare/sandbox';
 import { isDispatcherAvailable } from './utils/dispatcherUtils';
 import { createApp } from './app';
@@ -14,7 +14,7 @@ import { isOriginAllowed } from './config/security';
 // Durable Object and Service exports
 export { UserAppSandboxService, DeployerService } from './services/sandbox/sandboxSdkClient';
 
-export const CodeGeneratorAgent = Sentry.instrumentDurableObjectWithSentry(sentryOptions, SmartCodeGeneratorAgent);
+export const CodeGeneratorAgent = Sentry.instrumentDurableObjectWithSentry(sentryOptions, CodeGeneratorAgentDO);
 export const DORateLimitStore = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseDORateLimitStore);
 export const CodebaseAnalyzer = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseCodebaseAnalyzer);
 

@@ -314,6 +314,24 @@ export class SandboxSdkClient extends BaseSandboxService {
             } catch {
                 this.logger.info('No package.json found', { templateName });
             }
+            // Materialize the upstream-shape mirrors `importantFiles` +
+            // `allFiles` at construction time. `allFiles` is a path → contents
+            // Record built from `files`; `importantFiles` is the catalog's
+            // declared list of priority files, falling back to the empty list
+            // when the catalog does not specify any. Both are read by the
+            // ported `worker/services/sandbox/utils.ts` and
+            // `worker/agents/utils/templates.ts` helpers added in M3 commit 2b.1.
+            const allFiles: Record<string, string> = {};
+            for (const file of filesResponse.files) {
+                allFiles[file.filePath] = file.fileContents;
+            }
+            // `catalogInfo` does not currently carry an `importantFiles` field
+            // in the fork's catalog schema. M3 commit 2b will widen the catalog
+            // to surface this; until then we populate with an empty array so
+            // downstream consumers (e.g. ported helpers added later in M3)
+            // see a defined-but-empty list rather than `undefined`.
+            const importantFiles: string[] = [];
+
             const templateDetails: TemplateDetails = {
                 name: templateName,
                 description: {
@@ -324,9 +342,15 @@ export class SandboxSdkClient extends BaseSandboxService {
                 files: filesResponse.files,
                 language: catalogInfo?.language,
                 deps: dependencies,
+                projectType: catalogInfo?.projectType,
+                renderMode: catalogInfo?.renderMode,
+                disabled: catalogInfo?.disabled,
                 dontTouchFiles,
                 redactedFiles,
-                frameworks: catalogInfo?.frameworks || []
+                frameworks: catalogInfo?.frameworks || [],
+                slideDirectory: catalogInfo?.slideDirectory,
+                importantFiles,
+                allFiles,
             };
             
             this.logger.info('Template files retrieved', { templateName, fileCount: filesResponse.files.length });

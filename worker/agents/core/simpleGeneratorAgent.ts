@@ -147,8 +147,20 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
         return this.state.inferenceContext.agentId
     }
 
+    // The fields tagged `// M3-transitional` below are required by the
+    // new `PhasicState` shape (introduced in M3 commit 1) but had no
+    // analog in the pre-M3 `CodeGenState`. We populate them with the
+    // canonical defaults that `stateMigration.ts` would synthesize for
+    // a legacy state — this file is deleted in M3 commit 4 so the cost
+    // is throwaway.
     initialState: CodeGenState = {
-        blueprint: {} as Blueprint, 
+        behaviorType: 'phasic',                         // M3-transitional
+        projectType: 'app',                             // M3-transitional
+        projectName: '',                                // M3-transitional
+        templateName: 'custom',                         // M3-transitional
+        metadata: { agentId: '', userId: '' },          // M3-transitional
+        lastDeepDebugTranscript: null,                  // M3-transitional
+        blueprint: {} as Blueprint,
         query: "",
         generatedPhases: [],
         generatedFilesMap: {},
@@ -363,7 +375,10 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
                 agentId: this.getAgentId(),
                 query: this.state.query,
                 blueprint: this.state.blueprint,
-                template: this.state.templateDetails,
+                // `templateDetails` became optional in M3 commit 1; this
+                // file is deleted in commit 4 so the non-null assertion
+                // is throwaway.
+                template: this.state.templateDetails!,
                 inferenceContext: this.state.inferenceContext
             });
         }
@@ -1713,7 +1728,7 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
 
         // If AI template is configured, pass AI vars
         let localEnvVars: Record<string, string> = {};
-        if (this.state.templateDetails.name.includes('agents')) {
+        if (this.state.templateDetails?.name.includes('agents')) {
             localEnvVars = {
                 "CF_AI_BASE_URL": generateAppProxyUrl(this.env),
                 "CF_AI_API_KEY": await generateAppProxyToken(this.state.inferenceContext.agentId, this.state.inferenceContext.userId, this.env)

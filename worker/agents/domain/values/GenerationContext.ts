@@ -31,21 +31,36 @@ export class GenerationContext {
      * Create context from current state
      */
     static from(state: CodeGenState, logger?: Pick<StructuredLogger, 'info' | 'warn'>): GenerationContext {
+        // `templateDetails` is being phased out (replaced by `templateName` +
+        // an on-demand sandbox fetch in commit 5 of the M3 port). Until that
+        // refactor lands, this factory still requires the embedded object to
+        // be present on state — the phasic path only invokes it after init,
+        // which always populates the field. A missing value here is a
+        // legitimate programming error, not a recoverable state.
+        if (!state.templateDetails) {
+            throw new Error(
+                'GenerationContext.from: state.templateDetails is missing. This path '
+                + 'requires the embedded TemplateDetails until commit 5 rebases the '
+                + 'operations against upstream\'s templateName-based pattern.',
+            );
+        }
+        const templateDetails = state.templateDetails;
+
         const dependencies = DependencyManagement.mergeDependencies(
-            state.templateDetails?.deps || {},
+            templateDetails.deps || {},
             state.lastPackageJson,
             logger
         );
 
         const allFiles = FileProcessing.getAllFiles(
-            state.templateDetails,
+            templateDetails,
             state.generatedFilesMap
         );
 
         return new GenerationContext(
             state.query,
             state.blueprint,
-            state.templateDetails,
+            templateDetails,
             dependencies,
             allFiles,
             state.generatedPhases,
