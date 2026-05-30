@@ -1618,6 +1618,59 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     // ==========================================
+    // Async initialization (deploy + setup commands + README)
+    // ==========================================
+
+    /**
+     * Generate the project README via the simple-generation operation
+     * and save it. Ported from upstream `behaviors/base.ts` (adapted to
+     * the fork's single-arg `saveGeneratedFile`).
+     */
+    async generateReadme(): Promise<void> {
+        this.logger.info('Generating README.md');
+        this.broadcast(WebSocketMessageResponses.FILE_GENERATING, {
+            message: 'Generating README.md',
+            filePath: 'README.md',
+            filePurpose: 'Project documentation and setup instructions',
+        });
+
+        const readme = await this.operations.simpleGenerateFiles.generateReadme(this.getOperationOptions());
+
+        this.fileManager.saveGeneratedFile(readme);
+
+        this.broadcast(WebSocketMessageResponses.FILE_GENERATED, {
+            message: 'README.md generated successfully',
+            file: readme,
+        });
+        this.logger.info('README.md generated successfully');
+    }
+
+    /**
+     * Kicked off (fire-and-forget) from a concrete behavior's
+     * `initialize`. Deploys to the sandbox, predicts + runs the
+     * template setup commands, and generates the README — all in
+     * parallel. Ported from upstream `behaviors/base.ts`; `executeCommands`
+     * landed in slice 2b.17a and `generateReadme` above. Errors are
+     * swallowed (logged) — initialization must not crash the agent.
+     */
+    protected async initializeAsync(): Promise<void> {
+        try {
+            const [, setupCommands] = await Promise.all([
+                this.deployToSandbox(),
+                this.getProjectSetupAssistant().generateSetupCommands(),
+                this.generateReadme(),
+            ]);
+            this.logger.info(
+                'Deployment to sandbox service and initial commands predictions completed successfully',
+            );
+            await this.executeCommands(setupCommands.commands);
+            this.logger.info('Initial commands executed successfully');
+        } catch (error) {
+            this.logger.error('Error during async initialization:', error);
+        }
+    }
+
+    // ==========================================
     // Project-update tracking + broadcast override
     // ==========================================
 

@@ -63,9 +63,10 @@
  *     only shapes the broadcast message.
  *   - `applyFastSmartCodeFixes` uses the fork's `getAllFiles()` (no
  *     `getAllRelevantFiles`).
- *   - `initializeAsync()` is still omitted — depends on
- *     `executeCommands` (now landed) + `generateReadme` (still
- *     deferred to a later base-helper slice).
+ *   - `initialize()` fires `initializeAsync()` (sandbox deploy +
+ *     setup-command prediction/execution + README generation) in the
+ *     background, matching upstream — landed once `executeCommands`
+ *     (2b.17a) and `generateReadme` (commit 3) were available.
  */
 
 import type { ImageAttachment, ProcessedImageAttachment } from '../../../types/image-attachment';
@@ -255,10 +256,13 @@ export class PhasicCodingBehavior
             this.logger.info('Saved customized template files');
         }
 
-        // `initializeAsync()` (upstream) — kicks off
-        // `deployToSandbox` + `executeCommands(setupCommands)` +
-        // `generateReadme` in parallel. Deferred to the follow-on
-        // slice that lands `executeCommands` on `BaseCodingBehavior`.
+        // Kick off async initialization (sandbox deploy + setup
+        // commands + README) in the background — fire-and-forget so the
+        // controller's initialize() resolves promptly. Errors are
+        // surfaced via broadcastError.
+        this.initializeAsync().catch((error: unknown) => {
+            this.broadcastError('Initialization failed', error);
+        });
 
         this.logger.info(
             `Agent ${this.getAgentId()} session: ${this.state.sessionId} initialized successfully`,
