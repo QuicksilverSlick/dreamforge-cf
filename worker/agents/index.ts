@@ -1,5 +1,5 @@
 
-import { SmartCodeGeneratorAgent } from './core/smartGeneratorAgent';
+import { CodeGeneratorAgent } from './core/codingAgent';
 import { getAgentByName } from 'agents';
 import { CodeGenState } from './core/state';
 import { generateId } from '../utils/idGenerator';
@@ -12,14 +12,14 @@ import { TemplateDetails } from '../services/sandbox/sandboxTypes';
 import { TemplateSelection } from './schemas';
 import type { ImageAttachment } from '../types/image-attachment';
 
-export async function getAgentStub(env: Env, agentId: string, searchInOtherJurisdictions: boolean = false, logger: StructuredLogger) : Promise<DurableObjectStub<SmartCodeGeneratorAgent>> {
+export async function getAgentStub(env: Env, agentId: string, searchInOtherJurisdictions: boolean = false, logger: StructuredLogger) : Promise<DurableObjectStub<CodeGeneratorAgent>> {
     if (searchInOtherJurisdictions) {
         // Try multiple jurisdictions until we find the agent
         const jurisdictions = [undefined, 'eu' as DurableObjectJurisdiction];
         for (const jurisdiction of jurisdictions) {
             try {
                 logger.info(`Agent ${agentId} retreiving from jurisdiction ${jurisdiction}`);
-                const stub = await getAgentByName<Env, SmartCodeGeneratorAgent>(env.CodeGenObject, agentId, {
+                const stub = await getAgentByName<Env, CodeGeneratorAgent>(env.CodeGenObject, agentId, {
                     locationHint: 'enam',
                     jurisdiction: jurisdiction,
                 });
@@ -36,7 +36,7 @@ export async function getAgentStub(env: Env, agentId: string, searchInOtherJuris
         // throw new Error(`Agent ${agentId} not found in any jurisdiction`);
     }
     logger.info(`Agent ${agentId} retrieved directly`);
-    return getAgentByName<Env, SmartCodeGeneratorAgent>(env.CodeGenObject, agentId, {
+    return getAgentByName<Env, CodeGeneratorAgent>(env.CodeGenObject, agentId, {
         locationHint: 'enam'
     });
 }
@@ -46,7 +46,7 @@ export async function getAgentState(env: Env, agentId: string, searchInOtherJuri
     return (await agentInstance.getFullState()) as CodeGenState;
 }
 
-export async function cloneAgent(env: Env, agentId: string, logger: StructuredLogger) : Promise<{newAgentId: string, newAgent: DurableObjectStub<SmartCodeGeneratorAgent>}> {
+export async function cloneAgent(env: Env, agentId: string, logger: StructuredLogger) : Promise<{newAgentId: string, newAgent: DurableObjectStub<CodeGeneratorAgent>}> {
     const agentInstance = await getAgentStub(env, agentId, true, logger);
     if (!agentInstance || !await agentInstance.isInitialized()) {
         throw new Error(`Agent ${agentId} not found`);
