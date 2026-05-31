@@ -312,7 +312,7 @@ export class CodeGeneratorAgent
         });
     }
 
-    onConnect(connection: Connection, ctx: ConnectionContext) {
+    async onConnect(connection: Connection, ctx: ConnectionContext) {
         this.logger().info(`Agent connected for agent ${this.getAgentId()}`, {
             connection,
             ctx,
@@ -339,17 +339,34 @@ export class CodeGeneratorAgent
             this.logger().warn('Failed to capture CF token cookie on WS connect', { error });
         }
 
+        // Warm the per-instance template-details cache before reading it.
+        // On a cold DO wake-up the cache is empty and `getTemplateDetails()`
+        // throws ("Template details not loaded. Call ensureTemplateDetails()
+        // first."); without this the AGENT_CONNECTED payload below threw
+        // uncaught and crashed the WS upgrade, so the client could never
+        // connect. Best-effort: a failure here must not break the handshake.
+        try {
+            await this.behavior.ensureTemplateDetails();
+        } catch (error) {
+            this.logger().warn('Failed to load template details on WS connect', { error });
+        }
+
+        // Compute the template details + preview URL defensively — even if
+        // the cache is still cold, `onConnect` must not throw (else the
+        // connection is lost and the client retries forever).
+        let templateDetails: TemplateDetails | undefined;
         let previewUrl = '';
         try {
-            if (this.behavior.getTemplateDetails().renderMode === 'browser') {
+            templateDetails = this.behavior.getTemplateDetails();
+            if (templateDetails.renderMode === 'browser') {
                 previewUrl = this.behavior.getBrowserPreviewURL();
             }
         } catch (error) {
-            this.logger().error('Error getting preview URL:', error);
+            this.logger().error('Error getting template details / preview URL:', error);
         }
         sendToConnection(connection, WebSocketMessageResponses.AGENT_CONNECTED, {
             state: this.state,
-            templateDetails: this.behavior.getTemplateDetails(),
+            templateDetails,
             previewUrl,
         });
     }
