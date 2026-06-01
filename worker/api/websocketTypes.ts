@@ -423,6 +423,41 @@ type UsageUpdatedMessage = {
 	data?: Record<string, unknown>;
 };
 
+type GeneratedImageInfo = {
+	path: string;
+	url: string;
+	purpose: string;
+};
+
+type ImageGenerationStartedMessage = {
+	type: 'image_generation_started';
+	message: string;
+	count: number;
+};
+
+type ImageGenerationProgressMessage = {
+	type: 'image_generation_progress';
+	message: string;
+	path: string;
+	url: string;
+	provider: 'openai' | 'gemini';
+	index: number;
+	total: number;
+};
+
+type ImageGenerationCompletedMessage = {
+	type: 'image_generation_completed';
+	message: string;
+	images: GeneratedImageInfo[];
+};
+
+type ImageGenerationErrorMessage = {
+	type: 'image_generation_error';
+	message: string;
+	error: string;
+	path?: string;
+};
+
 export type WebSocketMessage =
 	| StateMessage
 	| ConversationStateMessage
@@ -477,7 +512,11 @@ export type WebSocketMessage =
 	| ProjectNameUpdatedMessage
 	| TemplateUpdatedMessage
 	| AgentConnectedMessage
-	| UsageUpdatedMessage;
+	| UsageUpdatedMessage
+	| ImageGenerationStartedMessage
+	| ImageGenerationProgressMessage
+	| ImageGenerationCompletedMessage
+	| ImageGenerationErrorMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)
 export type WebSocketMessageType = WebSocketMessage['type'];

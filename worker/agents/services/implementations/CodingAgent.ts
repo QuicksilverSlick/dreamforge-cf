@@ -1,5 +1,5 @@
 import { ProcessedImageAttachment } from "worker/types/image-attachment";
-import { ICodingAgent } from "../interfaces/ICodingAgent";
+import { ICodingAgent, type ImageGenerationRequest } from "../interfaces/ICodingAgent";
 
 /*
 * CodingAgentInterface - stub for passing to tool calls
@@ -34,5 +34,9 @@ export class CodingAgentInterface {
 
     queueRequest(request: string, images?: ProcessedImageAttachment[]): void {
         this.agentStub.queueUserRequest(request, images);
+    }
+
+    queueImageGeneration(request: ImageGenerationRequest): Promise<string | null> {
+        return this.agentStub.queueImageGeneration(request);
     }
 }

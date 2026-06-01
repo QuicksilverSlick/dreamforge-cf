@@ -93,6 +93,10 @@ export function base64ToUint8Array(base64: string): Uint8Array {
 export enum ImageType {
     SCREENSHOTS = 'screenshots',
     UPLOADS = 'uploads',
+    // AI-generated assets for generated apps. Written to R2 under
+    // `generated/<id>/<filename>` and served publicly via the `/api/generated/*`
+    // route (worker/api/controllers/screenshots/controller.ts:serveGeneratedImage).
+    GENERATED = 'generated',
 }
 
 export async function uploadImageToCloudflareImages(env: Env, image: ImageAttachment, type: ImageType, bytes?: Uint8Array): Promise<string> {

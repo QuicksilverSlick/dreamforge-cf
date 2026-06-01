@@ -34,6 +34,8 @@ import { AGENT_CONFIG } from '../inferutils/config';
 import { ModelConfigService } from '../../database/services/ModelConfigService';
 import { FileFetcher, fixProjectIssues } from '../../services/code-fixer';
 import { FastCodeFixerOperation } from '../operations/FastCodeFixer';
+import { ImageGenerationOperation, type GeneratedImageResult } from '../operations/ImageGeneration';
+import type { ImageGenerationRequest } from '../services/interfaces/ICodingAgent';
 import { getProtocolForHost } from '../../utils/urls';
 import { looksLikeCommand } from '../utils/common';
 import { generateBlueprint } from '../planning/blueprint';
@@ -115,6 +117,8 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
         fastCodeFixer: new FastCodeFixerOperation(),
         processUserMessage: new UserConversationProcessor()
     };
+
+    protected readonly imageGenerationOperation = new ImageGenerationOperation();
 
     isGenerating: boolean = false;
     
@@ -502,6 +506,150 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
     }
 
     /**
+     * Generate any not-yet-generated blueprint image assets before the first
+     * phase deploys. Idempotent/resumable: only manifest entries lacking a
+     * resolved `url` are generated; resolved URLs are merged back into the
+     * blueprint manifest. Per-asset and whole-step failures are non-fatal.
+     */
+    async generateBlueprintImages(): Promise<void> {
+        const blueprint = this.state.blueprint;
+        const assets = blueprint.imageAssets;
+        if (!assets || assets.length === 0) {
+            return;
+        }
+        const pending = assets.filter((asset) => !asset.url);
+        if (pending.length === 0) {
+            return;
+        }
+
+        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_STARTED, {
+            message: `Generating ${pending.length} image asset(s)`,
+            count: pending.length,
+        });
+
+        try {
+            const results = await this.imageGenerationOperation.execute(
+                {
+                    assets: pending,
+                    onImageGenerated: (result, index, total) => {
+                        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_PROGRESS, {
+                            message: `Generated image ${index}/${total}: ${result.path}`,
+                            path: result.path,
+                            url: result.url,
+                            provider: result.provider,
+                            index,
+                            total,
+                        });
+                    },
+                },
+                this.getOperationOptions(),
+            );
+
+            if (results.length > 0) {
+                this.mergeGeneratedImages(results);
+            }
+
+            this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_COMPLETED, {
+                message: `Generated ${results.length} of ${pending.length} image asset(s)`,
+                images: results.map((result) => ({
+                    path: result.path,
+                    url: result.url,
+                    purpose: result.purpose,
+                })),
+            });
+        } catch (error) {
+            this.logger().error('Image generation step failed', error);
+            this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_ERROR, {
+                message: 'Image generation failed',
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+
+    /**
+     * Generate (or replace) a single image asset on demand — driven by the
+     * conversational `generate_image` tool. Stores the image, merges its URL
+     * into the blueprint manifest, and queues a request so the next phase
+     * wires it into the app. Returns the public URL, or null on failure.
+     */
+    async queueImageGeneration(request: ImageGenerationRequest): Promise<string | null> {
+        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_STARTED, {
+            message: `Generating image asset: ${request.path}`,
+            count: 1,
+        });
+
+        let result: GeneratedImageResult | undefined;
+        try {
+            const results = await this.imageGenerationOperation.execute(
+                { assets: [{ ...request }] },
+                this.getOperationOptions(),
+            );
+            result = results[0];
+        } catch (error) {
+            this.logger().error('On-demand image generation failed', error);
+        }
+
+        if (!result) {
+            this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_ERROR, {
+                message: `Failed to generate image asset: ${request.path}`,
+                error: 'Image generation failed for all providers',
+                path: request.path,
+            });
+            return null;
+        }
+
+        this.mergeGeneratedImages([result], request);
+
+        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_COMPLETED, {
+            message: `Generated image asset: ${result.path}`,
+            images: [{ path: result.path, url: result.url, purpose: result.purpose }],
+        });
+
+        await this.queueUserRequest(
+            `A new image asset has been generated and is available at the URL ${result.url} ` +
+                `(purpose: ${result.purpose}, intended location "${result.path}"). Update the application to ` +
+                `use this image — replace any previous image serving the same purpose/location and reference it ` +
+                `via <img src="${result.url}"> (or as a CSS background) where appropriate.`,
+        );
+
+        return result.url;
+    }
+
+    private mergeGeneratedImages(
+        results: GeneratedImageResult[],
+        request?: ImageGenerationRequest,
+    ): void {
+        const blueprint = this.state.blueprint;
+        const existing = blueprint.imageAssets ?? [];
+        const urlByPath = new Map(results.map((result) => [result.path, result.url]));
+
+        const updated = existing.map((asset) =>
+            urlByPath.has(asset.path) ? { ...asset, url: urlByPath.get(asset.path) } : asset,
+        );
+
+        for (const result of results) {
+            if (!existing.some((asset) => asset.path === result.path)) {
+                updated.push({
+                    path: result.path,
+                    prompt: request?.prompt ?? '',
+                    purpose: result.purpose,
+                    width: request?.width,
+                    height: request?.height,
+                    url: result.url,
+                });
+            }
+        }
+
+        this.setState({
+            ...this.state,
+            blueprint: {
+                ...blueprint,
+                imageAssets: updated,
+            },
+        });
+    }
+
+    /**
      * State machine controller for code generation with user interaction support
      * Executes phases sequentially with review cycles and proper state transitions
      */
@@ -520,6 +668,11 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
             message: 'Starting code generation',
             totalFiles: this.getTotalFiles()
         });
+
+        // Generate the blueprint's declared image assets before the first
+        // phase deploys, so generated code can reference real asset URLs.
+        await this.generateBlueprintImages();
+
         let currentDevState = CurrentDevState.PHASE_IMPLEMENTING;
         const generatedPhases = this.state.generatedPhases;
         const completedPhases = generatedPhases.filter(phase => !phase.completed);

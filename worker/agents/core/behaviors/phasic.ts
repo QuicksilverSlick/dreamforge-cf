@@ -476,6 +476,7 @@ export class PhasicCodingBehavior
         // ensureTemplateDetails' own callers, and getOperationOptions still
         // surfaces a clear error if details are genuinely unavailable.
         await this.ensureTemplateDetails();
+        await this.generateBlueprintImages();
         await this.launchStateMachine();
     }
 

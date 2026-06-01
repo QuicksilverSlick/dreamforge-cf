@@ -850,7 +850,7 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
         **IF** you receive a TypeScript error "cannot be used as a JSX component" for a component \`<MyComponent />\`, **AND** the error says its type is \`'typeof import(...)'\`, then check if the import is correct (named vs default import).
         Applying this rule to your situation will fix both the type-check errors and the browser's runtime error.
 
-    # Never write image files! Never write jpeg, png, svg, etc files yourself! Always use some image url from the web.
+    # Never author binary asset files (jpeg, png, gif, mp3, wav, etc.) yourself — generated code cannot write them. For images, reference the \`url\` on the blueprint's \`imageAssets\` entries (real assets produced by dedicated image models), or call the \`generate_image\` tool to create/replace one. For audio, synthesize with the Web Audio API. Use icon libraries / inline SVG / canvas for decorative vector graphics.
 
 </AVOID COMMON PITFALLS>`,
     COMMON_DEP_DOCUMENTATION: `<COMMON DEPENDENCY DOCUMENTATION>
@@ -1181,7 +1181,7 @@ export const STRATEGIES_UTILS = {
         * Keep the size of codebase as small as possible, write encapsulated and abstracted code that can be reused, maximize code and component reuse and modularity. If a function/component is to be used in multiple files, it should be defined in a shared file.
         **DO NOT WRITE/MODIFY README FILES, LICENSES, ESSENTIAL CONFIG, OR OTHER NON-APPLICATION FILES as they are already configured in the final deployment. You are allowed to modify tailwind.config.js, vite.config.js etc if necessary**
             - Be very careful while working on vite.config.js, tailwind.config.js, etc. as any wrong changes can break the application.
-        **DO NOT WRITE pdf files, images, or any other non-text files as they are not supported by the deployment.**
+        **DO NOT WRITE pdf, image, audio, or any other binary/non-text files — generated code cannot produce them. Reference real images via the \`url\` on the blueprint's \`imageAssets\` entries or the \`generate_image\` tool; synthesize audio with the Web Audio API.**
 
         **Examples**:
             * Building any tic-tac-toe game: Has a single page, simple logic -> **Simple Project** - 1 phase and 1-2 files that contain most of the code. Initial phase should yield a perfectly working game.        
