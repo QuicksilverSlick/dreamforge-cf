@@ -70,6 +70,13 @@ interface InstanceMetadata {
 type SandboxType = Sandbox;
 
 /**
+ * A session-bound view of the sandbox API. Derived from the SDK's
+ * `createSession` return type so it tracks the pinned `@cloudflare/sandbox`
+ * version without importing an internal type.
+ */
+type ExecutionSession = Awaited<ReturnType<Sandbox['createSession']>>;
+
+/**
  * Streaming event for enhanced command execution
  */
 export interface StreamEvent {
@@ -108,6 +115,18 @@ function getAutoAllocatedSandbox(sessionId: string): string {
 export class SandboxSdkClient extends BaseSandboxService {
     private sandbox: SandboxType;
     private metadataCache = new Map<string, InstanceMetadata>();
+    /**
+     * Per-instance `ExecutionSession` cache. Keyed by session id — the
+     * instance id for the main per-instance session, {@link DEFAULT_SESSION_ID}
+     * for container-global ops, and `${instanceId}-dev` / `${instanceId}-tunnel`
+     * for long-lived processes. Explicit sessions replace the SDK's implicit
+     * default session, which dies ~75s after creation in `@cloudflare/sandbox`
+     * 0.5.6 ("shell has died") — the root cause of the long-standing
+     * preview-serving breakage.
+     */
+    private sessionCache = new Map<string, ExecutionSession>();
+
+    private static readonly DEFAULT_SESSION_ID = 'sandbox-default';
 
     constructor(sandboxId: string, agentId: string) {
         if (env.ALLOCATION_STRATEGY === AllocationStrategy.MANY_TO_ONE) {
@@ -125,8 +144,11 @@ export class SandboxSdkClient extends BaseSandboxService {
     }
 
     async initialize(): Promise<void> {
-        // Run a echo command to check if the sandbox is working
-        const echoResult = await this.sandbox.exec('echo "Hello World"');
+        // Establish the default session up front, then verify the sandbox
+        // responds. Session creation must happen here (async) rather than in
+        // the constructor.
+        await this.getDefaultSession();
+        const echoResult = await this.safeSandboxExec('echo "Hello World"');
         if (echoResult.exitCode !== 0) {
             throw new Error(`Failed to run echo command: ${echoResult.stderr}`);
         }
@@ -144,20 +166,92 @@ export class SandboxSdkClient extends BaseSandboxService {
         return this.sandbox;
     }
 
+    /**
+     * Create a session with the given id + cwd, falling back to retrieving an
+     * existing one (a sibling request sharing the same container pool may have
+     * already created it) and self-correcting its working directory.
+     */
+    private async getOrCreateSession(sessionId: string, cwd: string): Promise<ExecutionSession> {
+        try {
+            this.logger.info('Creating new sandbox session', { sessionId, cwd });
+            return await this.getSandbox().createSession({ id: sessionId, cwd });
+        } catch (error) {
+            this.logger.info('Sandbox session already exists, retrieving it', {
+                sessionId,
+                cwd,
+                error: error instanceof Error ? error.message : String(error),
+            });
+            const existingSession = await this.getSandbox().getSession(sessionId);
+
+            const pwdResult = await existingSession.exec('pwd');
+            const actualCwd = pwdResult.stdout.trim();
+            if (actualCwd !== cwd) {
+                this.logger.warn('Existing session has wrong cwd, changing directory', {
+                    sessionId,
+                    expectedCwd: cwd,
+                    actualCwd,
+                });
+                await existingSession.exec(`cd ${cwd}`);
+                const verifyResult = await existingSession.exec('pwd');
+                if (verifyResult.stdout.trim() !== cwd) {
+                    this.logger.error(`Failed to set working directory to ${cwd}, currently at ${verifyResult.stdout.trim()}`);
+                } else {
+                    this.logger.info('Changed directory for existing session', { sessionId, cwd });
+                }
+            }
+            return existingSession;
+        }
+    }
+
+    /**
+     * Get (or lazily create) the cached session for an instance. The main
+     * per-instance session runs in `/workspace/${instanceId}`; the default
+     * session runs in `/workspace`. Callers needing a different cwd (dev /
+     * tunnel process sessions) must pass it explicitly.
+     */
+    private async getInstanceSession(instanceId: string, cwd?: string): Promise<ExecutionSession> {
+        const cached = this.sessionCache.get(instanceId);
+        if (cached) {
+            return cached;
+        }
+        const resolvedCwd = instanceId === SandboxSdkClient.DEFAULT_SESSION_ID
+            ? '/workspace'
+            : cwd ?? `/workspace/${instanceId}`;
+        const session = await this.getOrCreateSession(instanceId, resolvedCwd);
+        this.sessionCache.set(instanceId, session);
+        return session;
+    }
+
+    /** The container-global session for template / pre-instance operations. */
+    private async getDefaultSession(): Promise<ExecutionSession> {
+        return this.getInstanceSession(SandboxSdkClient.DEFAULT_SESSION_ID, '/workspace');
+    }
+
+    private invalidateSessionCache(instanceId: string): void {
+        if (this.sessionCache.delete(instanceId)) {
+            this.logger.debug('Session cache invalidated', { instanceId });
+        }
+    }
+
+    /** Direct exec against the container-global default session. */
+    private async safeSandboxExec(command: string, timeout?: number): Promise<ExecResult> {
+        const session = await this.getDefaultSession();
+        return await session.exec(command, { timeout });
+    }
+
     /** Write a binary file to the sandbox using small base64 chunks to avoid large control messages. */
     private async writeBinaryFileViaBase64(targetPath: string, data: ArrayBuffer, bytesPerChunk: number = 16 * 1024): Promise<void> {
-        const sandbox = this.getSandbox();
         const dir = targetPath.includes('/') ? targetPath.slice(0, targetPath.lastIndexOf('/')) : '.';
         // Ensure directory and clean target file
-        await sandbox.exec(`mkdir -p '${dir}'`);
-        await sandbox.exec(`rm -f '${targetPath}'`);
+        await this.safeSandboxExec(`mkdir -p '${dir}'`);
+        await this.safeSandboxExec(`rm -f '${targetPath}'`);
 
         const buffer = new Uint8Array(data);
         for (let i = 0; i < buffer.length; i += bytesPerChunk) {
             const chunk = buffer.subarray(i, Math.min(i + bytesPerChunk, buffer.length));
             const base64Chunk = btoa(String.fromCharCode(...chunk));
             // Append decoded bytes into the target file inside the sandbox
-            const appendResult = await sandbox.exec(`printf '%s' '${base64Chunk}' | base64 -d >> '${targetPath}'`);
+            const appendResult = await this.safeSandboxExec(`printf '%s' '${base64Chunk}' | base64 -d >> '${targetPath}'`);
             if (appendResult.exitCode !== 0) {
                 throw new Error(`Failed to append to ${targetPath}: ${appendResult.stderr}`);
             }
@@ -169,8 +263,10 @@ export class SandboxSdkClient extends BaseSandboxService {
     }
 
     private async executeCommand(instanceId: string, command: string, timeout?: number): Promise<ExecResult> {
-        return await this.getSandbox().exec(`cd ${instanceId} && ${command}`, { timeout });
-        // return await this.getSandbox().exec(command, { cwd: instanceId, timeout });
+        // The instance session's cwd is `/workspace/${instanceId}`, so the
+        // command runs in the instance directory without a `cd` prefix.
+        const session = await this.getInstanceSession(instanceId);
+        return await session.exec(command, { timeout });
     }
 
     private async getInstanceMetadata(instanceId: string): Promise<InstanceMetadata> {
@@ -181,7 +277,11 @@ export class SandboxSdkClient extends BaseSandboxService {
         
         // Cache miss - read from disk
         try {
-            const metadataFile = await this.getSandbox().readFile(this.getInstanceMetadataFile(instanceId));
+            const session = await this.getDefaultSession();
+            const metadataFile = await session.readFile(this.getInstanceMetadataFile(instanceId));
+            if (!metadataFile.success) {
+                throw new Error('Failed to read instance metadata file');
+            }
             const metadata = JSON.parse(metadataFile.content) as InstanceMetadata;
             this.metadataCache.set(instanceId, metadata); // Cache it
             return metadata;
@@ -192,7 +292,8 @@ export class SandboxSdkClient extends BaseSandboxService {
     }
 
     private async storeInstanceMetadata(instanceId: string, metadata: InstanceMetadata): Promise<void> {
-        await this.getSandbox().writeFile(this.getInstanceMetadataFile(instanceId), JSON.stringify(metadata));
+        const session = await this.getDefaultSession();
+        await session.writeFile(this.getInstanceMetadataFile(instanceId), JSON.stringify(metadata));
         this.metadataCache.set(instanceId, metadata); // Update cache
     }
 
@@ -217,7 +318,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             exit 1
         `;
         
-        const result = await this.getSandbox().exec(findPortCmd.trim());
+        const result = await this.safeSandboxExec(findPortCmd.trim());
         const endTime = Date.now();
         const duration = (endTime - startTime) / 1000;
         this.logger.info(`Port allocation took ${duration} seconds`);
@@ -232,8 +333,7 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     private async checkTemplateExists(templateName: string): Promise<boolean> {
         // Single command to check if template directory and package.json both exist
-        const sandbox = this.getSandbox();
-        const checkResult = await sandbox.exec(`test -f ${templateName}/package.json && echo "exists" || echo "missing"`);
+        const checkResult = await this.safeSandboxExec(`test -f ${templateName}/package.json && echo "exists" || echo "missing"`);
         return checkResult.exitCode === 0 && checkResult.stdout.trim() === "exists";
     }
 
@@ -263,7 +363,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             await this.writeBinaryFileViaBase64(`${templateName}.zip`, zipData);
             this.logger.info(`Wrote zip file to sandbox in chunks: ${templateName}.zip`);
             
-            const setupResult = await this.getSandbox().exec(`unzip -o -q ${templateName}.zip -d ${isInstance ? '.' : templateName}`);
+            const setupResult = await this.safeSandboxExec(`unzip -o -q ${templateName}.zip -d ${isInstance ? '.' : templateName}`);
         
             if (setupResult.exitCode !== 0) {
                 throw new Error(`Failed to download/extract template: ${setupResult.stderr}`);
@@ -479,11 +579,9 @@ export class SandboxSdkClient extends BaseSandboxService {
     async listAllInstances(): Promise<ListInstancesResponse> {
         try {
             this.logger.info('Retrieving instance metadata');
-            
-            const sandbox = this.getSandbox();
-            
+
             // Use a single command to find metadata files only in current directory (not nested)
-            const bulkResult = await sandbox.exec(`find . -maxdepth 1 -name "*-metadata.json" -type f -exec sh -c 'echo "===FILE:$1==="; cat "$1"' _ {} \\;`);
+            const bulkResult = await this.safeSandboxExec(`find . -maxdepth 1 -name "*-metadata.json" -type f -exec sh -c 'echo "===FILE:$1==="; cat "$1"' _ {} \\;`);
             
             if (bulkResult.exitCode !== 0) {
                 return {
@@ -615,10 +713,12 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     private async startDevServer(instanceId: string, port: number): Promise<string> {
         try {
-            // Use CLI tools for enhanced monitoring instead of direct process start
-            const process = await this.getSandbox().startProcess(
-                `VITE_LOGGER_TYPE=json monitor-cli process start --instance-id ${instanceId} --port ${port} -- bun run dev`, 
-                { cwd: instanceId }
+            // Use CLI tools for enhanced monitoring instead of direct process start.
+            // The dev session's cwd is the instance directory, so no `cwd` option
+            // is passed (it would otherwise double-nest under the session cwd).
+            const devSession = await this.getOrCreateSession(`${instanceId}-dev`, `/workspace/${instanceId}`);
+            const process = await devSession.startProcess(
+                `VITE_LOGGER_TYPE=json monitor-cli process start --instance-id ${instanceId} --port ${port} -- bun run dev`,
             );
             this.logger.info('Development server started', { instanceId, processId: process.id });
             
@@ -647,10 +747,10 @@ export class SandboxSdkClient extends BaseSandboxService {
      */
     private async provisionTemplateResources(instanceId: string, projectName: string): Promise<ResourceProvisioningResult> {
         try {
-            const sandbox = this.getSandbox();
-            
+            const session = await this.getInstanceSession(instanceId);
+
             // Read wrangler.jsonc file
-            const wranglerFile = await sandbox.readFile(`${instanceId}/wrangler.jsonc`);
+            const wranglerFile = await session.readFile(`/workspace/${instanceId}/wrangler.jsonc`);
             if (!wranglerFile.success) {
                 this.logger.info(`No wrangler.jsonc found for ${instanceId}, skipping resource provisioning`);
                 return {
@@ -735,7 +835,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             let wranglerUpdated = false;
             if (Object.keys(replacements).length > 0) {
                 const updatedContent = templateParser.replacePlaceholders(wranglerFile.content, replacements);
-                const writeResult = await sandbox.writeFile(`${instanceId}/wrangler.jsonc`, updatedContent);
+                const writeResult = await session.writeFile(`/workspace/${instanceId}/wrangler.jsonc`, updatedContent);
                 
                 if (writeResult.success) {
                     wranglerUpdated = true;
@@ -779,13 +879,14 @@ export class SandboxSdkClient extends BaseSandboxService {
     */
     private async startCloudflaredTunnel(instanceId: string, port: number): Promise<string> {
         try {
-            const process = await this.getSandbox().startProcess(
-                `cloudflared tunnel --url http://localhost:${port}`, 
-                { cwd: instanceId }
+            const tunnelSession = await this.getOrCreateSession(`${instanceId}-tunnel`, `/workspace/${instanceId}`);
+            const process = await tunnelSession.startProcess(
+                `cloudflared tunnel --url http://localhost:${port}`,
             );
             this.logger.info(`Started cloudflared tunnel for ${instanceId}`);
 
-            // Stream process logs to extract the preview URL
+            // Stream process logs to extract the preview URL (process management
+            // is container-global, addressed via the bare sandbox stub).
             const logStream = await this.getSandbox().streamProcessLogs(process.id);
             
             return new Promise<string>((resolve, reject) => {
@@ -834,19 +935,18 @@ export class SandboxSdkClient extends BaseSandboxService {
      */
     private async updateProjectConfiguration(instanceId: string, projectName: string): Promise<void> {
         try {
-            const sandbox = this.getSandbox();
-            
-            // Update package.json with new project name (top-level only)
+            // Update package.json with new project name (top-level only). Runs
+            // in the instance session (cwd = instance dir), so no `cd` prefix.
             this.logger.info(`Updating package.json with project name: ${projectName}`);
-            const packageJsonResult = await sandbox.exec(`cd ${instanceId} && sed -i '1,10s/^[ \t]*"name"[ ]*:[ ]*"[^"]*"/  "name": "${projectName}"/' package.json`);
-            
+            const packageJsonResult = await this.executeCommand(instanceId, `sed -i '1,10s/^[ \t]*"name"[ ]*:[ ]*"[^"]*"/  "name": "${projectName}"/' package.json`);
+
             if (packageJsonResult.exitCode !== 0) {
                 this.logger.warn('Failed to update package.json', packageJsonResult.stderr);
             }
-            
+
             // Update wrangler.jsonc with new project name (top-level only)
             this.logger.info(`Updating wrangler.jsonc with project name: ${projectName}`);
-            const wranglerResult = await sandbox.exec(`cd ${instanceId} && sed -i '0,/"name":/s/"name"[ ]*:[ ]*"[^"]*"/"name": "${projectName}"/' wrangler.jsonc`);
+            const wranglerResult = await this.executeCommand(instanceId, `sed -i '0,/"name":/s/"name"[ ]*:[ ]*"[^"]*"/"name": "${projectName}"/' wrangler.jsonc`);
                
             if (wranglerResult.exitCode !== 0) {
                 this.logger.warn('Failed to update wrangler.jsonc', wranglerResult.stderr);
@@ -861,12 +961,12 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     private async setLocalEnvVars(instanceId: string, localEnvVars: Record<string, string>): Promise<void> {
         try {
-            const sandbox = this.getSandbox();
+            const session = await this.getInstanceSession(instanceId);
             // Simply save all env vars in '.dev.vars' file
             const envVarsContent = Object.entries(localEnvVars)
                 .map(([key, value]) => `${key}=${value}`)
                 .join('\n');
-            await sandbox.writeFile(`${instanceId}/.dev.vars`, envVarsContent);
+            await session.writeFile(`/workspace/${instanceId}/.dev.vars`, envVarsContent);
         } catch (error) {
             this.logger.error(`Error setting local environment variables: ${error}`);
             throw error;
@@ -887,7 +987,8 @@ export class SandboxSdkClient extends BaseSandboxService {
             
             // Store wrangler.jsonc configuration in KV after resource provisioning
             try {
-                const wranglerConfigFile = await sandbox.readFile(`${instanceId}/wrangler.jsonc`);
+                const instanceSession = await this.getInstanceSession(instanceId);
+                const wranglerConfigFile = await instanceSession.readFile(`/workspace/${instanceId}/wrangler.jsonc`);
                 if (wranglerConfigFile.success) {
                     await env.VibecoderStore.put(this.getWranglerKVKey(instanceId), wranglerConfigFile.content);
                     this.logger.info('Wrangler configuration stored in KV', { instanceId });
@@ -966,7 +1067,8 @@ export class SandboxSdkClient extends BaseSandboxService {
         let donttouchFiles: string[] = [];
         try {
             // Read .donttouch_files.json
-            const donttouchFile = await this.getSandbox().readFile(`${templateName}/.donttouch_files.json`);
+            const session = await this.getDefaultSession();
+            const donttouchFile = await session.readFile(`/workspace/${templateName}/.donttouch_files.json`);
             if (donttouchFile.exitCode !== 0) {
                 this.logger.warn(`Failed to read .donttouch_files.json: ${donttouchFile.content}`);
             }
@@ -981,7 +1083,8 @@ export class SandboxSdkClient extends BaseSandboxService {
         let redactedFiles: string[] = [];
         try {
             // Read .redacted_files.json
-            const redactedFile = await this.getSandbox().readFile(`${templateName}/.redacted_files.json`);
+            const session = await this.getDefaultSession();
+            const redactedFile = await session.readFile(`/workspace/${templateName}/.redacted_files.json`);
             if (redactedFile.exitCode !== 0) {
                 this.logger.warn(`Failed to read .redacted_files.json: ${redactedFile.content}`);
             }
@@ -998,7 +1101,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             // Set environment variables FIRST, before any other operations
             if (localEnvVars && Object.keys(localEnvVars).length > 0) {
                 this.logger.info('Configuring environment variables', { envVars: Object.keys(localEnvVars) });
-                sandbox.setEnvVars(localEnvVars);
+                await sandbox.setEnvVars(localEnvVars);
             }
             if (env.ALLOCATION_STRATEGY === 'one_to_one') {
                 // Multiple instances shouldn't exist in the same sandbox
@@ -1038,7 +1141,7 @@ export class SandboxSdkClient extends BaseSandboxService {
                 this.fetchRedactedFiles(templateName)
             ]);
 
-            const moveTemplateResult = await sandbox.exec(`mv ${templateName} ${instanceId}`);
+            const moveTemplateResult = await this.safeSandboxExec(`mv ${templateName} ${instanceId}`);
             if (moveTemplateResult.exitCode !== 0) {
                 throw new Error(`Failed to move template: ${moveTemplateResult.stderr}`);
             }
@@ -1150,11 +1253,12 @@ export class SandboxSdkClient extends BaseSandboxService {
                 if (metadata.processId) {
                     for (let i = 0; i < 3; i++) {
                         try {
-                            const process = await this.getSandbox().getProcess(metadata.processId);
+                            const processes = await this.getSandbox().listProcesses();
+                            const process = processes.find((p: { id: string; status: string }) => p.id === metadata.processId);
                             isHealthy = !!(process && process.status === 'running');
                             break;
                         } catch (error) {
-                            this.logger.error(`Process ${metadata.processId} not found or not running, retrying...${i + 1}/3`, {error});
+                            this.logger.error(`Failed to check process ${metadata.processId}, retrying...${i + 1}/3`, {error});
                             isHealthy = false; // Process not found or not running
                         }
                     }
@@ -1217,10 +1321,13 @@ export class SandboxSdkClient extends BaseSandboxService {
                 }
             }
             
-            // Clean up files
-            await sandbox.exec(`rm -rf /app/${instanceId}`);
+            // Clean up files (instances live under /workspace, not /app)
+            await this.safeSandboxExec(`rm -rf ${instanceId}`);
 
-            // Invalidate cache since instance is being shutdown
+            // Invalidate session cache
+            this.invalidateSessionCache(instanceId);
+
+            // Invalidate metadata cache since instance is being shutdown
             this.invalidateMetadataCache(instanceId);
 
             return {
@@ -1242,17 +1349,17 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     async writeFiles(instanceId: string, files: WriteFilesRequest['files'], commitMessage?: string): Promise<WriteFilesResponse> {
         try {
-            const sandbox = this.getSandbox();
+            const session = await this.getInstanceSession(instanceId);
 
             const results = [];
 
             // Filter out donttouch files
             const metadata = await this.getInstanceMetadata(instanceId);
             const donttouchFiles = new Set(metadata.donttouch_files);
-            
+
             const filteredFiles = files.filter(file => !donttouchFiles.has(file.filePath));
 
-            const writePromises = filteredFiles.map(file => sandbox.writeFile(`${instanceId}/${file.filePath}`, file.fileContents));
+            const writePromises = filteredFiles.map(file => session.writeFile(`/workspace/${instanceId}/${file.filePath}`, file.fileContents));
             
             const writeResults = await Promise.all(writePromises);
             
@@ -1292,7 +1399,7 @@ export class SandboxSdkClient extends BaseSandboxService {
 
             // If code files were modified, touch vite.config.ts to trigger a rebuild
             if (successCount > 0 && filteredFiles.some(file => file.filePath.endsWith('.ts') || file.filePath.endsWith('.tsx'))) {
-                await sandbox.exec(`touch ${instanceId}/vite.config.ts`);
+                await this.executeCommand(instanceId, `touch vite.config.ts`);
             }
 
             // Try to commit
@@ -1320,11 +1427,12 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     async getFiles(templateOrInstanceId: string, filePaths?: string[], applyFilter: boolean = true, redactedFiles?: string[]): Promise<GetFilesResponse> {
         try {
-            const sandbox = this.getSandbox();
+            const session = await this.getInstanceSession(templateOrInstanceId);
 
             if (!filePaths) {
-                // Read '.important_files.json' in instance directory
-                const importantFiles = await sandbox.exec(`cd ${templateOrInstanceId} && jq -r '.[]' .important_files.json | while read -r path; do if [ -d "$path" ]; then find "$path" -type f; elif [ -f "$path" ]; then echo "$path"; fi; done`);
+                // Read '.important_files.json' in instance directory. The session
+                // cwd is the instance/template dir, so no `cd` prefix is needed.
+                const importantFiles = await session.exec(`jq -r '.[]' .important_files.json | while read -r path; do if [ -d "$path" ]; then find "$path" -type f; elif [ -f "$path" ]; then echo "$path"; fi; done`);
                 this.logger.info(`Read important files: stdout: ${importantFiles.stdout}, stderr: ${importantFiles.stderr}`);
                 filePaths = importantFiles.stdout.split('\n').filter(path => path);
                 if (!filePaths) {
@@ -1358,7 +1466,7 @@ export class SandboxSdkClient extends BaseSandboxService {
 
             const readPromises = filePaths.map(async (filePath) => {
                 try {
-                    const result = await sandbox.readFile(`${templateOrInstanceId}/${filePath}`);
+                    const result = await session.readFile(`/workspace/${templateOrInstanceId}/${filePath}`);
                     return {
                         result,
                         filePath
@@ -1455,11 +1563,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             for (const command of commands) {
                 try {
                     const result = await this.executeCommand(instanceId, command, timeout);
-                    if (result.exitCode === 2 && result.stderr.includes('/bin/sh: 1: cd: can\'t cd to i-')) {
-                        throw new Error(result.stderr);
-                    }
-                    
-                    
+
                     results.push({
                         command,
                         success: result.exitCode === 0,
@@ -1760,6 +1864,7 @@ export class SandboxSdkClient extends BaseSandboxService {
     async fixCodeIssues(instanceId: string, allFiles?: FileObject[]): Promise<CodeFixResult> {
         try {
             this.logger.info(`Fixing code issues for ${instanceId}`);
+            const session = await this.getInstanceSession(instanceId);
             // First run static analysis
             const analysisResult = await this.runStaticAnalysisCode(instanceId);
             this.logger.info(`Static analysis completed for ${instanceId}`);
@@ -1771,7 +1876,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             const fileFetcher: FileFetcher = async (filePath: string) => {
                 // Fetch a single file from the instance
                 try {
-                    const result = await this.getSandbox().readFile(`${instanceId}/${filePath}`);
+                    const result = await session.readFile(`/workspace/${instanceId}/${filePath}`);
                     if (result.success) {
                         this.logger.info(`Successfully fetched file: ${filePath}`);
                         return {
@@ -1798,9 +1903,11 @@ export class SandboxSdkClient extends BaseSandboxService {
                 analysisResult.typecheck.issues,
                 fileFetcher
             );
-            fixResult.modifiedFiles.forEach((file: FileObject) => {
-                this.getSandbox().writeFile(`${instanceId}/${file.filePath}`, file.fileContents);
-            });
+            await Promise.all(
+                fixResult.modifiedFiles.map((file: FileObject) =>
+                    session.writeFile(`/workspace/${instanceId}/${file.filePath}`, file.fileContents),
+                ),
+            );
             this.logger.info(`Code fix completed for ${instanceId}`);
             return fixResult;
         } catch (error) {
@@ -1840,7 +1947,7 @@ export class SandboxSdkClient extends BaseSandboxService {
                 throw new Error('CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be set in environment');
             }
             
-            const sandbox = this.getSandbox();
+            const session = await this.getDefaultSession();
             this.logger.info('Processing deployment', { instanceId });
             
             // Step 1: Run build commands (bun run build && bunx wrangler build)
@@ -1876,7 +1983,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             // Step 3: Read worker script from dist
             this.logger.info('Reading worker script');
             const workerPath = `${instanceId}/dist/index.js`;
-            const workerFile = await sandbox.readFile(workerPath);
+            const workerFile = await session.readFile(`/workspace/${workerPath}`);
             if (!workerFile.success) {
                 throw new Error(`Worker script not found at ${workerPath}. Please build the project first.`);
             }
@@ -1889,14 +1996,14 @@ export class SandboxSdkClient extends BaseSandboxService {
             let additionalModules: Map<string, string> | undefined;
             try {
                 const workerAssetsPath = `${instanceId}/dist/assets`;
-                const workerAssetsResult = await sandbox.exec(`test -d ${workerAssetsPath} && echo "exists" || echo "missing"`);
+                const workerAssetsResult = await this.safeSandboxExec(`test -d ${workerAssetsPath} && echo "exists" || echo "missing"`);
                 const hasWorkerAssets = workerAssetsResult.exitCode === 0 && workerAssetsResult.stdout.trim() === "exists";
                 
                 if (hasWorkerAssets) {
                     this.logger.info('Processing additional worker modules', { workerAssetsPath });
                     
                     // Find all JS files in the worker assets directory
-                    const findResult = await sandbox.exec(`find ${workerAssetsPath} -type f -name "*.js"`);
+                    const findResult = await this.safeSandboxExec(`find ${workerAssetsPath} -type f -name "*.js"`);
                     if (findResult.exitCode === 0) {
                         const modulePaths = findResult.stdout.trim().split('\n').filter(path => path);
                         
@@ -1935,7 +2042,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             let assetsManifest: Record<string, { hash: string; size: number }> | undefined;
             let fileContents: Map<string, Buffer> | undefined;
             
-            const assetDirResult = await sandbox.exec(`test -d ${assetsPath} && echo "exists" || echo "missing"`);
+            const assetDirResult = await this.safeSandboxExec(`test -d ${assetsPath} && echo "exists" || echo "missing"`);
             const hasAssets = assetDirResult.exitCode === 0 && assetDirResult.stdout.trim() === "exists";
             
             if (hasAssets) {
@@ -2018,10 +2125,8 @@ export class SandboxSdkClient extends BaseSandboxService {
         assetsManifest: Record<string, { hash: string; size: number }>;
         fileContents: Map<string, Buffer>;
     }> {
-        const sandbox = this.getSandbox();
-        
         // Get list of all files in assets directory
-        const findResult = await sandbox.exec(`find ${assetsPath} -type f`);
+        const findResult = await this.safeSandboxExec(`find ${assetsPath} -type f`);
         if (findResult.exitCode !== 0) {
             throw new Error(`Failed to list assets: ${findResult.stderr}`);
         }
@@ -2062,10 +2167,8 @@ export class SandboxSdkClient extends BaseSandboxService {
      * Read file from sandbox as base64 and convert to Buffer
      */
     private async readFileAsBase64Buffer(filePath: string): Promise<Buffer> {
-        const sandbox = this.getSandbox();
-        
         // Use base64 with no line wrapping (-w 0) to preserve binary data
-        const base64Result = await sandbox.exec(`base64 -w 0 "${filePath}"`);
+        const base64Result = await this.safeSandboxExec(`base64 -w 0 "${filePath}"`);
         if (base64Result.exitCode !== 0) {
             throw new Error(`Failed to encode file: ${base64Result.stderr}`);
         }
@@ -2288,9 +2391,10 @@ export class SandboxSdkClient extends BaseSandboxService {
 
         this.logger.info(`Reading ${filePaths.length} files`, { instanceId });
 
+        const session = await this.getInstanceSession(instanceId);
         for (const filePath of filePaths) {
             try {
-                const readResult = await this.getSandbox().readFile(`${instanceId}/${filePath}`);
+                const readResult = await session.readFile(`/workspace/${instanceId}/${filePath}`);
                 if (readResult.success && readResult.content) {
                     files.push({
                         filePath,
@@ -2440,8 +2544,6 @@ export class SandboxSdkClient extends BaseSandboxService {
                 branch
             } = options;
 
-            const sandbox = this.getSandbox();
-
             const repoName = this.extractRepositoryName(repositoryUrl);
             if (!repoName) {
                 return {
@@ -2475,7 +2577,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             // Escape the access token for safe embedding in the printf command
             const escapedToken = accessToken.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/`/g, '\\`').replace(/\$/g, '\\$');
 
-            const writeResult = await sandbox.exec(
+            const writeResult = await this.safeSandboxExec(
                 `printf '#!/bin/sh\\n' > ${credHelperPath} && ` +
                 `printf '# Git credential helper for GitHub authentication\\n' >> ${credHelperPath} && ` +
                 `printf 'echo "[CRED_HELPER] Called with: $1" >&2\\n' >> ${credHelperPath} && ` +
@@ -2493,7 +2595,7 @@ export class SandboxSdkClient extends BaseSandboxService {
                 `printf '    exit 1\\n' >> ${credHelperPath} && ` +
                 `printf '    ;;\\n' >> ${credHelperPath} && ` +
                 `printf 'esac\\n' >> ${credHelperPath}`,
-                { timeout: 10000 }
+                10000
             );
 
             if (writeResult.exitCode !== 0) {
@@ -2507,11 +2609,11 @@ export class SandboxSdkClient extends BaseSandboxService {
 
             // Make script executable
             this.logger.info('Making credential helper executable');
-            await sandbox.exec(`chmod +x ${credHelperPath}`, { timeout: 5000 });
+            await this.safeSandboxExec(`chmod +x ${credHelperPath}`, 5000);
 
             // Test network connectivity
             this.logger.info('Testing GitHub connectivity');
-            const pingResult = await sandbox.exec('curl -I https://github.com', { timeout: 10000 });
+            const pingResult = await this.safeSandboxExec('curl -I https://github.com', 10000);
             this.logger.info('GitHub connectivity test result', {
                 exitCode: pingResult.exitCode,
                 stdout: pingResult.stdout.substring(0, 200)
@@ -2533,7 +2635,7 @@ export class SandboxSdkClient extends BaseSandboxService {
                 branch: branch || 'default'
             });
 
-            const cloneResult = await sandbox.exec(cloneCommand, { timeout: 120000 });
+            const cloneResult = await this.safeSandboxExec(cloneCommand, 120000);
 
             this.logger.info('Git clone command completed', {
                 exitCode: cloneResult.exitCode,
@@ -2542,7 +2644,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             });
 
             // Clean up credential helper immediately
-            await sandbox.exec(`rm -f ${credHelperPath}`, { timeout: 5000 });
+            await this.safeSandboxExec(`rm -f ${credHelperPath}`, 5000);
 
             if (cloneResult.exitCode !== 0) {
                 // Sanitize error message to remove any potential token leaks
@@ -2560,9 +2662,9 @@ export class SandboxSdkClient extends BaseSandboxService {
                 };
             }
 
-            const countResult = await sandbox.exec(
+            const countResult = await this.safeSandboxExec(
                 `find "${targetPath}" -type f ! -path "*/.git/*" | wc -l`,
-                { timeout: 30000 }
+                30000
             );
             const filesCount = countResult.exitCode === 0
                 ? parseInt(countResult.stdout.trim(), 10) || 0
@@ -2666,7 +2768,8 @@ export class SandboxSdkClient extends BaseSandboxService {
      */
     async readFileAsString(filePath: string): Promise<string | null> {
         try {
-            const result = await this.getSandbox().readFile(filePath);
+            const session = await this.getDefaultSession();
+            const result = await session.readFile(filePath);
             return result.content ?? null;
         } catch (error) {
             this.logger.warn('Failed to read file as string', { filePath, error });
@@ -2685,13 +2788,11 @@ export class SandboxSdkClient extends BaseSandboxService {
         const { repositoryPath, patterns = ['*.ts', '*.tsx', '*.js', '*.jsx', '*.json', '*.md'], maxFiles = 1000 } = options;
 
         try {
-            const sandbox = this.getSandbox();
-
             // Build find command to list files matching patterns
             const patternArgs = patterns.map(p => `-name "${p}"`).join(' -o ');
             const findCommand = `find "${repositoryPath}" -type f \\( ${patternArgs} \\) ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*/dist/*" ! -path "*/build/*" | head -n ${maxFiles}`;
 
-            const result = await sandbox.exec(findCommand, { timeout: 30000 });
+            const result = await this.safeSandboxExec(findCommand, 30000);
 
             if (result.exitCode !== 0) {
                 this.logger.warn('Failed to list repository files', {
