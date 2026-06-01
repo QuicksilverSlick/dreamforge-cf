@@ -95,6 +95,12 @@ const SYSTEM_PROMPT = `<ROLE>
     ✅ Icon libraries: lucide-react, heroicons (specify in frameworks)
     ❌ Never: .png, .jpg, .svg, .gif files in phase files list
     Binary files cannot be generated. Always use the approaches above for visual content.
+
+    **Audio & Sound - Use These Approaches:**
+    ✅ Web Audio API: synthesize sound effects directly in code (oscillator + gain nodes) — e.g. a click/move blip, a win chime, an error buzz
+    ✅ External audio URLs: reference a hosted/CDN audio file by URL only if a real recording is genuinely required
+    ❌ Never: .mp3, .wav, .ogg, .m4a or any binary audio files in the phase files list
+    Binary audio cannot be generated as text (it would be written as an empty, unplayable file). Always synthesize sound effects via the Web Audio API, or reference an external URL.
 </INSTRUCTIONS>
 
 <KEY GUIDELINES>

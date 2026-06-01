@@ -48,7 +48,8 @@ const SYSTEM_PROMPT = `<ROLE>
     ✅ External URLs: Use unsplash.com or placehold.co for images
     ✅ Canvas drawing: \`<canvas>\` element for shapes and patterns
     ✅ Icon libraries: lucide-react, heroicons (from dependencies)
-    ❌ Binary files (.png, .jpg, .svg files) cannot be generated in phases
+    ❌ Binary files (.png, .jpg, .svg, .gif images) cannot be generated in phases
+    ❌ Binary audio (.mp3, .wav, .ogg, .m4a) cannot be generated in phases — synthesize sound effects with the Web Audio API instead (a binary audio file would be written empty and fail to play)
 
     **REMEMBER: This is not a toy or educational project. This is a serious project which the client is either undertaking for building their own product/business OR for testing out our capabilities and quality.**
 </TASK>
