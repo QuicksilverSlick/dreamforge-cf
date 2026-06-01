@@ -301,7 +301,18 @@ export class PhasicCodingBehavior
      * `ICodingAgent` surface).
      */
     getOperationOptions(): OperationOptions {
-        const context = GenerationContext.from(this.state, this.logger);
+        // The new agent keeps template details in an in-memory cache keyed
+        // by `templateName` (`getTemplateDetails()`), not embedded on
+        // persisted state. `GenerationContext.from` still reads
+        // `state.templateDetails` (the transitional pattern retired in
+        // commit 5), so bridge the cache in here until that rebase lands —
+        // otherwise it throws "state.templateDetails is missing" and phase
+        // implementation cannot run. `build()` warms the cache first, so
+        // `getTemplateDetails()` resolves without throwing.
+        const stateForContext = this.state.templateDetails
+            ? this.state
+            : { ...this.state, templateDetails: this.getTemplateDetails() };
+        const context = GenerationContext.from(stateForContext, this.logger);
         return {
             env: this.env,
             agentId: this.getAgentId(),
@@ -458,6 +469,13 @@ export class PhasicCodingBehavior
      * remains the live runtime path until M3 commit 4.
      */
     async build(): Promise<void> {
+        // Warm the per-instance template-details cache before the state
+        // machine runs — `getOperationOptions()` reads it via
+        // `getTemplateDetails()` to populate the GenerationContext, and a
+        // cold cache would throw. Best-effort: failure is logged by
+        // ensureTemplateDetails' own callers, and getOperationOptions still
+        // surfaces a clear error if details are genuinely unavailable.
+        await this.ensureTemplateDetails();
         await this.launchStateMachine();
     }
 
