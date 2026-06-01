@@ -227,6 +227,21 @@ export class SandboxSdkClient extends BaseSandboxService {
         return this.getInstanceSession(SandboxSdkClient.DEFAULT_SESSION_ID, '/workspace');
     }
 
+    /**
+     * Dedicated session for the instance's long-lived dev-server process.
+     * Process management (`startProcess`/`getProcess`/`killProcess`) is kept on
+     * this session so the started process is consistently addressable. cwd is
+     * the instance directory.
+     */
+    private async getDevSession(instanceId: string): Promise<ExecutionSession> {
+        return this.getInstanceSession(`${instanceId}-dev`, `/workspace/${instanceId}`);
+    }
+
+    /** Dedicated session for the instance's long-lived cloudflared tunnel process. */
+    private async getTunnelSession(instanceId: string): Promise<ExecutionSession> {
+        return this.getInstanceSession(`${instanceId}-tunnel`, `/workspace/${instanceId}`);
+    }
+
     private invalidateSessionCache(instanceId: string): void {
         if (this.sessionCache.delete(instanceId)) {
             this.logger.debug('Session cache invalidated', { instanceId });
@@ -755,10 +770,12 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     private async startDevServer(instanceId: string, port: number): Promise<string> {
         try {
-            // Use CLI tools for enhanced monitoring instead of direct process start
-            const process = await this.getSandbox().startProcess(
-                `VITE_LOGGER_TYPE=json monitor-cli process start --instance-id ${instanceId} --port ${port} -- bun run dev`, 
-                { cwd: instanceId }
+            // Use CLI tools for enhanced monitoring instead of direct process start.
+            // The dev session's cwd is the instance directory, so no `cwd` option
+            // is passed (it would otherwise double-nest under the session cwd).
+            const devSession = await this.getDevSession(instanceId);
+            const process = await devSession.startProcess(
+                `VITE_LOGGER_TYPE=json monitor-cli process start --instance-id ${instanceId} --port ${port} -- bun run dev`,
             );
             this.logger.info('Development server started', { instanceId, processId: process.id });
             
@@ -787,10 +804,10 @@ export class SandboxSdkClient extends BaseSandboxService {
      */
     private async provisionTemplateResources(instanceId: string, projectName: string): Promise<ResourceProvisioningResult> {
         try {
-            const sandbox = this.getSandbox();
-            
+            const session = await this.getInstanceSession(instanceId);
+
             // Read wrangler.jsonc file
-            const wranglerFile = await sandbox.readFile(`${instanceId}/wrangler.jsonc`);
+            const wranglerFile = await session.readFile(`/workspace/${instanceId}/wrangler.jsonc`);
             if (!wranglerFile.success) {
                 this.logger.info(`No wrangler.jsonc found for ${instanceId}, skipping resource provisioning`);
                 return {
@@ -875,7 +892,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             let wranglerUpdated = false;
             if (Object.keys(replacements).length > 0) {
                 const updatedContent = templateParser.replacePlaceholders(wranglerFile.content, replacements);
-                const writeResult = await sandbox.writeFile(`${instanceId}/wrangler.jsonc`, updatedContent);
+                const writeResult = await session.writeFile(`/workspace/${instanceId}/wrangler.jsonc`, updatedContent);
                 
                 if (writeResult.success) {
                     wranglerUpdated = true;
@@ -919,14 +936,14 @@ export class SandboxSdkClient extends BaseSandboxService {
     */
     private async startCloudflaredTunnel(instanceId: string, port: number): Promise<string> {
         try {
-            const process = await this.getSandbox().startProcess(
-                `cloudflared tunnel --url http://localhost:${port}`, 
-                { cwd: instanceId }
+            const tunnelSession = await this.getTunnelSession(instanceId);
+            const process = await tunnelSession.startProcess(
+                `cloudflared tunnel --url http://localhost:${port}`,
             );
             this.logger.info(`Started cloudflared tunnel for ${instanceId}`);
 
             // Stream process logs to extract the preview URL
-            const logStream = await this.getSandbox().streamProcessLogs(process.id);
+            const logStream = await tunnelSession.streamProcessLogs(process.id);
             
             return new Promise<string>((resolve, reject) => {
                 const timeout = setTimeout(() => {
@@ -974,19 +991,18 @@ export class SandboxSdkClient extends BaseSandboxService {
      */
     private async updateProjectConfiguration(instanceId: string, projectName: string): Promise<void> {
         try {
-            const sandbox = this.getSandbox();
-            
-            // Update package.json with new project name (top-level only)
+            // Update package.json with new project name (top-level only). Runs
+            // in the instance session (cwd = instance dir), so no `cd` prefix.
             this.logger.info(`Updating package.json with project name: ${projectName}`);
-            const packageJsonResult = await sandbox.exec(`cd ${instanceId} && sed -i '1,10s/^[ \t]*"name"[ ]*:[ ]*"[^"]*"/  "name": "${projectName}"/' package.json`);
-            
+            const packageJsonResult = await this.executeCommand(instanceId, `sed -i '1,10s/^[ \t]*"name"[ ]*:[ ]*"[^"]*"/  "name": "${projectName}"/' package.json`);
+
             if (packageJsonResult.exitCode !== 0) {
                 this.logger.warn('Failed to update package.json', packageJsonResult.stderr);
             }
-            
+
             // Update wrangler.jsonc with new project name (top-level only)
             this.logger.info(`Updating wrangler.jsonc with project name: ${projectName}`);
-            const wranglerResult = await sandbox.exec(`cd ${instanceId} && sed -i '0,/"name":/s/"name"[ ]*:[ ]*"[^"]*"/"name": "${projectName}"/' wrangler.jsonc`);
+            const wranglerResult = await this.executeCommand(instanceId, `sed -i '0,/"name":/s/"name"[ ]*:[ ]*"[^"]*"/"name": "${projectName}"/' wrangler.jsonc`);
                
             if (wranglerResult.exitCode !== 0) {
                 this.logger.warn('Failed to update wrangler.jsonc', wranglerResult.stderr);
@@ -1001,12 +1017,12 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     private async setLocalEnvVars(instanceId: string, localEnvVars: Record<string, string>): Promise<void> {
         try {
-            const sandbox = this.getSandbox();
+            const session = await this.getInstanceSession(instanceId);
             // Simply save all env vars in '.dev.vars' file
             const envVarsContent = Object.entries(localEnvVars)
                 .map(([key, value]) => `${key}=${value}`)
                 .join('\n');
-            await sandbox.writeFile(`${instanceId}/.dev.vars`, envVarsContent);
+            await session.writeFile(`/workspace/${instanceId}/.dev.vars`, envVarsContent);
         } catch (error) {
             this.logger.error(`Error setting local environment variables: ${error}`);
             throw error;
@@ -1027,7 +1043,8 @@ export class SandboxSdkClient extends BaseSandboxService {
             
             // Store wrangler.jsonc configuration in KV after resource provisioning
             try {
-                const wranglerConfigFile = await sandbox.readFile(`${instanceId}/wrangler.jsonc`);
+                const instanceSession = await this.getInstanceSession(instanceId);
+                const wranglerConfigFile = await instanceSession.readFile(`/workspace/${instanceId}/wrangler.jsonc`);
                 if (wranglerConfigFile.success) {
                     await env.VibecoderStore.put(this.getWranglerKVKey(instanceId), wranglerConfigFile.content);
                     this.logger.info('Wrangler configuration stored in KV', { instanceId });
@@ -1138,7 +1155,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             // Set environment variables FIRST, before any other operations
             if (localEnvVars && Object.keys(localEnvVars).length > 0) {
                 this.logger.info('Configuring environment variables', { envVars: Object.keys(localEnvVars) });
-                sandbox.setEnvVars(localEnvVars);
+                await sandbox.setEnvVars(localEnvVars);
             }
             if (env.ALLOCATION_STRATEGY === 'one_to_one') {
                 // Multiple instances shouldn't exist in the same sandbox
@@ -1288,9 +1305,10 @@ export class SandboxSdkClient extends BaseSandboxService {
             try {
                 // Optionally check if process is still running
                 if (metadata.processId) {
+                    const devSession = await this.getDevSession(instanceId);
                     for (let i = 0; i < 3; i++) {
                         try {
-                            const process = await this.getSandbox().getProcess(metadata.processId);
+                            const process = await devSession.getProcess(metadata.processId);
                             isHealthy = !!(process && process.status === 'running');
                             break;
                         } catch (error) {
@@ -1341,7 +1359,8 @@ export class SandboxSdkClient extends BaseSandboxService {
             
             if (metadata.processId) {
                 try {
-                    await sandbox.killProcess(metadata.processId);
+                    const devSession = await this.getDevSession(instanceId);
+                    await devSession.killProcess(metadata.processId);
                 } catch (error) {
                     this.logger.warn(`Failed to kill process ${metadata.processId}`, error);
                 }
@@ -1382,17 +1401,17 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     async writeFiles(instanceId: string, files: WriteFilesRequest['files'], commitMessage?: string): Promise<WriteFilesResponse> {
         try {
-            const sandbox = this.getSandbox();
+            const session = await this.getInstanceSession(instanceId);
 
             const results = [];
 
             // Filter out donttouch files
             const metadata = await this.getInstanceMetadata(instanceId);
             const donttouchFiles = new Set(metadata.donttouch_files);
-            
+
             const filteredFiles = files.filter(file => !donttouchFiles.has(file.filePath));
 
-            const writePromises = filteredFiles.map(file => sandbox.writeFile(`${instanceId}/${file.filePath}`, file.fileContents));
+            const writePromises = filteredFiles.map(file => session.writeFile(`/workspace/${instanceId}/${file.filePath}`, file.fileContents));
             
             const writeResults = await Promise.all(writePromises);
             
@@ -1432,7 +1451,7 @@ export class SandboxSdkClient extends BaseSandboxService {
 
             // If code files were modified, touch vite.config.ts to trigger a rebuild
             if (successCount > 0 && filteredFiles.some(file => file.filePath.endsWith('.ts') || file.filePath.endsWith('.tsx'))) {
-                await sandbox.exec(`touch ${instanceId}/vite.config.ts`);
+                await this.executeCommand(instanceId, `touch vite.config.ts`);
             }
 
             // Try to commit
@@ -1460,11 +1479,12 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     async getFiles(templateOrInstanceId: string, filePaths?: string[], applyFilter: boolean = true, redactedFiles?: string[]): Promise<GetFilesResponse> {
         try {
-            const sandbox = this.getSandbox();
+            const session = await this.getInstanceSession(templateOrInstanceId);
 
             if (!filePaths) {
-                // Read '.important_files.json' in instance directory
-                const importantFiles = await sandbox.exec(`cd ${templateOrInstanceId} && jq -r '.[]' .important_files.json | while read -r path; do if [ -d "$path" ]; then find "$path" -type f; elif [ -f "$path" ]; then echo "$path"; fi; done`);
+                // Read '.important_files.json' in instance directory. The session
+                // cwd is the instance/template dir, so no `cd` prefix is needed.
+                const importantFiles = await session.exec(`jq -r '.[]' .important_files.json | while read -r path; do if [ -d "$path" ]; then find "$path" -type f; elif [ -f "$path" ]; then echo "$path"; fi; done`);
                 this.logger.info(`Read important files: stdout: ${importantFiles.stdout}, stderr: ${importantFiles.stderr}`);
                 filePaths = importantFiles.stdout.split('\n').filter(path => path);
                 if (!filePaths) {
@@ -1498,7 +1518,7 @@ export class SandboxSdkClient extends BaseSandboxService {
 
             const readPromises = filePaths.map(async (filePath) => {
                 try {
-                    const result = await sandbox.readFile(`${templateOrInstanceId}/${filePath}`);
+                    const result = await session.readFile(`/workspace/${templateOrInstanceId}/${filePath}`);
                     return {
                         result,
                         filePath
@@ -1896,6 +1916,7 @@ export class SandboxSdkClient extends BaseSandboxService {
     async fixCodeIssues(instanceId: string, allFiles?: FileObject[]): Promise<CodeFixResult> {
         try {
             this.logger.info(`Fixing code issues for ${instanceId}`);
+            const session = await this.getInstanceSession(instanceId);
             // First run static analysis
             const analysisResult = await this.runStaticAnalysisCode(instanceId);
             this.logger.info(`Static analysis completed for ${instanceId}`);
@@ -1907,7 +1928,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             const fileFetcher: FileFetcher = async (filePath: string) => {
                 // Fetch a single file from the instance
                 try {
-                    const result = await this.getSandbox().readFile(`${instanceId}/${filePath}`);
+                    const result = await session.readFile(`/workspace/${instanceId}/${filePath}`);
                     if (result.success) {
                         this.logger.info(`Successfully fetched file: ${filePath}`);
                         return {
@@ -1934,9 +1955,11 @@ export class SandboxSdkClient extends BaseSandboxService {
                 analysisResult.typecheck.issues,
                 fileFetcher
             );
-            fixResult.modifiedFiles.forEach((file: FileObject) => {
-                this.getSandbox().writeFile(`${instanceId}/${file.filePath}`, file.fileContents);
-            });
+            await Promise.all(
+                fixResult.modifiedFiles.map((file: FileObject) =>
+                    session.writeFile(`/workspace/${instanceId}/${file.filePath}`, file.fileContents),
+                ),
+            );
             this.logger.info(`Code fix completed for ${instanceId}`);
             return fixResult;
         } catch (error) {
@@ -2424,9 +2447,10 @@ export class SandboxSdkClient extends BaseSandboxService {
 
         this.logger.info(`Reading ${filePaths.length} files`, { instanceId });
 
+        const session = await this.getInstanceSession(instanceId);
         for (const filePath of filePaths) {
             try {
-                const readResult = await this.getSandbox().readFile(`${instanceId}/${filePath}`);
+                const readResult = await session.readFile(`/workspace/${instanceId}/${filePath}`);
                 if (readResult.success && readResult.content) {
                     files.push({
                         filePath,
