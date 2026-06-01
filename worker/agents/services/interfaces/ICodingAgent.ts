@@ -1,7 +1,10 @@
-import { FileOutputType } from "worker/agents/schemas";
+import { FileOutputType, ImageAssetType } from "worker/agents/schemas";
 import { BaseSandboxService } from "worker/services/sandbox/BaseSandboxService";
 import { PreviewType } from "worker/services/sandbox/sandboxTypes";
 import { ProcessedImageAttachment } from "worker/types/image-attachment";
+
+/** A request to generate (or replace) a single image asset on demand. */
+export type ImageGenerationRequest = Omit<ImageAssetType, 'url'>;
 
 export abstract class ICodingAgent {
     abstract getSandboxServiceClient(): BaseSandboxService;
@@ -13,4 +16,12 @@ export abstract class ICodingAgent {
     abstract getLogs(reset?: boolean): Promise<string>;
 
     abstract queueUserRequest(request: string, images?: ProcessedImageAttachment[]): void;
+
+    /**
+     * Generate (or replace) a single image asset on demand, store it, merge
+     * its public URL into the blueprint manifest, and queue a request so the
+     * next phase wires it into the app. Returns the public URL, or null if
+     * generation failed.
+     */
+    abstract queueImageGeneration(request: ImageGenerationRequest): Promise<string | null>;
 }

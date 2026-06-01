@@ -5,6 +5,7 @@ import { toolFeedbackDefinition } from './toolkit/feedback';
 import { createQueueRequestTool } from './toolkit/queue-request';
 import { createGetLogsTool } from './toolkit/get-logs';
 import { createDeployPreviewTool } from './toolkit/deploy-preview';
+import { createGenerateImageTool } from './toolkit/generate-image';
 import { CodingAgentInterface } from 'worker/agents/services/implementations/CodingAgent';
 
 export async function executeToolWithDefinition<TArgs, TResult>(
@@ -31,5 +32,6 @@ export function buildTools(
         createQueueRequestTool(agent, logger),
         createGetLogsTool(agent, logger),
         createDeployPreviewTool(agent, logger),
+        createGenerateImageTool(agent, logger),
     ];
 }

@@ -114,6 +114,8 @@ import type {
 } from '../../inferutils/config.types';
 import { FastCodeFixerOperation } from '../../operations/FastCodeFixer';
 import { SimpleCodeGenerationOperation } from '../../operations/SimpleCodeGeneration';
+import { ImageGenerationOperation, type GeneratedImageResult } from '../../operations/ImageGeneration';
+import type { ImageGenerationRequest } from '../../services/interfaces/ICodingAgent';
 import { fixProjectIssues, type FileFetcher } from '../../../services/code-fixer';
 import { looksLikeCommand } from '../../utils/common';
 import { ModelConfigService } from '../../../database/services/ModelConfigService';
@@ -231,6 +233,13 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         processUserMessage: new UserConversationProcessor(),
         simpleGenerateFiles: new SimpleCodeGenerationOperation(),
     };
+
+    /**
+     * Image-asset generator (dedicated image models). Shared by the
+     * blueprint-time pass ({@link generateBlueprintImages}) and the
+     * phase-time on-demand path ({@link queueImageGeneration}).
+     */
+    protected readonly imageGenerationOperation = new ImageGenerationOperation();
 
     constructor(
         infrastructure: AgentInfrastructure<TState>,
@@ -1845,6 +1854,159 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             });
             this.pendingUserImages = [...this.pendingUserImages, ...images];
         }
+    }
+
+    /**
+     * Generate any not-yet-generated blueprint image assets via dedicated
+     * image models before the first phase deploys, so generated code can
+     * reference real asset URLs. Idempotent and resumable: only manifest
+     * entries lacking a resolved `url` are generated, and resolved URLs are
+     * merged back into the blueprint manifest in state. Per-asset and
+     * whole-step failures are non-fatal — the build continues.
+     */
+    protected async generateBlueprintImages(): Promise<void> {
+        const blueprint = this.state.blueprint;
+        const assets = blueprint.imageAssets;
+        if (!assets || assets.length === 0) {
+            return;
+        }
+
+        const pending = assets.filter((asset) => !asset.url);
+        if (pending.length === 0) {
+            return;
+        }
+
+        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_STARTED, {
+            message: `Generating ${pending.length} image asset(s)`,
+            count: pending.length,
+        });
+
+        try {
+            const results = await this.imageGenerationOperation.execute(
+                {
+                    assets: pending,
+                    onImageGenerated: (result, index, total) => {
+                        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_PROGRESS, {
+                            message: `Generated image ${index}/${total}: ${result.path}`,
+                            path: result.path,
+                            url: result.url,
+                            provider: result.provider,
+                            index,
+                            total,
+                        });
+                    },
+                },
+                this.getOperationOptions(),
+            );
+
+            if (results.length > 0) {
+                this.mergeGeneratedImages(results);
+            }
+
+            this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_COMPLETED, {
+                message: `Generated ${results.length} of ${pending.length} image asset(s)`,
+                images: results.map((result) => ({
+                    path: result.path,
+                    url: result.url,
+                    purpose: result.purpose,
+                })),
+            });
+        } catch (error) {
+            this.logger.error('Image generation step failed', error);
+            this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_ERROR, {
+                message: 'Image generation failed',
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+
+    /**
+     * Generate (or replace) a single image asset on demand — driven by the
+     * conversational `generate_image` tool. Stores the image, merges its URL
+     * into the blueprint manifest, and queues a request so the next phase
+     * wires it into the app. Returns the public URL, or null on failure.
+     */
+    async queueImageGeneration(request: ImageGenerationRequest): Promise<string | null> {
+        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_STARTED, {
+            message: `Generating image asset: ${request.path}`,
+            count: 1,
+        });
+
+        let result: GeneratedImageResult | undefined;
+        try {
+            const results = await this.imageGenerationOperation.execute(
+                { assets: [{ ...request }] },
+                this.getOperationOptions(),
+            );
+            result = results[0];
+        } catch (error) {
+            this.logger.error('On-demand image generation failed', error);
+        }
+
+        if (!result) {
+            this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_ERROR, {
+                message: `Failed to generate image asset: ${request.path}`,
+                error: 'Image generation failed for all providers',
+                path: request.path,
+            });
+            return null;
+        }
+
+        this.mergeGeneratedImages([result], request);
+
+        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_COMPLETED, {
+            message: `Generated image asset: ${result.path}`,
+            images: [{ path: result.path, url: result.url, purpose: result.purpose }],
+        });
+
+        await this.queueUserRequest(
+            `A new image asset has been generated and is available at the URL ${result.url} ` +
+                `(purpose: ${result.purpose}, intended location "${result.path}"). Update the application to ` +
+                `use this image — replace any previous image serving the same purpose/location and reference it ` +
+                `via <img src="${result.url}"> (or as a CSS background) where appropriate.`,
+        );
+
+        return result.url;
+    }
+
+    /**
+     * Merge generated image URLs back into the blueprint manifest in state.
+     * Existing entries (matched by `path`) are updated in place; entries not
+     * already in the manifest are appended (with their request metadata when
+     * available).
+     */
+    private mergeGeneratedImages(
+        results: GeneratedImageResult[],
+        request?: ImageGenerationRequest,
+    ): void {
+        const blueprint = this.state.blueprint;
+        const existing = blueprint.imageAssets ?? [];
+        const urlByPath = new Map(results.map((result) => [result.path, result.url]));
+
+        const updated = existing.map((asset) =>
+            urlByPath.has(asset.path) ? { ...asset, url: urlByPath.get(asset.path) } : asset,
+        );
+
+        for (const result of results) {
+            if (!existing.some((asset) => asset.path === result.path)) {
+                updated.push({
+                    path: result.path,
+                    prompt: request?.prompt ?? '',
+                    purpose: result.purpose,
+                    width: request?.width,
+                    height: request?.height,
+                    url: result.url,
+                });
+            }
+        }
+
+        this.setState({
+            ...this.state,
+            blueprint: {
+                ...blueprint,
+                imageAssets: updated,
+            },
+        });
     }
 
     protected fetchPendingUserRequests(): string[] {

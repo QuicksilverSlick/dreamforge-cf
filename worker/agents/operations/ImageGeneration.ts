@@ -16,7 +16,7 @@ export interface GeneratedImageResult {
     path: string;
     /** Public URL the asset is served from (`/api/generated/<id>/<file>`). */
     url: string;
-    purpose: string;
+    purpose: ImageAssetType['purpose'];
     /** Provider that produced the asset. */
     provider: ImageProvider;
 }
