@@ -81,7 +81,10 @@ export const ImageAssetSchema = z.object({
     purpose: z.enum(['logo', 'icon', 'hero', 'background', 'illustration', 'avatar', 'photo']).describe('Role of the asset; drives provider-specific prompt tuning'),
     width: z.number().optional().describe('Desired width in pixels (divisible by 16). Defaults applied if omitted.'),
     height: z.number().optional().describe('Desired height in pixels (divisible by 16). Defaults applied if omitted.'),
+    url: z.string().optional().describe('Public URL of the generated asset. Populated by the system after the image is generated and uploaded; do NOT set this when authoring the blueprint. Once present, reference the image at this URL (e.g. <img src="{url}">).'),
 });
+
+export type ImageAssetType = z.infer<typeof ImageAssetSchema>;
 
 export const BlueprintSchema = z.object({
     title: z.string().describe('Title of the application'),

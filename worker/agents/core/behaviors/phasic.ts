@@ -86,6 +86,7 @@ import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 import { FastCodeFixerOperation } from '../../operations/FastCodeFixer';
 import { PhaseGenerationOperation } from '../../operations/PhaseGeneration';
 import { PhaseImplementationOperation } from '../../operations/PhaseImplementation';
+import { ImageGenerationOperation } from '../../operations/ImageGeneration';
 import { SimpleCodeGenerationOperation } from '../../operations/SimpleCodeGeneration';
 import { UserConversationProcessor } from '../../operations/UserConversationProcessor';
 import type { OperationOptions } from '../../operations/common';
@@ -117,6 +118,7 @@ import { BaseCodingBehavior, type BaseCodingOperations } from './base';
 interface PhasicOperations extends BaseCodingOperations {
     generateNextPhase: PhaseGenerationOperation;
     implementPhase: PhaseImplementationOperation;
+    generateImages: ImageGenerationOperation;
 }
 
 /**
@@ -136,6 +138,7 @@ export class PhasicCodingBehavior
         simpleGenerateFiles: new SimpleCodeGenerationOperation(),
         generateNextPhase: new PhaseGenerationOperation(),
         implementPhase: new PhaseImplementationOperation(),
+        generateImages: new ImageGenerationOperation(),
     };
 
     /**
@@ -476,7 +479,83 @@ export class PhasicCodingBehavior
         // ensureTemplateDetails' own callers, and getOperationOptions still
         // surfaces a clear error if details are genuinely unavailable.
         await this.ensureTemplateDetails();
+        await this.maybeGenerateImages();
         await this.launchStateMachine();
+    }
+
+    /**
+     * Generate the blueprint's declared image assets (logos/hero/illustrations)
+     * via dedicated image models before the first phase deploys, so generated
+     * code can reference real asset URLs. Idempotent and resumable: only
+     * manifest entries lacking a resolved `url` are generated, and the
+     * resolved URLs are merged back into the blueprint manifest in state.
+     * Per-asset and whole-step failures are non-fatal — the build continues.
+     */
+    private async maybeGenerateImages(): Promise<void> {
+        const blueprint = this.state.blueprint;
+        const assets = blueprint.imageAssets;
+        if (!assets || assets.length === 0) {
+            return;
+        }
+
+        const pending = assets.filter((asset) => !asset.url);
+        if (pending.length === 0) {
+            return;
+        }
+
+        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_STARTED, {
+            message: `Generating ${pending.length} image asset(s)`,
+            count: pending.length,
+        });
+
+        try {
+            const results = await this.operations.generateImages.execute(
+                {
+                    assets: pending,
+                    onImageGenerated: (result, index, total) => {
+                        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_PROGRESS, {
+                            message: `Generated image ${index}/${total}: ${result.path}`,
+                            path: result.path,
+                            url: result.url,
+                            provider: result.provider,
+                            index,
+                            total,
+                        });
+                    },
+                },
+                this.getOperationOptions(),
+            );
+
+            if (results.length > 0) {
+                const urlByPath = new Map(results.map((result) => [result.path, result.url]));
+                this.setState({
+                    ...this.state,
+                    blueprint: {
+                        ...blueprint,
+                        imageAssets: assets.map((asset) =>
+                            urlByPath.has(asset.path)
+                                ? { ...asset, url: urlByPath.get(asset.path) }
+                                : asset,
+                        ),
+                    },
+                });
+            }
+
+            this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_COMPLETED, {
+                message: `Generated ${results.length} of ${pending.length} image asset(s)`,
+                images: results.map((result) => ({
+                    path: result.path,
+                    url: result.url,
+                    purpose: result.purpose,
+                })),
+            });
+        } catch (error) {
+            this.logger.error('Image generation step failed', error);
+            this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_ERROR, {
+                message: 'Image generation failed',
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
     }
 
     private async launchStateMachine(): Promise<void> {

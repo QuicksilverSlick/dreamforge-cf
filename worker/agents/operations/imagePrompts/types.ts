@@ -27,4 +27,4 @@ export interface ImagePromptContext {
     projectDescriptor?: string;
 }
 
-export type ImageProvider = 'openai' | 'gemini';
+export type { ImageProvider } from '../../inferutils/imageGeneration';

@@ -15,14 +15,31 @@
  */
 import { getConfigurationForModel } from './core';
 import { createLogger } from '../../logger';
+import type { SupportedImageMimeType } from '../../types/image-attachment';
 
 const logger = createLogger('ImageGeneration');
 
 export type ImageQuality = 'low' | 'medium' | 'high';
 
-/** Primary/fallback image models (bracket form forces provider routing). */
-export const IMAGE_MODEL_PRIMARY = '[openai]gpt-image-2';
-export const IMAGE_MODEL_FALLBACK = '[gemini]gemini-3-pro-image';
+/** Image-generation providers, in fallback order (primary first). */
+export type ImageProvider = 'openai' | 'gemini';
+
+/**
+ * Model spec per provider (bracket form forces provider routing in
+ * {@link getConfigurationForModel}).
+ */
+export const IMAGE_MODEL_BY_PROVIDER: Record<ImageProvider, string> = {
+    openai: '[openai]gpt-image-2',
+    gemini: '[gemini]gemini-3-pro-image',
+};
+
+/** Default provider attempt order: GPT Image 2 primary, Nano Banana Pro fallback. */
+export const IMAGE_PROVIDER_ORDER: readonly ImageProvider[] = ['openai', 'gemini'];
+
+/** @deprecated Use {@link IMAGE_MODEL_BY_PROVIDER}. */
+export const IMAGE_MODEL_PRIMARY = IMAGE_MODEL_BY_PROVIDER.openai;
+/** @deprecated Use {@link IMAGE_MODEL_BY_PROVIDER}. */
+export const IMAGE_MODEL_FALLBACK = IMAGE_MODEL_BY_PROVIDER.gemini;
 
 export interface GenerateImageParams {
     /** Provider-tuned prompt describing the image to create. */
@@ -37,7 +54,7 @@ export interface GenerateImageParams {
 export interface GeneratedImage {
     /** Base64-encoded image bytes (no data-URI prefix). */
     base64: string;
-    mimeType: string;
+    mimeType: SupportedImageMimeType;
 }
 
 interface ImagesApiResponse {
@@ -92,17 +109,45 @@ async function callImagesApi(
 }
 
 /**
- * Generate a single image, trying the primary provider then the fallback.
- * Throws only if both providers fail (callers treat a per-asset failure as
- * non-fatal so the build still completes).
+ * Generate a single image with one specific provider. Throws on failure so
+ * callers can fall back to another provider.
  */
-export async function generateImage(env: Env, params: GenerateImageParams): Promise<GeneratedImage> {
-    try {
-        return await callImagesApi(env, IMAGE_MODEL_PRIMARY, params);
-    } catch (primaryError) {
-        logger.warn('Primary image model failed; trying fallback', {
-            error: primaryError instanceof Error ? primaryError.message : String(primaryError),
-        });
-        return await callImagesApi(env, IMAGE_MODEL_FALLBACK, params);
+export function generateImageWithProvider(
+    env: Env,
+    provider: ImageProvider,
+    params: GenerateImageParams,
+): Promise<GeneratedImage> {
+    return callImagesApi(env, IMAGE_MODEL_BY_PROVIDER[provider], params);
+}
+
+/**
+ * Generate a single image, trying providers in {@link IMAGE_PROVIDER_ORDER}
+ * (primary then fallback). `buildPrompt` is invoked per attempt so each
+ * provider receives a prompt tuned to its own skill guide. Throws only if
+ * every provider fails (callers treat a per-asset failure as non-fatal so the
+ * build still completes).
+ */
+export async function generateImage(
+    env: Env,
+    buildPrompt: (provider: ImageProvider) => string,
+    params: Omit<GenerateImageParams, 'prompt'>,
+): Promise<{ image: GeneratedImage; provider: ImageProvider }> {
+    let lastError: unknown;
+    for (const provider of IMAGE_PROVIDER_ORDER) {
+        try {
+            const image = await generateImageWithProvider(env, provider, {
+                ...params,
+                prompt: buildPrompt(provider),
+            });
+            return { image, provider };
+        } catch (error) {
+            lastError = error;
+            logger.warn(`Image model '${provider}' failed; trying next provider`, {
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
     }
+    throw lastError instanceof Error
+        ? lastError
+        : new Error('All image providers failed');
 }
