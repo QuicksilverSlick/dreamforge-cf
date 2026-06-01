@@ -174,6 +174,16 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 {
     protected static readonly MAX_COMMANDS_HISTORY = 10;
 
+    /**
+     * Fail-fast bound for a single sandbox deploy. The fork's
+     * `SandboxSdkClient.createInstance` orchestration is unbounded — several
+     * `sandbox.exec` calls (template move, instance setup) carry no per-call
+     * timeout, so an unresponsive container hangs the deploy, and with it the
+     * dependent generation flow, indefinitely. Matches upstream's 60s value
+     * for the same deploy path.
+     */
+    protected static readonly SANDBOX_DEPLOY_TIMEOUT_MS = 60_000;
+
     protected projectSetupAssistant: ProjectSetupAssistant | undefined;
     protected templateDetailsCache: TemplateDetails | null = null;
 
@@ -519,12 +529,14 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         });
 
         try {
-            const result = await this.deploymentManager.deployToSandbox({
-                files,
-                redeploy,
-                commitMessage,
-                clearLogs,
-            });
+            const result = await this.raceDeployTimeout(
+                this.deploymentManager.deployToSandbox({
+                    files,
+                    redeploy,
+                    commitMessage,
+                    clearLogs,
+                }),
+            );
 
             const preview: PreviewType = {
                 runId: result.deploymentId,
@@ -546,6 +558,41 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             });
             throw error;
         }
+    }
+
+    /**
+     * Bounds a sandbox deploy with a fail-fast timeout (see
+     * {@link SANDBOX_DEPLOY_TIMEOUT_MS}). On timeout the race rejects so the
+     * caller surfaces `DEPLOYMENT_FAILED` instead of wedging the generation
+     * flow on an unresponsive container.
+     *
+     * The underlying deploy promise is intentionally left to settle on its
+     * own (its rejection is swallowed to avoid an unhandled rejection): with
+     * no session reset here, a late success merely records a valid
+     * `sandboxInstanceId`, which is harmless. Session-reset-and-retry on
+     * timeout is deferred to the M4 sandbox-lifecycle work, where a fresh
+     * instance can actually be expected to serve — doing it here would race
+     * the orphaned deploy's `onSessionIdChange` against the new session.
+     */
+    private raceDeployTimeout<T>(deployment: Promise<T>): Promise<T> {
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+                reject(
+                    new Error(
+                        `Deployment timed out after ${
+                            BaseCodingBehavior.SANDBOX_DEPLOY_TIMEOUT_MS / 1000
+                        }s`,
+                    ),
+                );
+            }, BaseCodingBehavior.SANDBOX_DEPLOY_TIMEOUT_MS);
+        });
+        void deployment.catch(() => undefined);
+        return Promise.race([deployment, timeout]).finally(() => {
+            if (timeoutId !== undefined) {
+                clearTimeout(timeoutId);
+            }
+        });
     }
 
     /**
