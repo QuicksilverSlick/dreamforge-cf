@@ -199,6 +199,19 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     private sandboxReadyPromise: Promise<void>;
     private resolveSandboxReady!: () => void;
 
+    /**
+     * Memoised sandbox client and the session id it was built for. The
+     * client is bound to a single sandbox session for its lifetime, so it
+     * is constructed once and reused across every sandbox touch (static
+     * analysis polling, runtime-error fetches, command execution, template
+     * details). Keyed on {@link getSandboxSessionId} so it self-invalidates
+     * if the session id ever changes (e.g. a future deploy-timeout reset);
+     * a fresh behavior instance after a DO restart rebuilds it for the
+     * persisted session id on first access.
+     */
+    private sandboxServiceClient?: BaseSandboxService;
+    private sandboxServiceClientSessionId?: string;
+
     protected userModelConfigs?: Record<AgentActionKey, ModelConfig>;
     protected runtimeOverrides?: InferenceRuntimeOverrides;
 
@@ -343,10 +356,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
         this.logger.info(`Loading template details for: ${this.state.templateName}`);
 
-        const sandboxClient: BaseSandboxService = getSandboxService(
-            this.getSandboxSessionId(),
-            this.getAgentId(),
-        );
+        const sandboxClient = this.getSandboxServiceClient();
         const results = await sandboxClient.getTemplateDetails(this.state.templateName);
         if (!results.success || !results.templateDetails) {
             throw new Error(
@@ -849,7 +859,18 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     getSandboxServiceClient(): BaseSandboxService {
-        return getSandboxService(this.getSandboxSessionId(), this.getAgentId());
+        const sessionId = this.getSandboxSessionId();
+        if (
+            !this.sandboxServiceClient ||
+            this.sandboxServiceClientSessionId !== sessionId
+        ) {
+            this.sandboxServiceClient = getSandboxService(
+                sessionId,
+                this.getAgentId(),
+            );
+            this.sandboxServiceClientSessionId = sessionId;
+        }
+        return this.sandboxServiceClient;
     }
 
     /**
