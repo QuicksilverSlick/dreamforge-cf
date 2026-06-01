@@ -305,17 +305,19 @@ export class SandboxSdkClient extends BaseSandboxService {
         const startTime = Date.now();
         const excludeList = excludedPorts.join(' ');
         
-        // Single command to find first available port in dev range (8001-8999)
+        // Single command to find first available port in dev range (8001-8999).
+        // Uses `break` (not `exit`) — this runs in the persistent session shell,
+        // and a top-level `exit` would terminate the session itself, killing every
+        // subsequent command on it. Matches upstream.
         const findPortCmd = `
             for port in $(seq 8001 8999); do
-                if ! echo "${excludeList}" | grep -q "\\\\b$port\\\\b" && 
-                   ! netstat -tuln 2>/dev/null | grep -q ":$port " && 
+                if ! echo "${excludeList}" | grep -q "\\\\b$port\\\\b" &&
+                   ! netstat -tuln 2>/dev/null | grep -q ":$port " &&
                    ! ss -tuln 2>/dev/null | grep -q ":$port "; then
                     echo $port
-                    exit 0
+                    break
                 fi
             done
-            exit 1
         `;
         
         const result = await this.safeSandboxExec(findPortCmd.trim());
