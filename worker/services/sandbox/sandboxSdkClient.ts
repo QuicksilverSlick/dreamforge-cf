@@ -70,6 +70,13 @@ interface InstanceMetadata {
 type SandboxType = Sandbox;
 
 /**
+ * A session-bound view of the sandbox API. Derived from the SDK's
+ * `createSession` return type so it tracks the pinned `@cloudflare/sandbox`
+ * version without importing an internal type.
+ */
+type ExecutionSession = Awaited<ReturnType<Sandbox['createSession']>>;
+
+/**
  * Streaming event for enhanced command execution
  */
 export interface StreamEvent {
@@ -108,6 +115,18 @@ function getAutoAllocatedSandbox(sessionId: string): string {
 export class SandboxSdkClient extends BaseSandboxService {
     private sandbox: SandboxType;
     private metadataCache = new Map<string, InstanceMetadata>();
+    /**
+     * Per-instance `ExecutionSession` cache. Keyed by session id — the
+     * instance id for the main per-instance session, {@link DEFAULT_SESSION_ID}
+     * for container-global ops, and `${instanceId}-dev` / `${instanceId}-tunnel`
+     * for long-lived processes. Explicit sessions replace the SDK's implicit
+     * default session, which dies ~75s after creation in `@cloudflare/sandbox`
+     * 0.5.6 ("shell has died") — the root cause of the long-standing
+     * preview-serving breakage.
+     */
+    private sessionCache = new Map<string, ExecutionSession>();
+
+    private static readonly DEFAULT_SESSION_ID = 'sandbox-default';
 
     constructor(sandboxId: string, agentId: string) {
         if (env.ALLOCATION_STRATEGY === AllocationStrategy.MANY_TO_ONE) {
@@ -125,8 +144,11 @@ export class SandboxSdkClient extends BaseSandboxService {
     }
 
     async initialize(): Promise<void> {
-        // Run a echo command to check if the sandbox is working
-        const echoResult = await this.sandbox.exec('echo "Hello World"');
+        // Establish the default session up front, then verify the sandbox
+        // responds. Session creation must happen here (async) rather than in
+        // the constructor.
+        await this.getDefaultSession();
+        const echoResult = await this.safeSandboxExec('echo "Hello World"');
         if (echoResult.exitCode !== 0) {
             throw new Error(`Failed to run echo command: ${echoResult.stderr}`);
         }
@@ -142,6 +164,123 @@ export class SandboxSdkClient extends BaseSandboxService {
             this.sandbox = getSandbox(env.Sandbox, this.sandboxId);
         }
         return this.sandbox;
+    }
+
+    /**
+     * Create a session with the given id + cwd, falling back to retrieving an
+     * existing one (a sibling request sharing the same container pool may have
+     * already created it) and self-correcting its working directory.
+     */
+    private async getOrCreateSession(sessionId: string, cwd: string): Promise<ExecutionSession> {
+        try {
+            this.logger.info('Creating new sandbox session', { sessionId, cwd });
+            return await this.getSandbox().createSession({ id: sessionId, cwd });
+        } catch (error) {
+            this.logger.info('Sandbox session already exists, retrieving it', {
+                sessionId,
+                cwd,
+                error: error instanceof Error ? error.message : String(error),
+            });
+            const existingSession = await this.getSandbox().getSession(sessionId);
+
+            const pwdResult = await existingSession.exec('pwd');
+            const actualCwd = pwdResult.stdout.trim();
+            if (actualCwd !== cwd) {
+                this.logger.warn('Existing session has wrong cwd, changing directory', {
+                    sessionId,
+                    expectedCwd: cwd,
+                    actualCwd,
+                });
+                await existingSession.exec(`cd ${cwd}`);
+                const verifyResult = await existingSession.exec('pwd');
+                if (verifyResult.stdout.trim() !== cwd) {
+                    this.logger.error(`Failed to set working directory to ${cwd}, currently at ${verifyResult.stdout.trim()}`);
+                } else {
+                    this.logger.info('Changed directory for existing session', { sessionId, cwd });
+                }
+            }
+            return existingSession;
+        }
+    }
+
+    /**
+     * Get (or lazily create) the cached session for an instance. The main
+     * per-instance session runs in `/workspace/${instanceId}`; the default
+     * session runs in `/workspace`. Callers needing a different cwd (dev /
+     * tunnel process sessions) must pass it explicitly.
+     */
+    private async getInstanceSession(instanceId: string, cwd?: string): Promise<ExecutionSession> {
+        const cached = this.sessionCache.get(instanceId);
+        if (cached) {
+            return cached;
+        }
+        const resolvedCwd = instanceId === SandboxSdkClient.DEFAULT_SESSION_ID
+            ? '/workspace'
+            : cwd ?? `/workspace/${instanceId}`;
+        const session = await this.getOrCreateSession(instanceId, resolvedCwd);
+        this.sessionCache.set(instanceId, session);
+        return session;
+    }
+
+    /** The container-global session for template / pre-instance operations. */
+    private async getDefaultSession(): Promise<ExecutionSession> {
+        return this.getInstanceSession(SandboxSdkClient.DEFAULT_SESSION_ID, '/workspace');
+    }
+
+    private invalidateSessionCache(instanceId: string): void {
+        if (this.sessionCache.delete(instanceId)) {
+            this.logger.debug('Session cache invalidated', { instanceId });
+        }
+    }
+
+    /** True when an error indicates the underlying shell session has died. */
+    private isSessionDeadError(error: unknown): boolean {
+        if (!(error instanceof Error)) {
+            return false;
+        }
+        return /shell has died|session .*not (ready|found)|not ready|shell process/i.test(error.message);
+    }
+
+    /**
+     * Run a session-scoped operation with one automatic recovery: if the
+     * session shell has died, drop it from the cache, best-effort delete it
+     * (never the default session), recreate, and retry once. Non-session
+     * errors propagate unchanged.
+     */
+    private async withSession<T>(
+        instanceId: string,
+        op: (session: ExecutionSession) => Promise<T>,
+    ): Promise<T> {
+        const session = await this.getInstanceSession(instanceId);
+        try {
+            return await op(session);
+        } catch (error) {
+            if (!this.isSessionDeadError(error)) {
+                throw error;
+            }
+            this.logger.warn('Sandbox session appears dead; recreating and retrying once', {
+                instanceId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+            this.invalidateSessionCache(instanceId);
+            if (instanceId !== SandboxSdkClient.DEFAULT_SESSION_ID) {
+                try {
+                    await this.getSandbox().deleteSession(instanceId);
+                } catch (deleteError) {
+                    this.logger.debug('deleteSession during recovery failed (continuing)', {
+                        instanceId,
+                        error: deleteError instanceof Error ? deleteError.message : String(deleteError),
+                    });
+                }
+            }
+            const fresh = await this.getInstanceSession(instanceId);
+            return await op(fresh);
+        }
+    }
+
+    /** Direct exec against the container-global default session. */
+    private async safeSandboxExec(command: string, timeout?: number): Promise<ExecResult> {
+        return this.withSession(SandboxSdkClient.DEFAULT_SESSION_ID, (session) => session.exec(command, { timeout }));
     }
 
     /** Write a binary file to the sandbox using small base64 chunks to avoid large control messages. */
@@ -169,8 +308,9 @@ export class SandboxSdkClient extends BaseSandboxService {
     }
 
     private async executeCommand(instanceId: string, command: string, timeout?: number): Promise<ExecResult> {
-        return await this.getSandbox().exec(`cd ${instanceId} && ${command}`, { timeout });
-        // return await this.getSandbox().exec(command, { cwd: instanceId, timeout });
+        // The instance session's cwd is `/workspace/${instanceId}`, so the
+        // command runs in the instance directory without a `cd` prefix.
+        return this.withSession(instanceId, (session) => session.exec(command, { timeout }));
     }
 
     private async getInstanceMetadata(instanceId: string): Promise<InstanceMetadata> {
@@ -1455,11 +1595,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             for (const command of commands) {
                 try {
                     const result = await this.executeCommand(instanceId, command, timeout);
-                    if (result.exitCode === 2 && result.stderr.includes('/bin/sh: 1: cd: can\'t cd to i-')) {
-                        throw new Error(result.stderr);
-                    }
-                    
-                    
+
                     results.push({
                         command,
                         success: result.exitCode === 0,
