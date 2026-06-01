@@ -673,9 +673,54 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                     onDebugMessage
                 );
                 setMessages(prev => [...prev, rateLimitMessage]);
-                
+
                 break;
             }
+
+            case 'conversation_cleared': {
+                // Reset the chat to a tool-event entry confirming the clear (upstream parity).
+                setMessages(() => appendToolEvent([], 'conversation_cleared', {
+                    name: message.message || 'conversation reset',
+                    status: 'success',
+                }));
+                break;
+            }
+
+            case 'command_executing': {
+                // Surface the commands being run in the terminal panel.
+                if (onTerminalMessage) {
+                    onTerminalMessage({
+                        id: `command-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                        content: message.commands.join('\n'),
+                        type: 'command',
+                        timestamp: Date.now(),
+                    });
+                }
+                break;
+            }
+
+            // Known informational / placeholder server events with no client-side UI
+            // action yet. Initial state restoration is handled by 'cf_agent_state'.
+            // Wiring these into the UI (model settings, static-analysis panel,
+            // screenshot gallery, deterministic-fix progress, etc.) is planned feature
+            // work for the full Dreamforge push — see worker/api/websocketTypes.ts
+            // (M3 commit-2b note). They are acknowledged explicitly here so the
+            // `default` branch's warning stays reserved for genuinely unexpected types.
+            case 'agent_connected':
+            case 'template_updated':
+            case 'blueprint_updated':
+            case 'project_name_updated':
+            case 'usage_updated':
+            case 'preview_force_refresh':
+            case 'model_configs_info':
+            case 'static_analysis_results':
+            case 'deterministic_code_fix_started':
+            case 'deterministic_code_fix_completed':
+            case 'screenshot_capture_started':
+            case 'screenshot_capture_success':
+            case 'screenshot_capture_error':
+            case 'screenshot_analysis_result':
+                break;
 
             default:
                 logger.warn('Unhandled message:', message);
