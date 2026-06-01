@@ -344,7 +344,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         this.logger.info(`Loading template details for: ${this.state.templateName}`);
 
         const sandboxClient: BaseSandboxService = getSandboxService(
-            this.state.sandboxInstanceId ?? '',
+            this.getSandboxSessionId(),
             this.getAgentId(),
         );
         const results = await sandboxClient.getTemplateDetails(this.state.templateName);
@@ -833,8 +833,23 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
      * always returns a client — the session id is used by the client
      * for instance-scoped operations.
      */
+    /**
+     * The stable, always-present sandbox **session** id used to construct
+     * the sandbox client. `getSandbox(env.Sandbox, id)` requires a 1-63
+     * character id, so this MUST NOT be `sandboxInstanceId` — that field
+     * is undefined until a deploy creates an instance, and an empty id
+     * makes the SDK throw "Sandbox ID must be 1-63 characters long",
+     * breaking every sandbox touch before the first deploy (follow-up
+     * messages, runtime-error polling, logs). Uses the session id assigned
+     * at agent init, falling back to the always-set agent id. Instance-
+     * scoped operations still pass `sandboxInstanceId` as their argument.
+     */
+    protected getSandboxSessionId(): string {
+        return this.state.sessionId || this.getAgentId();
+    }
+
     getSandboxServiceClient(): BaseSandboxService {
-        return getSandboxService(this.state.sandboxInstanceId ?? '', this.getAgentId());
+        return getSandboxService(this.getSandboxSessionId(), this.getAgentId());
     }
 
     /**
