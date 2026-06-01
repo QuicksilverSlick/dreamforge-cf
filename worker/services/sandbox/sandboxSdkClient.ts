@@ -227,95 +227,16 @@ export class SandboxSdkClient extends BaseSandboxService {
         return this.getInstanceSession(SandboxSdkClient.DEFAULT_SESSION_ID, '/workspace');
     }
 
-    /**
-     * Dedicated session for the instance's long-lived dev-server process.
-     * Process management (`startProcess`/`getProcess`/`killProcess`) is kept on
-     * this session so the started process is consistently addressable. cwd is
-     * the instance directory.
-     */
-    private async getDevSession(instanceId: string): Promise<ExecutionSession> {
-        return this.getInstanceSession(`${instanceId}-dev`, `/workspace/${instanceId}`);
-    }
-
-    /** Dedicated session for the instance's long-lived cloudflared tunnel process. */
-    private async getTunnelSession(instanceId: string): Promise<ExecutionSession> {
-        return this.getInstanceSession(`${instanceId}-tunnel`, `/workspace/${instanceId}`);
-    }
-
     private invalidateSessionCache(instanceId: string): void {
         if (this.sessionCache.delete(instanceId)) {
             this.logger.debug('Session cache invalidated', { instanceId });
         }
     }
 
-    /**
-     * Tear down every session associated with an instance (main, dev process,
-     * tunnel process): drop from the cache and best-effort delete server-side.
-     * The default session is never deleted. Called on shutdown so abandoned
-     * sessions don't linger on a pooled container.
-     */
-    private async destroyInstanceSessions(instanceId: string): Promise<void> {
-        for (const sessionId of [instanceId, `${instanceId}-dev`, `${instanceId}-tunnel`]) {
-            this.invalidateSessionCache(sessionId);
-            try {
-                await this.getSandbox().deleteSession(sessionId);
-            } catch (error) {
-                this.logger.debug('deleteSession during shutdown failed (continuing)', {
-                    sessionId,
-                    error: error instanceof Error ? error.message : String(error),
-                });
-            }
-        }
-    }
-
-    /** True when an error indicates the underlying shell session has died. */
-    private isSessionDeadError(error: unknown): boolean {
-        if (!(error instanceof Error)) {
-            return false;
-        }
-        return /shell has died|session .*not (ready|found)|not ready|shell process/i.test(error.message);
-    }
-
-    /**
-     * Run a session-scoped operation with one automatic recovery: if the
-     * session shell has died, drop it from the cache, best-effort delete it
-     * (never the default session), recreate, and retry once. Non-session
-     * errors propagate unchanged.
-     */
-    private async withSession<T>(
-        instanceId: string,
-        op: (session: ExecutionSession) => Promise<T>,
-    ): Promise<T> {
-        const session = await this.getInstanceSession(instanceId);
-        try {
-            return await op(session);
-        } catch (error) {
-            if (!this.isSessionDeadError(error)) {
-                throw error;
-            }
-            this.logger.warn('Sandbox session appears dead; recreating and retrying once', {
-                instanceId,
-                error: error instanceof Error ? error.message : String(error),
-            });
-            this.invalidateSessionCache(instanceId);
-            if (instanceId !== SandboxSdkClient.DEFAULT_SESSION_ID) {
-                try {
-                    await this.getSandbox().deleteSession(instanceId);
-                } catch (deleteError) {
-                    this.logger.debug('deleteSession during recovery failed (continuing)', {
-                        instanceId,
-                        error: deleteError instanceof Error ? deleteError.message : String(deleteError),
-                    });
-                }
-            }
-            const fresh = await this.getInstanceSession(instanceId);
-            return await op(fresh);
-        }
-    }
-
     /** Direct exec against the container-global default session. */
     private async safeSandboxExec(command: string, timeout?: number): Promise<ExecResult> {
-        return this.withSession(SandboxSdkClient.DEFAULT_SESSION_ID, (session) => session.exec(command, { timeout }));
+        const session = await this.getDefaultSession();
+        return await session.exec(command, { timeout });
     }
 
     /** Write a binary file to the sandbox using small base64 chunks to avoid large control messages. */
@@ -344,7 +265,8 @@ export class SandboxSdkClient extends BaseSandboxService {
     private async executeCommand(instanceId: string, command: string, timeout?: number): Promise<ExecResult> {
         // The instance session's cwd is `/workspace/${instanceId}`, so the
         // command runs in the instance directory without a `cd` prefix.
-        return this.withSession(instanceId, (session) => session.exec(command, { timeout }));
+        const session = await this.getInstanceSession(instanceId);
+        return await session.exec(command, { timeout });
     }
 
     private async getInstanceMetadata(instanceId: string): Promise<InstanceMetadata> {
@@ -356,7 +278,10 @@ export class SandboxSdkClient extends BaseSandboxService {
         // Cache miss - read from disk
         try {
             const session = await this.getDefaultSession();
-            const metadataFile = await session.readFile(`/workspace/${this.getInstanceMetadataFile(instanceId)}`);
+            const metadataFile = await session.readFile(this.getInstanceMetadataFile(instanceId));
+            if (!metadataFile.success) {
+                throw new Error('Failed to read instance metadata file');
+            }
             const metadata = JSON.parse(metadataFile.content) as InstanceMetadata;
             this.metadataCache.set(instanceId, metadata); // Cache it
             return metadata;
@@ -368,7 +293,7 @@ export class SandboxSdkClient extends BaseSandboxService {
 
     private async storeInstanceMetadata(instanceId: string, metadata: InstanceMetadata): Promise<void> {
         const session = await this.getDefaultSession();
-        await session.writeFile(`/workspace/${this.getInstanceMetadataFile(instanceId)}`, JSON.stringify(metadata));
+        await session.writeFile(this.getInstanceMetadataFile(instanceId), JSON.stringify(metadata));
         this.metadataCache.set(instanceId, metadata); // Update cache
     }
 
@@ -791,7 +716,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             // Use CLI tools for enhanced monitoring instead of direct process start.
             // The dev session's cwd is the instance directory, so no `cwd` option
             // is passed (it would otherwise double-nest under the session cwd).
-            const devSession = await this.getDevSession(instanceId);
+            const devSession = await this.getOrCreateSession(`${instanceId}-dev`, `/workspace/${instanceId}`);
             const process = await devSession.startProcess(
                 `VITE_LOGGER_TYPE=json monitor-cli process start --instance-id ${instanceId} --port ${port} -- bun run dev`,
             );
@@ -954,14 +879,15 @@ export class SandboxSdkClient extends BaseSandboxService {
     */
     private async startCloudflaredTunnel(instanceId: string, port: number): Promise<string> {
         try {
-            const tunnelSession = await this.getTunnelSession(instanceId);
+            const tunnelSession = await this.getOrCreateSession(`${instanceId}-tunnel`, `/workspace/${instanceId}`);
             const process = await tunnelSession.startProcess(
                 `cloudflared tunnel --url http://localhost:${port}`,
             );
             this.logger.info(`Started cloudflared tunnel for ${instanceId}`);
 
-            // Stream process logs to extract the preview URL
-            const logStream = await tunnelSession.streamProcessLogs(process.id);
+            // Stream process logs to extract the preview URL (process management
+            // is container-global, addressed via the bare sandbox stub).
+            const logStream = await this.getSandbox().streamProcessLogs(process.id);
             
             return new Promise<string>((resolve, reject) => {
                 const timeout = setTimeout(() => {
@@ -1325,14 +1251,14 @@ export class SandboxSdkClient extends BaseSandboxService {
             try {
                 // Optionally check if process is still running
                 if (metadata.processId) {
-                    const devSession = await this.getDevSession(instanceId);
                     for (let i = 0; i < 3; i++) {
                         try {
-                            const process = await devSession.getProcess(metadata.processId);
+                            const processes = await this.getSandbox().listProcesses();
+                            const process = processes.find((p: { id: string; status: string }) => p.id === metadata.processId);
                             isHealthy = !!(process && process.status === 'running');
                             break;
                         } catch (error) {
-                            this.logger.error(`Process ${metadata.processId} not found or not running, retrying...${i + 1}/3`, {error});
+                            this.logger.error(`Failed to check process ${metadata.processId}, retrying...${i + 1}/3`, {error});
                             isHealthy = false; // Process not found or not running
                         }
                     }
@@ -1379,8 +1305,7 @@ export class SandboxSdkClient extends BaseSandboxService {
             
             if (metadata.processId) {
                 try {
-                    const devSession = await this.getDevSession(instanceId);
-                    await devSession.killProcess(metadata.processId);
+                    await sandbox.killProcess(metadata.processId);
                 } catch (error) {
                     this.logger.warn(`Failed to kill process ${metadata.processId}`, error);
                 }
@@ -1399,9 +1324,11 @@ export class SandboxSdkClient extends BaseSandboxService {
             // Clean up files (instances live under /workspace, not /app)
             await this.safeSandboxExec(`rm -rf ${instanceId}`);
 
-            // Invalidate caches and tear down sessions since the instance is gone
+            // Invalidate session cache
+            this.invalidateSessionCache(instanceId);
+
+            // Invalidate metadata cache since instance is being shutdown
             this.invalidateMetadataCache(instanceId);
-            await this.destroyInstanceSessions(instanceId);
 
             return {
                 success: true,
