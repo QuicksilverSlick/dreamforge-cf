@@ -248,6 +248,26 @@ export class SandboxSdkClient extends BaseSandboxService {
         }
     }
 
+    /**
+     * Tear down every session associated with an instance (main, dev process,
+     * tunnel process): drop from the cache and best-effort delete server-side.
+     * The default session is never deleted. Called on shutdown so abandoned
+     * sessions don't linger on a pooled container.
+     */
+    private async destroyInstanceSessions(instanceId: string): Promise<void> {
+        for (const sessionId of [instanceId, `${instanceId}-dev`, `${instanceId}-tunnel`]) {
+            this.invalidateSessionCache(sessionId);
+            try {
+                await this.getSandbox().deleteSession(sessionId);
+            } catch (error) {
+                this.logger.debug('deleteSession during shutdown failed (continuing)', {
+                    sessionId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
+    }
+
     /** True when an error indicates the underlying shell session has died. */
     private isSessionDeadError(error: unknown): boolean {
         if (!(error instanceof Error)) {
@@ -1379,8 +1399,9 @@ export class SandboxSdkClient extends BaseSandboxService {
             // Clean up files (instances live under /workspace, not /app)
             await this.safeSandboxExec(`rm -rf ${instanceId}`);
 
-            // Invalidate cache since instance is being shutdown
+            // Invalidate caches and tear down sessions since the instance is gone
             this.invalidateMetadataCache(instanceId);
+            await this.destroyInstanceSessions(instanceId);
 
             return {
                 success: true,
