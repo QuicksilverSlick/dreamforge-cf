@@ -699,6 +699,49 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 break;
             }
 
+            case 'image_generation_started': {
+                sendMessage(createAIMessage(
+                    `image_generation_started_${Date.now()}`,
+                    `🎨 Generating ${message.count} image asset${message.count !== 1 ? 's' : ''}…`,
+                ));
+                break;
+            }
+
+            case 'image_generation_progress': {
+                onDebugMessage?.(
+                    'info',
+                    `Image generated (${message.index}/${message.total})`,
+                    `${message.path} via ${message.provider}\n${message.url}`,
+                    'Image Generation',
+                );
+                break;
+            }
+
+            case 'image_generation_completed': {
+                if (message.images.length > 0) {
+                    const list = message.images
+                        .map((image) => `• ${image.purpose}: ${image.url}`)
+                        .join('\n');
+                    sendMessage(createAIMessage(
+                        `image_generation_completed_${Date.now()}`,
+                        `🖼️ ${message.message}\n${list}`,
+                    ));
+                }
+                break;
+            }
+
+            case 'image_generation_error': {
+                onDebugMessage?.(
+                    'error',
+                    'Image Generation Error',
+                    message.path ? `${message.path}: ${message.error}` : message.error,
+                    'Image Generation',
+                    'error',
+                    message,
+                );
+                break;
+            }
+
             // Known informational / placeholder server events with no client-side UI
             // action yet. Initial state restoration is handled by 'cf_agent_state'.
             // Wiring these into the UI (model settings, static-analysis panel,
