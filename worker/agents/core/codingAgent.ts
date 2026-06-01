@@ -152,9 +152,14 @@ export class CodeGeneratorAgent
     private _deploymentManager: DeploymentManager | null = null;
     get deploymentManager(): IDeploymentManager {
         if (!this._deploymentManager) {
-            const sessionId = this.state.sandboxInstanceId ?? '';
+            // The sandbox CLIENT must be built from the stable, always-present
+            // session id (never `sandboxInstanceId`, which is undefined until a
+            // deploy creates an instance — an empty id makes getSandbox throw
+            // "Sandbox ID must be 1-63 characters long"). `getSessionId` below
+            // still tracks the deploy-time instance id separately.
+            const sandboxSessionId = this.state.sessionId || this.getAgentId();
             this._deploymentManager = new DeploymentManager({
-                sandboxClient: getSandboxService(sessionId, this.getAgentId()),
+                sandboxClient: getSandboxService(sandboxSessionId, this.getAgentId()),
                 getSessionId: () => this.state.sandboxInstanceId,
                 onSessionIdChange: (id) => {
                     this.setState({ ...this.state, sandboxInstanceId: id });
