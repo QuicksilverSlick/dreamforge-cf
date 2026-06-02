@@ -508,6 +508,13 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             throw new Error('Project is not previewable');
         }
 
+        // The preview-deploy path can run independently of build() — e.g. a
+        // deploy_preview WebSocket message (or the controller's deploy call) on
+        // a resumed agent whose in-memory template-details cache is cold. Warm
+        // it here, as build() does, before the getTemplateDetails() reads below;
+        // ensureTemplateDetails() is idempotent when the cache is already set.
+        await this.ensureTemplateDetails();
+
         this.logger.info('[AGENT] Deploying to sandbox', {
             files: files.length,
             redeploy,
