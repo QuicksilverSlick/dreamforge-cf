@@ -10,13 +10,15 @@ This directory defines the deployment contract for `dreamforge-cf`. **The contra
 3. **Merge to `main` triggers deploy** ([`deploy.yml`](./deploy.yml)): install, build, deploy to Cloudflare, health check `https://app.getdreamforge.com/api/health`, auto-rollback on health-check failure.
 4. **No deploys from feature branches.** The previous `claude/**` push trigger was a foot-gun and is intentionally removed.
 5. **Manual deploys** are possible via `workflow_dispatch` on `deploy.yml` for emergency cases (e.g. cherry-pick a fix without going through PR). Use sparingly and document the reason in the input field.
+6. **The Worker and the templates deploy on separate tracks.** `deploy.yml` deploys **only the Worker bundle**. The app-generation **templates** (the zips + catalog in the `vibesdk-templates` R2 bucket) deploy via [`deploy-templates.yml`](./deploy-templates.yml) — see "[Template deploy contract](#template-deploy-contract)". A change to the templates fork does **not** reach production until that workflow runs.
 
 ## Workflows
 
 | File | When | Purpose |
 |---|---|---|
 | [`ci.yml`](./ci.yml) | PR to `main` | Pre-merge gate — validates every PR before it can be merged |
-| [`deploy.yml`](./deploy.yml) | Push to `main`, `workflow_dispatch` | Deploy to Cloudflare with health-check + rollback |
+| [`deploy.yml`](./deploy.yml) | Push to `main`, `workflow_dispatch` | Deploy the **Worker** to Cloudflare with health-check + rollback |
+| [`deploy-templates.yml`](./deploy-templates.yml) | `repository_dispatch` from the templates fork, `workflow_dispatch` | Generate + upload **templates** to the `vibesdk-templates` R2 bucket |
 | [`upstream-sync-manual.yml`](./upstream-sync-manual.yml) | `workflow_dispatch` only | Sync from `cloudflare/vibesdk` upstream (see [`UPSTREAM_SYNC.md`](../../UPSTREAM_SYNC.md)) |
 | [`upstream-notifications.yml`](./upstream-notifications.yml) | Weekly cron | Open a GitHub issue summarising new upstream commits |
 
@@ -54,6 +56,53 @@ The "Edit Cloudflare Workers" template covers most of these — add D1 and the z
 If the deploy succeeds but the health check fails (10 retries × 6s = ~60s), the workflow runs `wrangler rollback` to the version that was active immediately before the deploy. This restores the Worker but **does not** revert the merge commit on `main` — fix forward with another PR, or revert the merge manually if needed.
 
 If the deploy *itself* fails (e.g. `wrangler deploy` errors), there is nothing to roll back from — the previous version remains active on Cloudflare.
+
+## Template deploy contract
+
+Generated apps are scaffolded from **templates** stored as zips + a `template_catalog.json` in the **`vibesdk-templates` R2 bucket** (bound as `TEMPLATES_BUCKET`). These are **not** part of the Worker bundle and **`deploy.yml` never touches them** — a template fix is not live until [`deploy-templates.yml`](./deploy-templates.yml) runs.
+
+### Source of truth: the owned fork
+
+`wrangler.jsonc` → `vars.TEMPLATES_REPOSITORY` points at **`QuicksilverSlick/vibesdk-templates`** (our fork of `cloudflare/vibesdk-templates`). Templates are *generated* there (`tools/generate_templates.py` from `definitions/*` + `reference/*`), not stored as plain dirs — fix cross-cutting things (e.g. Vite config) in `reference/*`. Keep `upstream` as a remote on the fork and periodically merge it; our patch set is intentionally small.
+
+### How a template change reaches production
+
+1. Land the change on the fork's `main` (PR → merge).
+2. The fork's push-to-`main` workflow fires a **`repository_dispatch` (`templates-updated`)** at this repo, which runs `deploy-templates.yml`.
+3. `deploy-templates.yml` checks out the fork, runs `deploy_templates.sh` (generate → zip via `create_zip.py` → `wrangler r2 object put … --remote`), uploading every template zip + the catalog to R2.
+4. The next app generation pulls the updated templates. (No Worker redeploy needed.)
+
+You can also run it **manually** via `workflow_dispatch` (optionally pin a `templates_ref`) — use this for the first deploy, to redeploy after fixing a broken template, or if the auto-trigger isn't wired yet.
+
+> The legacy path — `npm run deploy` (`scripts/deploy.ts`) — still deploys templates as part of a full local deploy. `deploy-templates.yml` is the CI equivalent and the preferred path: it runs on Linux with the repo Actions secrets, is monitorable, and doesn't require a local `.prod.vars`.
+
+### Secrets
+
+`deploy-templates.yml` (in **this** repo) reuses the existing `CLOUDFLARE_API_TOKEN` (needs **Workers R2 Storage → Edit**) and `CLOUDFLARE_ACCOUNT_ID` Actions secrets — no new secret needed for manual runs.
+
+The **auto-on-fork-change** path needs one secret **in the fork** (`QuicksilverSlick/vibesdk-templates` → Settings → Secrets → Actions):
+
+| Secret (in the fork) | Value |
+|---|---|
+| `DISPATCH_TOKEN` | A GitHub token (classic `repo`, or fine-grained with **Contents: read+write** on `dreamforge-cf`) so the fork can POST a `repository_dispatch` to `dreamforge-cf`. Without it, the auto-trigger no-ops and you deploy via `workflow_dispatch`. |
+
+### Monitoring & surfacing deployment issues
+
+- **Watch a run:** `gh run watch <id> --repo QuicksilverSlick/dreamforge-cf --exit-status`, or the Actions tab → "Deploy Templates to R2".
+- **List recent template deploys:** `gh run list --repo QuicksilverSlick/dreamforge-cf --workflow=deploy-templates.yml`.
+- **What deployed:** the run **Summary** records the source fork, ref, bucket, and trigger.
+- **Rollback reference:** each run uploads the *previous* `template_catalog.json` as the **`prev-template-catalog`** artifact (30-day retention) before overwriting — use it to see what changed / what to restore.
+- **Verify what's live in R2:** `wrangler r2 object get vibesdk-templates/template_catalog.json --remote --file=- ` (or download a specific `<template>.zip` and inspect, as we did to confirm a zip wasn't corrupt).
+
+### Troubleshooting
+
+| Symptom | Likely cause / action |
+|---|---|
+| All new app builds fail to scaffold | A bad template zip/catalog was uploaded. Re-run `deploy-templates.yml` from a known-good fork SHA (`templates_ref`), or fix-forward on the fork and re-deploy. Uploads are the last step, so a *failed* run leaves R2 unchanged. |
+| `wrangler r2 object put … 10000 Authentication error` | `CLOUDFLARE_API_TOKEN` lacks **R2 Storage → Edit**, or wrong `CLOUDFLARE_ACCOUNT_ID`. |
+| `Failed to download/extract template … extra bytes / bad zipfile` reported by the sandbox | The served zip is corrupt **or** the running sandbox instance has a stale/partial cached copy. Confirm the R2 object is a valid zip (download + `unzip -t`); if R2 is fine, the wedged instance recovers on a fresh build. |
+| Auto-deploy didn't fire on a fork change | `DISPATCH_TOKEN` missing/expired in the fork, or the change didn't touch a watched path. Trigger `deploy-templates.yml` manually. |
+| Template change deployed but apps still show old behaviour | A *running* sandbox instance keeps its image/template until it recycles; new instances pick up the change. |
 
 ## Deploy metadata
 
