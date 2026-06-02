@@ -24,6 +24,12 @@ RUN mkdir -p /workspace/container /workspace/data
 # Copy the process monitoring system
 COPY container/ /workspace/container/
 
+# Normalize line endings on scripts. When the image is built on a Windows host
+# a CRLF shebang breaks `#!/usr/bin/env bun` (the kernel execs `bun\r`), so
+# cli-tools.ts (symlinked as monitor-cli) and shell scripts must be stripped of
+# CR before they are made executable.
+RUN find /workspace/container -type f \( -name '*.ts' -o -name '*.sh' \) -exec sed -i 's/\r$//' {} +
+
 # Install dependencies for the monitoring system
 WORKDIR /workspace/container
 RUN bun install && bun run build
