@@ -7,7 +7,7 @@ import {
     type ImageProvider,
     type ImageQuality,
 } from '../inferutils/imageGeneration';
-import { base64ToUint8Array, uploadImageToR2, ImageType } from '../../utils/images';
+import { uploadImageToR2, ImageType } from '../../utils/images';
 import { generateNanoId } from '../../utils/idGenerator';
 
 /** A successfully generated and stored image asset. */
@@ -28,6 +28,8 @@ export interface ImageGenerationInputs {
     quality?: ImageQuality;
     /** Per-asset progress callback (1-based index). */
     onImageGenerated?: (result: GeneratedImageResult, index: number, total: number) => void;
+    /** Per-asset failure callback — surfaces the provider error (path + reason). */
+    onImageError?: (path: string, error: string) => void;
 }
 
 /** Filename to store an asset under, derived from its manifest path. */
@@ -78,10 +80,12 @@ export class ImageGenerationOperation extends AgentOperation<ImageGenerationInpu
                     url: result.url,
                 });
             } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
                 logger.error('Failed to generate image asset; skipping', {
                     path: asset.path,
-                    error: error instanceof Error ? error.message : String(error),
+                    error: message,
                 });
+                inputs.onImageError?.(asset.path, message);
             }
         }
 
@@ -107,18 +111,17 @@ export class ImageGenerationOperation extends AgentOperation<ImageGenerationInpu
                     userId,
                 });
 
-                const bytes = base64ToUint8Array(image.base64);
                 const { url } = await uploadImageToR2(
                     env,
                     {
                         id: generateNanoId(),
                         filename: fileNameForAsset(asset.path),
                         mimeType: image.mimeType,
-                        base64Data: image.base64,
+                        base64Data: '',
                     },
                     ImageType.GENERATED,
                     undefined,
-                    bytes,
+                    image.bytes,
                 );
 
                 return { path: asset.path, url, purpose: asset.purpose, provider };

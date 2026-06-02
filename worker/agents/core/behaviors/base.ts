@@ -1895,6 +1895,13 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                             total,
                         });
                     },
+                    onImageError: (path, error) => {
+                        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_ERROR, {
+                            message: `Failed to generate image asset: ${path}`,
+                            error,
+                            path,
+                        });
+                    },
                 },
                 this.getOperationOptions(),
             );
@@ -1933,20 +1940,27 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         });
 
         let result: GeneratedImageResult | undefined;
+        let failureReason = 'Image generation failed for all providers';
         try {
             const results = await this.imageGenerationOperation.execute(
-                { assets: [{ ...request, url: null }] },
+                {
+                    assets: [{ ...request, url: null }],
+                    onImageError: (_path, error) => {
+                        failureReason = error;
+                    },
+                },
                 this.getOperationOptions(),
             );
             result = results[0];
         } catch (error) {
+            failureReason = error instanceof Error ? error.message : String(error);
             this.logger.error('On-demand image generation failed', error);
         }
 
         if (!result) {
             this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_ERROR, {
                 message: `Failed to generate image asset: ${request.path}`,
-                error: 'Image generation failed for all providers',
+                error: failureReason,
                 path: request.path,
             });
             return null;
