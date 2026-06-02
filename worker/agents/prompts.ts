@@ -1268,6 +1268,20 @@ export function generalSystemPromptBuilder(
         }
         variables.blueprint = TemplateRegistry.markdown.serialize(blueprint, BlueprintSchemaLite);
         variables.blueprintDependencies = params.blueprint.frameworks?.join(', ') ?? '';
+
+        // Generated image assets are hosted at their own URLs (stored in R2,
+        // served via /api/generated/...). The coder otherwise defaults to the
+        // manifest `path` (e.g. treats "public/logo.png" as "/logo.png"), which
+        // does not exist and 404s. Surface the path -> URL mapping explicitly
+        // and imperatively so the exact URL is used as the src.
+        const hostedImages = (params.blueprint.imageAssets ?? []).filter(
+            (asset): asset is typeof asset & { url: string } => Boolean(asset.url),
+        );
+        if (hostedImages.length > 0) {
+            variables.blueprint += `\n\n## GENERATED IMAGE ASSETS — ALREADY HOSTED (use these exact URLs)\n`
+                + `These images are already generated and hosted at the URLs below. Reference each one by its **exact URL** as the \`src\` (e.g. \`<img src="<url>" />\`) or as a CSS \`background-image: url(<url>)\`. The \`path\` is only a logical identifier — that file does NOT exist in the project, so never reference these assets by their path, by \`/<filename>\`, by \`public/...\`, by a local import, or any other local path.\n`
+                + hostedImages.map((asset) => `- \`${asset.path}\` (${asset.purpose}) → ${asset.url}`).join('\n');
+        }
     }
 
     // Optional language and frameworks
