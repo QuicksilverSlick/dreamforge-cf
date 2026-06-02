@@ -71,8 +71,8 @@ export function createGenerateImageTool(
 					path: args.path,
 					prompt: args.prompt,
 					purpose: args.purpose,
-					width: args.width,
-					height: args.height,
+					width: args.width ?? null,
+					height: args.height ?? null,
 				});
 				if (!url) {
 					return { error: `Failed to generate image asset for "${args.path}".` };

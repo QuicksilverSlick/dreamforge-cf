@@ -1935,7 +1935,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         let result: GeneratedImageResult | undefined;
         try {
             const results = await this.imageGenerationOperation.execute(
-                { assets: [{ ...request }] },
+                { assets: [{ ...request, url: null }] },
                 this.getOperationOptions(),
             );
             result = results[0];
@@ -1983,9 +1983,10 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         const existing = blueprint.imageAssets ?? [];
         const urlByPath = new Map(results.map((result) => [result.path, result.url]));
 
-        const updated = existing.map((asset) =>
-            urlByPath.has(asset.path) ? { ...asset, url: urlByPath.get(asset.path) } : asset,
-        );
+        const updated = existing.map((asset) => {
+            const newUrl = urlByPath.get(asset.path);
+            return newUrl ? { ...asset, url: newUrl } : asset;
+        });
 
         for (const result of results) {
             if (!existing.some((asset) => asset.path === result.path)) {
@@ -1993,8 +1994,8 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                     path: result.path,
                     prompt: request?.prompt ?? '',
                     purpose: result.purpose,
-                    width: request?.width,
-                    height: request?.height,
+                    width: request?.width ?? null,
+                    height: request?.height ?? null,
                     url: result.url,
                 });
             }
