@@ -126,15 +126,20 @@ interface AiRunEnvelope {
 
 /**
  * Invoke a catalog image model through the AI Gateway REST endpoint
- * (`POST /accounts/{id}/ai/run`) authenticated with the Cloudflare API token.
+ * (`POST /accounts/{id}/ai/run`), routed through the project's gateway so its
+ * stored provider keys (BYOK) are injected.
  *
- * Why REST and not the `env.AI` binding: routing the binding through the
- * project's Authenticated gateway returned "2021: Invalid User Credentials"
- * because the binding's GatewayOptions cannot carry the required
- * `cf-aig-authorization` token. The REST endpoint authenticates with the
- * account API token instead, needs no provider keys (third-party models are
- * billed via Unified Billing), and auto-routes through the account's default
- * gateway so logging/caching still apply.
+ * Auth layers:
+ *  - `Authorization: Bearer CLOUDFLARE_API_TOKEN` authenticates to the REST API.
+ *  - `cf-aig-gateway-id` routes the request through `vibesdk-gateway` (rather
+ *    than the default gateway) so its BYOK provider keys apply.
+ *  - `cf-aig-authorization` authenticates to that gateway (it runs in
+ *    Authenticated mode); the worker already holds this token and sends it on
+ *    every text-inference request too.
+ *
+ * The env.AI binding can't be used here: its GatewayOptions cannot carry
+ * `cf-aig-authorization`, so it returns "2021: Invalid User Credentials"
+ * against an authenticated gateway.
  */
 async function runImageModel(
     env: Env,
@@ -147,6 +152,8 @@ async function runImageModel(
         headers: {
             'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
             'Content-Type': 'application/json',
+            'cf-aig-gateway-id': env.CLOUDFLARE_AI_GATEWAY,
+            'cf-aig-authorization': `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`,
         },
         body: JSON.stringify({ model: modelId, input: buildInput(modelId, params) }),
     });
