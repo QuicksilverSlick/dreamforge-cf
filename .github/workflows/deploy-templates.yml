@@ -1,0 +1,148 @@
+name: Deploy Templates to R2
+
+# Deploys the app-generation templates (from the owned fork in
+# TEMPLATES_REPOSITORY) to the R2 bucket the Worker serves them from.
+#
+# WHY THIS IS SEPARATE FROM deploy.yml:
+#   deploy.yml deploys ONLY the Worker bundle (`wrangler deploy -c
+#   dist/dreamforge_cf/wrangler.json`). It does NOT touch templates. Template
+#   *content* (the zips + catalog in the `vibesdk-templates` R2 bucket) is
+#   deployed here. A change to the templates fork therefore does NOT reach
+#   production until this workflow runs.
+#
+# TRIGGERS:
+#   - repository_dispatch (type: templates-updated): fired by the fork's own
+#     push-to-main workflow (see the fork's .github/workflows). This is the
+#     "deploy on a fork change" path.
+#   - workflow_dispatch: manual run (e.g. to deploy a specific ref, or to
+#     re-deploy after fixing a broken template). Always available.
+#
+# See .github/workflows/README.md → "Template deploy contract".
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why this manual template deploy?'
+        required: false
+      templates_ref:
+        description: 'Fork ref to deploy (branch/tag/SHA)'
+        required: false
+        default: 'main'
+  repository_dispatch:
+    types: [templates-updated]
+
+# Never run two template deploys against the same bucket at once; do not cancel
+# an in-flight upload (a half-cancelled upload could leave R2 inconsistent).
+concurrency:
+  group: deploy-templates-r2
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # The owned fork that holds our template source (kept in sync with upstream).
+  # Mirror of dreamforge-cf wrangler.jsonc `vars.TEMPLATES_REPOSITORY`.
+  TEMPLATES_REPO: QuicksilverSlick/vibesdk-templates
+  # R2 bucket the Worker reads templates from (wrangler.jsonc TEMPLATES_BUCKET).
+  R2_BUCKET_NAME: vibesdk-templates
+  BUCKET_NAME: vibesdk-templates
+
+jobs:
+  deploy-templates:
+    name: Generate + upload templates to R2
+    runs-on: ubuntu-latest
+    # Inherits the same protection (and repo-level Actions secrets) as worker
+    # deploys, so a future reviewer gate applies uniformly to this high-impact
+    # action too.
+    environment:
+      name: production
+    steps:
+      - name: Resolve templates ref
+        id: ref
+        run: |
+          REF="${{ github.event.inputs.templates_ref || github.event.client_payload.ref || 'main' }}"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Deploying templates from $TEMPLATES_REPO @ $REF"
+
+      - name: Checkout templates fork
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TEMPLATES_REPO }}
+          ref: ${{ steps.ref.outputs.ref }}
+          path: templates
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      # wrangler 4.90+ CLI requires Node 22; deploy_templates.sh calls `wrangler`.
+      - name: Setup Node 22 (wrangler CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML + wrangler
+        run: |
+          python3 -m pip install --quiet pyyaml
+          npm install -g wrangler@4
+          wrangler --version
+
+      - name: Snapshot current template catalog (rollback reference)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Best-effort: capture the catalog currently served so a bad deploy can
+          # be diagnosed. Non-fatal (first deploy / transient API errors).
+          if wrangler r2 object get "${R2_BUCKET_NAME}/template_catalog.json" \
+              --file=prev_template_catalog.json --remote 2>/dev/null; then
+            echo "Captured previous template_catalog.json"
+          else
+            echo "::warning::Could not fetch previous template_catalog.json (first deploy or transient error)"
+          fi
+
+      - name: Upload pre-deploy catalog snapshot as an artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prev-template-catalog
+          path: prev_template_catalog.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Generate + deploy templates to R2
+        working-directory: templates
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ env.R2_BUCKET_NAME }}
+          BUCKET_NAME: ${{ env.BUCKET_NAME }}
+        run: |
+          chmod +x deploy_templates.sh
+          ./deploy_templates.sh
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### Template deploy"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Source fork | \`$TEMPLATES_REPO\` |"
+            echo "| Ref | \`${{ steps.ref.outputs.ref }}\` |"
+            echo "| R2 bucket | \`$R2_BUCKET_NAME\` |"
+            echo "| Trigger | \`${{ github.event_name }}\` |"
+            echo "| Result | **${{ job.status }}** |"
+            echo ""
+            echo "Generated apps fetch templates from this bucket. If this run failed,"
+            echo "templates in R2 are unchanged (uploads are last-step); investigate before retrying."
+          } >> "$GITHUB_STEP_SUMMARY"
