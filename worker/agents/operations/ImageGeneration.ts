@@ -7,7 +7,7 @@ import {
     type ImageProvider,
     type ImageQuality,
 } from '../inferutils/imageGeneration';
-import { base64ToUint8Array, uploadImageToR2, ImageType } from '../../utils/images';
+import { uploadImageToR2, ImageType } from '../../utils/images';
 import { generateNanoId } from '../../utils/idGenerator';
 
 /** A successfully generated and stored image asset. */
@@ -107,18 +107,17 @@ export class ImageGenerationOperation extends AgentOperation<ImageGenerationInpu
                     userId,
                 });
 
-                const bytes = base64ToUint8Array(image.base64);
                 const { url } = await uploadImageToR2(
                     env,
                     {
                         id: generateNanoId(),
                         filename: fileNameForAsset(asset.path),
                         mimeType: image.mimeType,
-                        base64Data: image.base64,
+                        base64Data: '',
                     },
                     ImageType.GENERATED,
                     undefined,
-                    bytes,
+                    image.bytes,
                 );
 
                 return { path: asset.path, url, purpose: asset.purpose, provider };

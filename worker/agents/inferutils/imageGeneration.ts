@@ -2,110 +2,141 @@
  * Image generation provider layer.
  *
  * Frontier *coding* models output text only; real image assets come from
- * dedicated image models. This calls them through the OpenAI-style Images API
- * ("/images/generations", base64 response), routed via Cloudflare AI Gateway
- * using the same configuration/auth path as text inference
- * ({@link getConfigurationForModel}).
+ * dedicated image models. Cloudflare exposes these as proxied catalog models
+ * invoked through the Workers AI binding (`env.AI.run(model, input)`), routed
+ * via the project's AI Gateway for BYOK/observability. This is NOT the OpenAI
+ * `/images/generations` compat path — that endpoint only proxies
+ * `/chat/completions`.
  *
- * Routing decision: GPT Image 2 (OpenAI) is primary; Nano Banana Pro
- * (Google `gemini-3-pro-image`) is the fallback. The bracket forms below force
- * provider routing in `getConfigurationForModel` (`[openai]` → AI Gateway
- * OpenAI route + `OPENAI_API_KEY`; `[gemini]` → Google's OpenAI-compatible
- * endpoint + `GOOGLE_AI_STUDIO_API_KEY`).
+ * Routing: GPT Image 2 (`openai/gpt-image-2`) is primary; Nano Banana Pro
+ * (`google/nano-banana-pro`) is the fallback. Each model takes a different
+ * input shape and returns `{ result: { image } }` where `image` is a URL (or
+ * data URI / base64); we resolve it to raw bytes for storage in our own R2.
  */
-import { getConfigurationForModel } from './core';
 import { createLogger } from '../../logger';
+import { base64ToUint8Array } from '../../utils/images';
 import type { SupportedImageMimeType } from '../../types/image-attachment';
 
 const logger = createLogger('ImageGeneration');
 
 export type ImageQuality = 'low' | 'medium' | 'high';
 
-/** Image-generation providers, in fallback order (primary first). */
+/** Image generation providers, in fallback order (primary first). */
 export type ImageProvider = 'openai' | 'gemini';
 
-/**
- * Model spec per provider (bracket form forces provider routing in
- * {@link getConfigurationForModel}).
- */
+/** Cloudflare AI catalog model id per provider. */
 export const IMAGE_MODEL_BY_PROVIDER: Record<ImageProvider, string> = {
-    openai: '[openai]gpt-image-2',
-    gemini: '[gemini]gemini-3-pro-image',
+    openai: 'openai/gpt-image-2',
+    gemini: 'google/nano-banana-pro',
 };
 
 /** Default provider attempt order: GPT Image 2 primary, Nano Banana Pro fallback. */
 export const IMAGE_PROVIDER_ORDER: readonly ImageProvider[] = ['openai', 'gemini'];
 
-/** @deprecated Use {@link IMAGE_MODEL_BY_PROVIDER}. */
-export const IMAGE_MODEL_PRIMARY = IMAGE_MODEL_BY_PROVIDER.openai;
-/** @deprecated Use {@link IMAGE_MODEL_BY_PROVIDER}. */
-export const IMAGE_MODEL_FALLBACK = IMAGE_MODEL_BY_PROVIDER.gemini;
-
 export interface GenerateImageParams {
     /** Provider-tuned prompt describing the image to create. */
     prompt: string;
-    /** `WIDTHxHEIGHT`, e.g. `1024x1024` (width/height divisible by 16). */
+    /** Requested pixel size `WIDTHxHEIGHT` (mapped per-model). */
     size?: string;
     quality?: ImageQuality;
-    /** For per-user key resolution / rate-limit attribution. */
+    /** For attribution / rate-limit accounting. */
     userId: string;
 }
 
 export interface GeneratedImage {
-    /** Base64-encoded image bytes (no data-URI prefix). */
-    base64: string;
+    /** Raw image bytes. */
+    bytes: Uint8Array;
     mimeType: SupportedImageMimeType;
 }
 
-interface ImagesApiResponse {
-    data?: Array<{ b64_json?: string }>;
-    error?: { message?: string };
+const OPENAI_SIZES = new Set(['1024x1024', '1024x1536', '1536x1024']);
+
+function parseSize(size?: string): { width: number; height: number } | undefined {
+    if (!size) return undefined;
+    const match = /^(\d+)x(\d+)$/.exec(size.trim());
+    if (!match) return undefined;
+    return { width: Number(match[1]), height: Number(match[2]) };
 }
 
-/**
- * Build the Images-API endpoint from a (possibly trailing-slashed) gateway
- * base URL. Pure — unit-testable without network.
- */
-export function buildImagesEndpoint(baseURL: string): string {
-    return `${baseURL.replace(/\/+$/, '')}/images/generations`;
+/** Map a requested size to a GPT Image 2 supported size enum. */
+function openaiSize(size?: string): string {
+    if (size && OPENAI_SIZES.has(size)) return size;
+    const parsed = parseSize(size);
+    if (parsed) {
+        if (parsed.width > parsed.height) return '1536x1024';
+        if (parsed.height > parsed.width) return '1024x1536';
+    }
+    return '1024x1024';
 }
 
-async function callImagesApi(
+/** Map a requested size to a Nano Banana Pro aspect-ratio enum. */
+function geminiAspectRatio(size?: string): string {
+    const parsed = parseSize(size);
+    if (!parsed || parsed.width === parsed.height) return '1:1';
+    return parsed.width > parsed.height ? '16:9' : '3:4';
+}
+
+/** Build the model-specific input payload. */
+function buildInput(modelId: string, params: GenerateImageParams): Record<string, unknown> {
+    if (modelId.startsWith('openai/')) {
+        return {
+            prompt: params.prompt,
+            quality: params.quality ?? 'medium',
+            size: openaiSize(params.size),
+            output_format: 'png',
+        };
+    }
+    return {
+        prompt: params.prompt,
+        aspect_ratio: geminiAspectRatio(params.size),
+        image_size: '2K',
+        output_format: 'png',
+    };
+}
+
+/** Extract the image string from the various result envelope shapes. */
+function extractImageString(response: Record<string, unknown>): string | undefined {
+    const direct = response.image;
+    if (typeof direct === 'string') return direct;
+
+    const result = response.result;
+    if (typeof result === 'string') return result;
+    if (result && typeof result === 'object') {
+        const image = (result as Record<string, unknown>).image;
+        if (typeof image === 'string') return image;
+    }
+    return undefined;
+}
+
+/** Resolve a returned image reference (URL, data URI, or base64) to raw bytes. */
+async function resolveToBytes(image: string): Promise<Uint8Array> {
+    if (image.startsWith('http://') || image.startsWith('https://')) {
+        const response = await fetch(image);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch generated image (${response.status})`);
+        }
+        return new Uint8Array(await response.arrayBuffer());
+    }
+    const base64 = image.startsWith('data:') ? image.slice(image.indexOf(',') + 1) : image;
+    return base64ToUint8Array(base64);
+}
+
+async function runImageModel(
     env: Env,
-    modelSpec: string,
+    modelId: string,
     params: GenerateImageParams,
 ): Promise<GeneratedImage> {
-    const { baseURL, apiKey, defaultHeaders } = await getConfigurationForModel(modelSpec, env, params.userId);
-    const model = modelSpec.replace(/\[.*?\]/, '');
-    const endpoint = buildImagesEndpoint(baseURL);
-
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            ...(defaultHeaders ?? {}),
-        },
-        body: JSON.stringify({
-            model,
-            prompt: params.prompt,
-            size: params.size ?? '1024x1024',
-            quality: params.quality ?? 'medium',
-            n: 1,
-        }),
+    const response = await env.AI.run(modelId, buildInput(modelId, params), {
+        gateway: { id: env.CLOUDFLARE_AI_GATEWAY },
     });
 
-    if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Image model '${model}' request failed (${response.status}): ${text.slice(0, 300)}`);
+    const image = extractImageString(response);
+    if (!image) {
+        const message = typeof response.errors === 'string' ? `: ${response.errors}` : '';
+        throw new Error(`Image model '${modelId}' returned no image${message}`);
     }
 
-    const json = await response.json() as ImagesApiResponse;
-    const base64 = json.data?.[0]?.b64_json;
-    if (!base64) {
-        throw new Error(`Image model '${model}' returned no image data${json.error?.message ? `: ${json.error.message}` : ''}`);
-    }
-    return { base64, mimeType: 'image/png' };
+    return { bytes: await resolveToBytes(image), mimeType: 'image/png' };
 }
 
 /**
@@ -117,15 +148,14 @@ export function generateImageWithProvider(
     provider: ImageProvider,
     params: GenerateImageParams,
 ): Promise<GeneratedImage> {
-    return callImagesApi(env, IMAGE_MODEL_BY_PROVIDER[provider], params);
+    return runImageModel(env, IMAGE_MODEL_BY_PROVIDER[provider], params);
 }
 
 /**
  * Generate a single image, trying providers in {@link IMAGE_PROVIDER_ORDER}
  * (primary then fallback). `buildPrompt` is invoked per attempt so each
  * provider receives a prompt tuned to its own skill guide. Throws only if
- * every provider fails (callers treat a per-asset failure as non-fatal so the
- * build still completes).
+ * every provider fails.
  */
 export async function generateImage(
     env: Env,
@@ -147,7 +177,5 @@ export async function generateImage(
             });
         }
     }
-    throw lastError instanceof Error
-        ? lastError
-        : new Error('All image providers failed');
+    throw lastError instanceof Error ? lastError : new Error('All image providers failed');
 }
