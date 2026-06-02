@@ -156,6 +156,7 @@ export class AgenticCodingBehavior
                 pitfalls: [],
                 frameworks: [],
                 implementationRoadmap: [],
+                imageAssets: null,
                 initialPhase: {
                     name: '',
                     description: '',

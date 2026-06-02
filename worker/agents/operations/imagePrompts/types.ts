@@ -15,8 +15,8 @@ export interface ImageAssetRequest {
     prompt: string;
     /** Asset role: 'logo' | 'icon' | 'hero' | 'illustration' | 'background' | 'avatar' | … */
     purpose: string;
-    width?: number;
-    height?: number;
+    width?: number | null;
+    height?: number | null;
 }
 
 /** Light project context used to keep generated assets on-brand. */
