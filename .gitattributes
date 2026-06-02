@@ -1,0 +1,8 @@
+# Files executed inside the Linux sandbox container must use LF line endings.
+# A CRLF shebang (e.g. when the image is built on a Windows host with
+# core.autocrlf=true) makes the kernel look up the interpreter as `bun\r`,
+# which breaks `#!/usr/bin/env bun` in container/cli-tools.ts (monitor-cli).
+container/** text eol=lf
+
+# Shell scripts must always be LF regardless of host OS.
+*.sh text eol=lf
