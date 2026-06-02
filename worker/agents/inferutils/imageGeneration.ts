@@ -126,9 +126,12 @@ async function runImageModel(
     modelId: string,
     params: GenerateImageParams,
 ): Promise<GeneratedImage> {
-    const response = await env.AI.run(modelId, buildInput(modelId, params), {
-        gateway: { id: env.CLOUDFLARE_AI_GATEWAY },
-    });
+    // Invoke Workers AI directly (account-bound), NOT through the AI Gateway:
+    // the gateway runs in Authenticated mode and the AI binding's GatewayOptions
+    // cannot carry the required `cf-aig-authorization` token, so routing through
+    // it returns "2021: Invalid User Credentials". Direct invocation uses the
+    // worker's account credentials and works for Unified-billed catalog models.
+    const response = await env.AI.run(modelId, buildInput(modelId, params));
 
     const image = extractImageString(response);
     if (!image) {
