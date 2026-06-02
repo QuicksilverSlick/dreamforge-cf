@@ -33,6 +33,16 @@ export const IMAGE_MODEL_BY_PROVIDER: Record<ImageProvider, string> = {
 /** Default provider attempt order: GPT Image 2 primary, Nano Banana Pro fallback. */
 export const IMAGE_PROVIDER_ORDER: readonly ImageProvider[] = ['openai', 'gemini'];
 
+/**
+ * BYOK key alias per provider, sent as `cf-aig-byok-alias` so the gateway
+ * selects the right stored key. The OpenAI image key is stored under a
+ * non-default alias in `vibesdk-gateway`; Google AI Studio uses the default
+ * alias (no header needed).
+ */
+const IMAGE_BYOK_ALIAS: Partial<Record<ImageProvider, string>> = {
+    openai: 'dreamforge_cf_image_gen',
+};
+
 export interface GenerateImageParams {
     /** Provider-tuned prompt describing the image to create. */
     prompt: string;
@@ -95,16 +105,12 @@ function buildInput(modelId: string, params: GenerateImageParams): Record<string
 }
 
 /** Extract the image string from the various result envelope shapes. */
-function extractImageString(response: Record<string, unknown>): string | undefined {
-    const direct = response.image;
-    if (typeof direct === 'string') return direct;
+function extractImageString(response: AiRunEnvelope): string | undefined {
+    if (typeof response.image === 'string') return response.image;
 
     const result = response.result;
     if (typeof result === 'string') return result;
-    if (result && typeof result === 'object') {
-        const image = (result as Record<string, unknown>).image;
-        if (typeof image === 'string') return image;
-    }
+    if (result && typeof result.image === 'string') return result.image;
     return undefined;
 }
 
@@ -121,19 +127,68 @@ async function resolveToBytes(image: string): Promise<Uint8Array> {
     return base64ToUint8Array(base64);
 }
 
+interface AiRunEnvelope {
+    result?: { image?: string } | string;
+    image?: string;
+    success?: boolean;
+    errors?: Array<{ message?: string }>;
+}
+
+/**
+ * Invoke a catalog image model through the AI Gateway REST endpoint
+ * (`POST /accounts/{id}/ai/run`), routed through the project's gateway so its
+ * stored provider keys (BYOK) are injected.
+ *
+ * Auth layers:
+ *  - `Authorization: Bearer CLOUDFLARE_API_TOKEN` authenticates to the REST API.
+ *  - `cf-aig-gateway-id` routes the request through `vibesdk-gateway` (rather
+ *    than the default gateway) so its BYOK provider keys apply.
+ *  - `cf-aig-authorization` authenticates to that gateway (it runs in
+ *    Authenticated mode); the worker already holds this token and sends it on
+ *    every text-inference request too.
+ *
+ * The env.AI binding can't be used here: its GatewayOptions cannot carry
+ * `cf-aig-authorization`, so it returns "2021: Invalid User Credentials"
+ * against an authenticated gateway.
+ */
 async function runImageModel(
     env: Env,
     modelId: string,
     params: GenerateImageParams,
 ): Promise<GeneratedImage> {
-    const response = await env.AI.run(modelId, buildInput(modelId, params), {
-        gateway: { id: env.CLOUDFLARE_AI_GATEWAY },
+    const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/run`;
+    const headers: Record<string, string> = {
+        'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
+        'Content-Type': 'application/json',
+        'cf-aig-gateway-id': env.CLOUDFLARE_AI_GATEWAY,
+        'cf-aig-authorization': `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`,
+    };
+    const provider: ImageProvider = modelId.startsWith('openai/') ? 'openai' : 'gemini';
+    const byokAlias = IMAGE_BYOK_ALIAS[provider];
+    if (byokAlias) {
+        headers['cf-aig-byok-alias'] = byokAlias;
+    }
+
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ model: modelId, input: buildInput(modelId, params) }),
     });
 
-    const image = extractImageString(response);
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Image model '${modelId}' request failed (${response.status}): ${text.slice(0, 300)}`);
+    }
+
+    const envelope = await response.json() as AiRunEnvelope;
+    if (envelope.success === false) {
+        const message = envelope.errors?.map((e) => e.message).filter(Boolean).join('; ') || 'unknown error';
+        throw new Error(`Image model '${modelId}' returned an error: ${message}`);
+    }
+
+    const image = extractImageString(envelope);
     if (!image) {
-        const message = typeof response.errors === 'string' ? `: ${response.errors}` : '';
-        throw new Error(`Image model '${modelId}' returned no image${message}`);
+        throw new Error(`Image model '${modelId}' returned no image`);
     }
 
     return { bytes: await resolveToBytes(image), mimeType: 'image/png' };
