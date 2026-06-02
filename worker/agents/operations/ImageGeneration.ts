@@ -28,6 +28,8 @@ export interface ImageGenerationInputs {
     quality?: ImageQuality;
     /** Per-asset progress callback (1-based index). */
     onImageGenerated?: (result: GeneratedImageResult, index: number, total: number) => void;
+    /** Per-asset failure callback — surfaces the provider error (path + reason). */
+    onImageError?: (path: string, error: string) => void;
 }
 
 /** Filename to store an asset under, derived from its manifest path. */
@@ -78,10 +80,12 @@ export class ImageGenerationOperation extends AgentOperation<ImageGenerationInpu
                     url: result.url,
                 });
             } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
                 logger.error('Failed to generate image asset; skipping', {
                     path: asset.path,
-                    error: error instanceof Error ? error.message : String(error),
+                    error: message,
                 });
+                inputs.onImageError?.(asset.path, message);
             }
         }
 
