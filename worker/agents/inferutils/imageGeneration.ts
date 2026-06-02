@@ -95,16 +95,12 @@ function buildInput(modelId: string, params: GenerateImageParams): Record<string
 }
 
 /** Extract the image string from the various result envelope shapes. */
-function extractImageString(response: Record<string, unknown>): string | undefined {
-    const direct = response.image;
-    if (typeof direct === 'string') return direct;
+function extractImageString(response: AiRunEnvelope): string | undefined {
+    if (typeof response.image === 'string') return response.image;
 
     const result = response.result;
     if (typeof result === 'string') return result;
-    if (result && typeof result === 'object') {
-        const image = (result as Record<string, unknown>).image;
-        if (typeof image === 'string') return image;
-    }
+    if (result && typeof result.image === 'string') return result.image;
     return undefined;
 }
 
@@ -121,22 +117,54 @@ async function resolveToBytes(image: string): Promise<Uint8Array> {
     return base64ToUint8Array(base64);
 }
 
+interface AiRunEnvelope {
+    result?: { image?: string } | string;
+    image?: string;
+    success?: boolean;
+    errors?: Array<{ message?: string }>;
+}
+
+/**
+ * Invoke a catalog image model through the AI Gateway REST endpoint
+ * (`POST /accounts/{id}/ai/run`) authenticated with the Cloudflare API token.
+ *
+ * Why REST and not the `env.AI` binding: routing the binding through the
+ * project's Authenticated gateway returned "2021: Invalid User Credentials"
+ * because the binding's GatewayOptions cannot carry the required
+ * `cf-aig-authorization` token. The REST endpoint authenticates with the
+ * account API token instead, needs no provider keys (third-party models are
+ * billed via Unified Billing), and auto-routes through the account's default
+ * gateway so logging/caching still apply.
+ */
 async function runImageModel(
     env: Env,
     modelId: string,
     params: GenerateImageParams,
 ): Promise<GeneratedImage> {
-    // Invoke Workers AI directly (account-bound), NOT through the AI Gateway:
-    // the gateway runs in Authenticated mode and the AI binding's GatewayOptions
-    // cannot carry the required `cf-aig-authorization` token, so routing through
-    // it returns "2021: Invalid User Credentials". Direct invocation uses the
-    // worker's account credentials and works for Unified-billed catalog models.
-    const response = await env.AI.run(modelId, buildInput(modelId, params));
+    const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/run`;
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model: modelId, input: buildInput(modelId, params) }),
+    });
 
-    const image = extractImageString(response);
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Image model '${modelId}' request failed (${response.status}): ${text.slice(0, 300)}`);
+    }
+
+    const envelope = await response.json() as AiRunEnvelope;
+    if (envelope.success === false) {
+        const message = envelope.errors?.map((e) => e.message).filter(Boolean).join('; ') || 'unknown error';
+        throw new Error(`Image model '${modelId}' returned an error: ${message}`);
+    }
+
+    const image = extractImageString(envelope);
     if (!image) {
-        const message = typeof response.errors === 'string' ? `: ${response.errors}` : '';
-        throw new Error(`Image model '${modelId}' returned no image${message}`);
+        throw new Error(`Image model '${modelId}' returned no image`);
     }
 
     return { bytes: await resolveToBytes(image), mimeType: 'image/png' };
