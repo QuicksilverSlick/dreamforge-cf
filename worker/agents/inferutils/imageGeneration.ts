@@ -33,6 +33,16 @@ export const IMAGE_MODEL_BY_PROVIDER: Record<ImageProvider, string> = {
 /** Default provider attempt order: GPT Image 2 primary, Nano Banana Pro fallback. */
 export const IMAGE_PROVIDER_ORDER: readonly ImageProvider[] = ['openai', 'gemini'];
 
+/**
+ * BYOK key alias per provider, sent as `cf-aig-byok-alias` so the gateway
+ * selects the right stored key. The OpenAI image key is stored under a
+ * non-default alias in `vibesdk-gateway`; Google AI Studio uses the default
+ * alias (no header needed).
+ */
+const IMAGE_BYOK_ALIAS: Partial<Record<ImageProvider, string>> = {
+    openai: 'dreamforge_cf_image_gen',
+};
+
 export interface GenerateImageParams {
     /** Provider-tuned prompt describing the image to create. */
     prompt: string;
@@ -147,14 +157,21 @@ async function runImageModel(
     params: GenerateImageParams,
 ): Promise<GeneratedImage> {
     const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/run`;
+    const headers: Record<string, string> = {
+        'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
+        'Content-Type': 'application/json',
+        'cf-aig-gateway-id': env.CLOUDFLARE_AI_GATEWAY,
+        'cf-aig-authorization': `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`,
+    };
+    const provider: ImageProvider = modelId.startsWith('openai/') ? 'openai' : 'gemini';
+    const byokAlias = IMAGE_BYOK_ALIAS[provider];
+    if (byokAlias) {
+        headers['cf-aig-byok-alias'] = byokAlias;
+    }
+
     const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
-            'Content-Type': 'application/json',
-            'cf-aig-gateway-id': env.CLOUDFLARE_AI_GATEWAY,
-            'cf-aig-authorization': `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`,
-        },
+        headers,
         body: JSON.stringify({ model: modelId, input: buildInput(modelId, params) }),
     });
 
