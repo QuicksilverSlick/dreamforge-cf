@@ -1,5 +1,6 @@
 import {
     // Template types
+    TemplateInfo,
     TemplateListResponse,
     TemplateDetailsResponse,
     
@@ -45,16 +46,6 @@ import { FileOutputType } from 'worker/agents/schemas';
     timestamp: Date;
   }
   
-  export interface TemplateInfo {
-      name: string;
-      language?: string;
-      frameworks?: string[];
-      description: {
-          selection: string;
-          usage: string;
-      };
-  }
-  
   /**
    * Abstract base class providing complete RunnerService API compatibility
    * All implementations MUST support every method defined here
@@ -97,7 +88,16 @@ import { FileOutputType } from 'worker/agents/schemas';
                     name: t.name,
                     language: t.language,
                     frameworks: t.frameworks || [],
-                    description: t.description
+                    projectType: t.projectType,
+                    description: t.description,
+                    // Preserve the catalog's render/classification fields — these
+                    // drive downstream behaviour (e.g. renderMode === 'browser'
+                    // makes a template previewable as a static site). Dropping
+                    // them here left renderMode undefined, so browser templates
+                    // like minimal-js failed isPreviewable() and never deployed.
+                    renderMode: t.renderMode,
+                    slideDirectory: t.slideDirectory,
+                    disabled: t.disabled,
                 })),
                 count: filteredTemplates.length
             };
