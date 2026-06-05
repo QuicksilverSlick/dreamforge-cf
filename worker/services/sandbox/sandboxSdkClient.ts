@@ -1270,6 +1270,16 @@ export class SandboxSdkClient extends BaseSandboxService {
                 isHealthy = false;
             }
 
+            // A serving instance always has an exposed preview URL. If it is
+            // missing, the instance is not actually reachable (wedged container
+            // / dead dev server even if a stale process lingers), so report it
+            // unhealthy — callers reset and recreate instead of handing back a
+            // dead preview the UI can never load.
+            if (isHealthy && !metadata.previewURL) {
+                this.logger.warn('Instance process is running but has no preview URL; treating as unhealthy', { instanceId });
+                isHealthy = false;
+            }
+
             return {
                 success: true,
                 pending: false,

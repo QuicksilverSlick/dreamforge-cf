@@ -104,6 +104,49 @@ export class DeploymentManager implements IDeploymentManager {
         // until a consumer needs it (see commit-2b deferred work).
 
         const status = await sandboxClient.getInstanceStatus(sessionId);
+
+        // Self-heal a wedged instance. If the existing instance is unhealthy or
+        // has no preview URL after the write, the app is not actually serving
+        // (a stuck container / dead dev server). Tear it down and bring up a
+        // fresh instance, then re-write the files — rather than returning a dead
+        // preview that the UI loops on forever (deployment_completed with an
+        // empty previewURL + WebSocket reconnect churn).
+        if (!status.isHealthy || !status.previewURL) {
+            logger?.warn(
+                `Instance ${sessionId} is wedged after deploy (healthy=${status.isHealthy}, previewURL=${status.previewURL ? 'set' : 'empty'}); resetting and recreating`,
+            );
+            try {
+                await sandboxClient.shutdownInstance(sessionId);
+            } catch (error) {
+                logger?.warn(
+                    `shutdownInstance failed during self-heal: ${error instanceof Error ? error.message : String(error)}`,
+                );
+            }
+
+            const fresh = await sandboxClient.createInstance(
+                templateName,
+                projectName,
+                webhookUrl,
+                localEnvVars,
+            );
+            if (fresh.success && fresh.runId) {
+                sessionId = fresh.runId;
+                onSessionIdChange?.(sessionId);
+                if (opts.files && opts.files.length > 0) {
+                    const write = await sandboxClient.writeFiles(sessionId, opts.files, opts.commitMessage);
+                    if (!write.success) {
+                        logger?.warn(`writeFiles after self-heal reported failure: ${write.error ?? ''}`);
+                    }
+                }
+                return {
+                    deploymentId: sessionId,
+                    previewURL: fresh.previewURL,
+                    tunnelURL: fresh.tunnelURL,
+                };
+            }
+            logger?.error(`Self-heal createInstance failed: ${fresh.error ?? 'unknown error'}`);
+        }
+
         return {
             deploymentId: sessionId,
             previewURL: status.previewURL,
