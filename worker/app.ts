@@ -85,8 +85,14 @@ export function createApp(env: Env): Hono<AppEnv> {
         const config = await getGlobalConfigurableSettings(env);
         c.set('config', config);
 
-        // Apply global rate limit middleware. Should this be moved after setupRoutes so that maybe 'user' is available?
-        await RateLimitService.enforceGlobalApiRateLimit(env, c.get('config').security.rateLimit, null, c.req.raw)
+        // Public, cacheable static-asset serving (generated images at
+        // /api/generated/*) must NOT be subject to the API rate limiter: an
+        // image-heavy generated app fires a burst of these on every page load,
+        // which otherwise trips the limiter and returns 503 for the images.
+        if (!c.req.path.startsWith('/api/generated/')) {
+            // Apply global rate limit middleware. Should this be moved after setupRoutes so that maybe 'user' is available?
+            await RateLimitService.enforceGlobalApiRateLimit(env, c.get('config').security.rateLimit, null, c.req.raw)
+        }
         await next();
     })
 
