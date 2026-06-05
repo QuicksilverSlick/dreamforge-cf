@@ -140,6 +140,11 @@ export class ScreenshotsController extends BaseController {
                 // matches the screenshot route's prior posture.
                 'Cache-Control': 'public, max-age=86400, immutable',
                 'X-Content-Type-Options': 'nosniff',
+                // Public CDN-style asset: openly loadable cross-origin from any
+                // generated-app preview (sandbox or browser-render subdomain) as
+                // an <img>/background. No credentials, no per-origin Vary.
+                'Access-Control-Allow-Origin': '*',
+                'Cross-Origin-Resource-Policy': 'cross-origin',
             });
 
             return new Response(obj.body, { headers }) as unknown as ControllerResponse<ApiResponse<never>>;
