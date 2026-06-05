@@ -1,5 +1,6 @@
 import { createLogger } from './logger';
 import { CodeGeneratorAgent as CodeGeneratorAgentDO } from './agents/core/codingAgent';
+import { getAgentStub } from './agents';
 import { proxyToSandbox } from '@cloudflare/sandbox';
 import { isDispatcherAvailable } from './utils/dispatcherUtils';
 import { createApp } from './app';
@@ -244,6 +245,21 @@ const worker = {
 
 		// Route 3: User App Request (e.g., xyz.build.cloudflare.dev or test.localhost)
 		if (isSubdomainRequest) {
+			// Browser-render template previews (renderMode === 'browser') are
+			// served as static files straight from the agent — they never run in
+			// a container sandbox and are not deployed as dispatched workers. The
+			// preview host is `b-{agentId}-{token}.{previewDomain}`; route those
+			// to the agent's file server rather than the sandbox/dispatcher path.
+			const subdomain = hostname.split('.')[0];
+			if (subdomain.startsWith('b-')) {
+				const withoutPrefix = subdomain.slice(2);
+				const lastHyphen = withoutPrefix.lastIndexOf('-');
+				if (lastHyphen > 0) {
+					const agentId = withoutPrefix.slice(0, lastHyphen);
+					const agent = await getAgentStub(env, agentId, true, logger);
+					return agent.handleBrowserFileServing(request);
+				}
+			}
 			return handleUserAppRequest(request, env);
 		}
 
