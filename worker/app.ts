@@ -31,6 +31,13 @@ export function createApp(env: Env): Hono<AppEnv> {
         if (pathname.startsWith('/oauth/') || pathname === '/auth/callback') {
             return next();
         }
+        // Public generated images set their own headers, including
+        // Cross-Origin-Resource-Policy: cross-origin so generated-app previews
+        // can embed them as <img>/backgrounds. secureHeaders would otherwise
+        // force CORP: same-origin, which blocks the cross-origin load.
+        if (pathname.startsWith('/api/generated/')) {
+            return next();
+        }
         // Apply secure headers
         return secureHeaders(getSecureHeadersConfig(env))(c, next);
     });
