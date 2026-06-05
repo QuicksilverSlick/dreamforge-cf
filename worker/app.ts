@@ -35,8 +35,19 @@ export function createApp(env: Env): Hono<AppEnv> {
         return secureHeaders(getSecureHeadersConfig(env))(c, next);
     });
     
-    // CORS configuration
-    app.use('/api/*', cors(getCORSConfig(env)));
+    // CORS configuration. Public generated-image serving is excluded: it is a
+    // CDN-style public asset (ScreenshotsController sets permissive, cacheable,
+    // open CORS headers itself), not a credentialed API call. Running it through
+    // the credentialed CORS path tags responses with `Vary: Origin` +
+    // `access-control-allow-credentials` but no `access-control-allow-origin`
+    // for non-allowlisted origins, which breaks cross-origin <img> loads from
+    // browser-render preview subdomains and fragments edge caching per-origin.
+    app.use('/api/*', async (c, next) => {
+        if (c.req.path.startsWith('/api/generated/')) {
+            return next();
+        }
+        return cors(getCORSConfig(env))(c, next);
+    });
     
     // CSRF protection using double-submit cookie pattern with proper GET handling
     app.use('*', async (c, next) => {
