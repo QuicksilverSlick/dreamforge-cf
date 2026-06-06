@@ -163,6 +163,13 @@ export interface BaseCodingOperations {
 }
 
 /**
+ * Delay before re-running static analysis once it comes back inconclusive,
+ * giving a freshly-(re)deployed sandbox dev server a moment to settle before
+ * the second attempt.
+ */
+const STATIC_ANALYSIS_RETRY_DELAY_MS = 3000;
+
+/**
  * Abstract base for all coding behaviors.
  *
  * Concrete subclasses (`PhasicCodingBehavior`, `AgenticCodingBehavior`)
@@ -1026,11 +1033,23 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 files,
             );
 
-            if (!analysisResponse || analysisResponse.error) {
-                const errorMsg = `Code linting failed: ${analysisResponse?.error ?? 'Unknown error'}, full response: ${JSON.stringify(analysisResponse)}`;
+            if (!analysisResponse) {
+                const errorMsg = 'Code linting failed: no response from sandbox';
                 this.logger.error(errorMsg);
-                this.broadcast(WebSocketMessageResponses.ERROR, { error: errorMsg, analysisResponse });
-                throw new Error(errorMsg);
+                this.broadcast(WebSocketMessageResponses.ERROR, { error: errorMsg });
+                return { success: false, lint: { issues: [] }, typecheck: { issues: [] } };
+            }
+
+            // An inconclusive analysis (success === false) means tsc/eslint
+            // could not complete — typically a wedged instance. Surface it to
+            // the caller so it can retry / self-heal, rather than throwing and
+            // collapsing it into an empty result that downstream fixers read
+            // as "clean".
+            if (analysisResponse.success === false) {
+                this.logger.warn(
+                    `Static analysis inconclusive: ${analysisResponse.error ?? 'unknown reason'}`,
+                );
+                return analysisResponse;
             }
 
             const { lint, typecheck } = analysisResponse;
@@ -1075,11 +1094,53 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
      * are translated into `bun install` commands so missing external
      * modules get pulled in.
      */
+    /**
+     * Run static analysis, recovering from an inconclusive result (tsc/eslint
+     * could not complete — typically a wedged sandbox instance). Retries once
+     * after a short settle, then self-heals by redeploying onto a fresh
+     * instance and analyzing again. Returns the best result obtained; a still
+     * `success === false` result means "could not verify" — the caller must
+     * not treat it as clean.
+     */
+    protected async runStaticAnalysisWithRecovery(): Promise<StaticAnalysisResponse> {
+        let analysis = await this.runStaticAnalysisCode();
+        if (analysis.success !== false) {
+            return analysis;
+        }
+
+        this.logger.warn('Static analysis inconclusive; retrying once after settle');
+        await new Promise((resolve) => setTimeout(resolve, STATIC_ANALYSIS_RETRY_DELAY_MS));
+        analysis = await this.runStaticAnalysisCode();
+        if (analysis.success !== false) {
+            return analysis;
+        }
+
+        this.logger.warn('Static analysis still inconclusive; self-healing sandbox before re-analysis');
+        await this.deployToSandbox(
+            this.fileManager.getGeneratedFiles(),
+            true,
+            'fix: self-heal sandbox for static analysis',
+        );
+        analysis = await this.runStaticAnalysisCode();
+        if (analysis.success === false) {
+            this.logger.error(
+                'Static analysis remained inconclusive after self-heal; proceeding without verification',
+            );
+        }
+        return analysis;
+    }
+
     protected async applyDeterministicCodeFixes(): Promise<StaticAnalysisResponse | undefined> {
         try {
-            const staticAnalysis = await this.runStaticAnalysisCode();
+            const staticAnalysis = await this.runStaticAnalysisWithRecovery();
             if (staticAnalysis.typecheck.issues.length === 0) {
-                this.logger.info('No typecheck issues found, skipping deterministic fixes');
+                if (staticAnalysis.success === false) {
+                    this.logger.warn(
+                        'Static analysis inconclusive after recovery; skipping deterministic fixes (could not verify)',
+                    );
+                } else {
+                    this.logger.info('No typecheck issues found, skipping deterministic fixes');
+                }
                 return staticAnalysis;
             }
             const typeCheckIssues = staticAnalysis.typecheck.issues;

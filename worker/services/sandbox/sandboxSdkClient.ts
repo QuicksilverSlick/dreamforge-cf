@@ -1721,7 +1721,17 @@ export class SandboxSdkClient extends BaseSandboxService {
         try {
             const lintIssues: CodeIssue[] = [];
             const typecheckIssues: CodeIssue[] = [];
-            
+
+            // Track whether each analyzer actually completed and produced a
+            // trustworthy result. A command that rejected (e.g. exec failed on
+            // a wedged instance) or that exited non-zero without yielding any
+            // parseable diagnostics is INCONCLUSIVE — it must not be reported
+            // as "clean", or compile-breaking code (e.g. a named/default
+            // export mismatch, TS2614) sails through the deterministic fixer's
+            // zero-issues early-return and ships to a "successful" preview.
+            let typecheckConclusive = true;
+            let lintConclusive = true;
+
             // Run ESLint and TypeScript check in parallel
             const [lintResult, tscResult] = await Promise.allSettled([
                 this.executeCommand(instanceId, 'bun run lint'),
@@ -1779,6 +1789,10 @@ export class SandboxSdkClient extends BaseSandboxService {
                     }
                 } catch (error) {
                     this.logger.warn('Failed to parse ESLint output', error);
+                    // Non-JSON output from `bun run lint` means ESLint did not
+                    // produce a readable report (crash / config failure), not
+                    // that the code is clean.
+                    lintConclusive = false;
                 }
 
                 results.lint.issues = lintIssues;
@@ -1790,10 +1804,12 @@ export class SandboxSdkClient extends BaseSandboxService {
                 results.lint.rawOutput = `STDOUT: ${lintResult.value.stdout}\nSTDERR: ${lintResult.value.stderr}`;
             } else if (lintResult.status === 'rejected') {
                 this.logger.warn('ESLint analysis failed', lintResult.reason);
+                lintConclusive = false;
             }
-            
+
             // Process TypeScript check results
             if (tscResult.status === 'fulfilled') {
+                const tscExitCode = tscResult.value.exitCode;
                 try {
                     // TypeScript errors can come from either stdout or stderr
                     const output = tscResult.value.stderr || tscResult.value.stdout;
@@ -1843,8 +1859,21 @@ export class SandboxSdkClient extends BaseSandboxService {
                     }
                 } catch (error) {
                     this.logger.warn('Failed to parse TypeScript output', error);
+                    typecheckConclusive = false;
                 }
-                
+
+                // `tsc` exits non-zero whenever it finds errors. If it exited
+                // non-zero but we extracted no structured diagnostics, the run
+                // failed in a way we cannot read (build-config error such as
+                // TS6306, a wedged instance, unexpected framing) — treat it as
+                // inconclusive rather than clean.
+                if (typeof tscExitCode === 'number' && tscExitCode !== 0 && typecheckIssues.length === 0) {
+                    this.logger.warn(
+                        `tsc exited ${tscExitCode} with no parseable diagnostics; treating typecheck as inconclusive`,
+                    );
+                    typecheckConclusive = false;
+                }
+
                 results.typecheck.issues = typecheckIssues;
                 results.typecheck.summary = {
                     errorCount: typecheckIssues.filter(issue => issue.severity === 'error').length,
@@ -1854,9 +1883,21 @@ export class SandboxSdkClient extends BaseSandboxService {
                 results.typecheck.rawOutput = `STDOUT: ${tscResult.value.stdout}\nSTDERR: ${tscResult.value.stderr}`;
             } else if (tscResult.status === 'rejected') {
                 this.logger.warn('TypeScript analysis failed', tscResult.reason);
+                typecheckConclusive = false;
             }
 
             this.logger.info(`Analysis completed: ${lintIssues.length} lint issues, ${typecheckIssues.length} typecheck issues`);
+
+            // Surface an inconclusive run so callers can retry / self-heal
+            // instead of mistaking "could not check" for "no issues".
+            if (!typecheckConclusive || !lintConclusive) {
+                const failedParts = [
+                    typecheckConclusive ? null : 'typecheck',
+                    lintConclusive ? null : 'lint',
+                ].filter((part): part is string => part !== null);
+                results.success = false;
+                results.error = `Static analysis inconclusive: ${failedParts.join(' + ')} did not complete; not safe to treat as clean`;
+            }
 
             return {
                 ...results
