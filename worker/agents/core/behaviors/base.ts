@@ -515,8 +515,15 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             throw new Error('Project is not previewable');
         }
 
+        // A deploy that carries no explicit files — a deploy_preview / redeploy
+        // (WebSocket or controller), or a self-heal that recreated a fresh
+        // instance from the template — must still write the full generated
+        // project, or the new instance serves the bare template instead of the
+        // app. Fall back to the agent's complete generated file set.
+        const filesToDeploy = files.length > 0 ? files : this.fileManager.getGeneratedFiles();
+
         this.logger.info('[AGENT] Deploying to sandbox', {
-            files: files.length,
+            files: filesToDeploy.length,
             redeploy,
             commitMessage,
             renderMode: this.getTemplateDetails()?.renderMode,
@@ -526,7 +533,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             this.logger.info('Deploying to browser native sandbox');
             this.broadcast(WebSocketMessageResponses.DEPLOYMENT_STARTED, {
                 message: 'Deploying to browser native sandbox',
-                files: files.map((f) => ({ filePath: f.filePath })),
+                files: filesToDeploy.map((f) => ({ filePath: f.filePath })),
             });
             const preview: PreviewType = {
                 previewURL: this.getBrowserPreviewURL(),
@@ -547,7 +554,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         try {
             const result = await this.raceDeployTimeout(
                 this.deploymentManager.deployToSandbox({
-                    files,
+                    files: filesToDeploy,
                     redeploy,
                     commitMessage,
                     clearLogs,
