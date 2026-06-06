@@ -103,7 +103,7 @@ export class CodingAgentController extends BaseController {
                 agentId: agentId,
                 userId: user.id,
                 enableRealtimeCodeFix: false, // This costs us too much, so disabled it for now
-                enableFastSmartCodeFix: false,
+                enableFastSmartCodeFix: true, // Post-phase AI fixer: catches semantic model slips the deterministic TS fixer cannot
             }
                                 
             this.logger.info(`Initialized inference context for user ${user.id}`, {

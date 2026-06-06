@@ -24,10 +24,21 @@ export enum AIModels {
 	GEMINI_2_5_FLASH_PREVIEW_05_20 = 'google-ai-studio/gemini-2.5-flash-preview-05-20',
 	GEMINI_2_5_PRO_PREVIEW_06_05 = 'google-ai-studio/gemini-2.5-pro-preview-06-05',
 
+	// Gemini 3.x (current generation, June 2026)
+	GEMINI_3_5_FLASH = 'google-ai-studio/gemini-3.5-flash',
+	GEMINI_3_1_FLASH_LITE = 'google-ai-studio/gemini-3.1-flash-lite',
+	GEMINI_3_1_PRO_PREVIEW = 'google-ai-studio/gemini-3.1-pro-preview',
+	GEMINI_3_FLASH_PREVIEW = 'google-ai-studio/gemini-3-flash-preview',
+
 	CLAUDE_3_5_SONNET_LATEST = 'anthropic/claude-3-5-sonnet-latest',
 	CLAUDE_3_7_SONNET_20250219 = 'anthropic/claude-3-7-sonnet-20250219',
 	CLAUDE_4_OPUS = 'anthropic/claude-opus-4-20250514',
 	CLAUDE_4_SONNET = 'anthropic/claude-sonnet-4-20250514',
+
+	// Claude 4.x (current generation, June 2026)
+	CLAUDE_OPUS_4_8 = 'anthropic/claude-opus-4-8',
+	CLAUDE_SONNET_4_6 = 'anthropic/claude-sonnet-4-6',
+	CLAUDE_HAIKU_4_5 = 'anthropic/claude-haiku-4-5',
 
 	OPENAI_O3 = 'openai/o3',
 	OPENAI_O4_MINI = 'openai/o4-mini',
@@ -36,6 +47,11 @@ export enum AIModels {
     OPENAI_5 = 'openai/gpt-5',
     OPENAI_5_MINI = 'openai/gpt-5-mini',
     OPENAI_OSS = 'openai/gpt-oss-120b',
+
+    // GPT-5.4 / 5.5 (current generation, June 2026; gpt-5 / gpt-5-mini sunset)
+    OPENAI_5_5 = 'openai/gpt-5.5',
+    OPENAI_5_4 = 'openai/gpt-5.4',
+    OPENAI_5_4_MINI = 'openai/gpt-5.4-mini',
 
     // OPENROUTER_QWEN_3_CODER = '[openrouter]qwen/qwen3-coder',
     // OPENROUTER_KIMI_2_5 = '[openrouter]moonshotai/kimi-k2',

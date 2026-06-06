@@ -2269,8 +2269,12 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         return {
             ...this.state.metadata,
             userModelConfigs: this.userModelConfigs,
-            enableRealtimeCodeFix: false,
-            enableFastSmartCodeFix: false,
+            // Honor the toggles the controller persisted into state rather
+            // than hardcoding policy here — otherwise the behavior path
+            // ignores `enableFastSmartCodeFix` / `enableRealtimeCodeFix`
+            // chosen at agent creation.
+            enableRealtimeCodeFix: this.state.inferenceContext?.enableRealtimeCodeFix ?? false,
+            enableFastSmartCodeFix: this.state.inferenceContext?.enableFastSmartCodeFix ?? false,
         };
     }
 
