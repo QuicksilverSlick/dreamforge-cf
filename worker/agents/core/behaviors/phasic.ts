@@ -939,9 +939,15 @@ export class PhasicCodingBehavior
     private async applyFastSmartCodeFixes(): Promise<void> {
         try {
             this.logger.info('Applying fast smart code fixes');
-            const staticAnalysis = await this.runStaticAnalysisCode();
+            const staticAnalysis = await this.runStaticAnalysisWithRecovery();
             if (staticAnalysis.typecheck.issues.length + staticAnalysis.lint.issues.length === 0) {
-                this.logger.info('No issues found, skipping fast smart code fixes');
+                if (staticAnalysis.success === false) {
+                    this.logger.warn(
+                        'Static analysis inconclusive after recovery; skipping fast smart code fixes',
+                    );
+                } else {
+                    this.logger.info('No issues found, skipping fast smart code fixes');
+                }
                 return;
             }
             const issues = staticAnalysis.typecheck.issues.concat(staticAnalysis.lint.issues);
