@@ -59,6 +59,8 @@ export interface GenerateImageParams {
     quality?: ImageQuality;
     /** For attribution / rate-limit accounting. */
     userId: string;
+    /** Aborts the underlying provider request (e.g. a per-image timeout). */
+    signal?: AbortSignal;
 }
 
 export interface GeneratedImage {
@@ -118,9 +120,9 @@ interface GeminiImageResponse {
 }
 
 /** Resolve a returned image reference (base64 or URL) to raw bytes. */
-async function resolveToBytes(image: string): Promise<Uint8Array> {
+async function resolveToBytes(image: string, signal?: AbortSignal): Promise<Uint8Array> {
     if (image.startsWith('http://') || image.startsWith('https://')) {
-        const response = await fetch(image);
+        const response = await fetch(image, { signal });
         if (!response.ok) {
             throw new Error(`Failed to fetch generated image (${response.status})`);
         }
@@ -141,6 +143,7 @@ async function runOpenAIImage(
 ): Promise<GeneratedImage> {
     const response = await fetch(`${gatewayBaseUrl(env)}/openai/images/generations`, {
         method: 'POST',
+        signal: params.signal,
         headers: {
             'Content-Type': 'application/json',
             'cf-aig-authorization': `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`,
@@ -168,7 +171,7 @@ async function runOpenAIImage(
         throw new Error(`OpenAI image '${model}' returned no image`);
     }
 
-    return { bytes: await resolveToBytes(reference), mimeType: 'image/png' };
+    return { bytes: await resolveToBytes(reference, params.signal), mimeType: 'image/png' };
 }
 
 /**
@@ -184,6 +187,7 @@ async function runGeminiImage(
         `${gatewayBaseUrl(env)}/google-ai-studio/v1beta/models/${model}:generateContent`,
         {
             method: 'POST',
+            signal: params.signal,
             headers: {
                 'Content-Type': 'application/json',
                 'cf-aig-authorization': `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`,
