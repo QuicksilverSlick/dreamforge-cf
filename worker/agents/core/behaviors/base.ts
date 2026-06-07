@@ -1952,7 +1952,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         }
 
         this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_STARTED, {
-            message: `Generating ${pending.length} image asset(s)`,
+            message: `Generating ${pending.length} image${pending.length === 1 ? '' : 's'} in parallel — they'll populate in the preview as each one is ready.`,
             count: pending.length,
         });
 

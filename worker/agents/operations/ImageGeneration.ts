@@ -73,31 +73,41 @@ export class ImageGenerationOperation extends AgentOperation<ImageGenerationInpu
             projectDescriptor: blueprint.description || blueprint.title,
         };
 
-        const results: GeneratedImageResult[] = [];
         const total = inputs.assets.length;
 
-        for (let i = 0; i < total; i++) {
-            const asset = inputs.assets[i];
-            try {
-                const result = await this.generateAndStore(env, asset, promptContext, userId, quality);
-                results.push(result);
-                inputs.onImageGenerated?.(result, i + 1, total);
-                logger.info('Generated image asset', {
-                    path: result.path,
-                    provider: result.provider,
-                    url: result.url,
-                });
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                logger.error('Failed to generate image asset; skipping', {
-                    path: asset.path,
-                    error: message,
-                });
-                inputs.onImageError?.(asset.path, message);
-            }
-        }
+        // Generate all assets concurrently rather than one-at-a-time: a build
+        // should not wait out the sum of every image's latency. Each call is
+        // independently timed out and failure-isolated, so one slow/failed
+        // asset never holds up the others. Progress fires in completion order
+        // (a shared counter, safe under the single-threaded event loop) so the
+        // UI can populate images as they arrive.
+        let completed = 0;
+        const settled = await Promise.all(
+            inputs.assets.map(async (asset) => {
+                try {
+                    const result = await this.generateAndStore(env, asset, promptContext, userId, quality);
+                    completed += 1;
+                    inputs.onImageGenerated?.(result, completed, total);
+                    logger.info('Generated image asset', {
+                        path: result.path,
+                        provider: result.provider,
+                        url: result.url,
+                    });
+                    return result;
+                } catch (error) {
+                    completed += 1;
+                    const message = error instanceof Error ? error.message : String(error);
+                    logger.error('Failed to generate image asset; skipping', {
+                        path: asset.path,
+                        error: message,
+                    });
+                    inputs.onImageError?.(asset.path, message);
+                    return null;
+                }
+            }),
+        );
 
-        return results;
+        return settled.filter((result): result is GeneratedImageResult => result !== null);
     }
 
     private async generateAndStore(
