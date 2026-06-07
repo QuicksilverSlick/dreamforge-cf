@@ -24,22 +24,25 @@ refresh / come back later → it doesn't load, and I have to hit Reset."*
 
 ## Plan (each slice atomic-green: typecheck 0 / lint 0 / 191·1·2; shipped PR→CI→deploy)
 
-- **Slice 1 — Readiness gate** *(highest impact, lowest risk; START HERE)*
-  Confirm the dev server serves a real 200 on the port (HTTP poll + timeout)
-  before emitting `previewURL` / `DEPLOYMENT_COMPLETED`. → fixes #1.
+- **Slice 1 — Readiness gate** ✅ SHIPPED (#81) + VERIFIED in prod (vite build
+  `8001-a565feac`, 2026-06-07: `Waiting for development server HTTP readiness`
+  → `Development server HTTP-ready` after ~5s, 0 timeouts). Confirms the dev
+  server serves real HTTP before `previewURL` / `DEPLOYMENT_COMPLETED`. → fixes #1.
 - **Slice 2 — Reliable idle-revive on return**
   On preview 404 (dead container), auto-recreate without manual Reset; on
   chat-page load, health-check + revive even on a fresh WS. → fixes #3.
-- **Slice 3 — Kill HMR churn**
-  Correct, stable Vite preview posture: HMR configured to ride the proxy
-  reliably, or native HMR disabled with agent-driven full-reload doing
-  refreshes. → fixes #4.
+- **Slice 3 — Kill HMR churn** ✅ SHIPPED. Template repo `reference/vite-reference/
+  vite.config.ts` sets `server.hmr: false` (preview proxy can't carry the HMR WS)
+  + guards the reload-trigger plugin's `server.ws.send`; refreshes come from the
+  platform reloading the iframe after each deploy. Scratch template config
+  (`worker/agents/utils/templates.ts`) set to `hmr: false` too. → fixes #4.
 - **Slice 4 — URL/port stability**
   Reuse the instance's port across *phase* deploys (churn only on a true
   wedged-recreate) so the preview URL stays put mid-build. → fixes #2.
-- **Slice 5 — Stop the model band-aiding HMR**
-  Prompt/template guard so the model never rewrites Vite/WebSocket config or
-  POSTs to `/api/client-errors`; the platform owns preview. → removes cruft source.
+- **Slice 5 — Stop the model band-aiding HMR** ✅ SHIPPED. `worker/agents/prompts.ts`
+  forbids touching Vite HMR/dev-server/WebSocket wiring, `ProxiedWebSocket` shims,
+  `import.meta.hot`, and `/api/client-errors` POSTs — the platform owns preview.
+  → removes cruft source.
 
 ## Already shipped (foundation)
 
