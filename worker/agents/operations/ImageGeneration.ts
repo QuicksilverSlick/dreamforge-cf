@@ -10,6 +10,14 @@ import {
 import { uploadImageToR2, ImageType } from '../../utils/images';
 import { generateNanoId } from '../../utils/idGenerator';
 
+/**
+ * Per-image provider-call timeout. A hung provider request (network/gateway
+ * stall) must not block the sequential generation loop — and thus the whole
+ * build — indefinitely. On timeout the call aborts, the next provider is tried,
+ * and a fully-failed asset is skipped (non-fatal) so the build continues.
+ */
+const IMAGE_GENERATION_TIMEOUT_MS = 90_000;
+
 /** A successfully generated and stored image asset. */
 export interface GeneratedImageResult {
     /** Project-relative path the asset was requested at (manifest key). */
@@ -109,6 +117,7 @@ export class ImageGenerationOperation extends AgentOperation<ImageGenerationInpu
                     size,
                     quality,
                     userId,
+                    signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS),
                 });
 
                 const { url } = await uploadImageToR2(
