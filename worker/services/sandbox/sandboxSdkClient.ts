@@ -657,59 +657,58 @@ export class SandboxSdkClient extends BaseSandboxService {
     }
 
     /**
-     * Waits for the development server to be ready by monitoring logs for readiness indicators
+     * Waits for the development server to actually serve HTTP on the given port
+     * by probing `http://localhost:<port>/` from inside the container until it
+     * returns a 2xx/3xx response (Vite serves the SPA index once it is genuinely
+     * accepting requests).
+     *
+     * This replaces the previous log-pattern heuristic, which reported "ready"
+     * as soon as Vite printed its `Local: http://…` line — before the server
+     * was reliably answering requests. That gap let `DEPLOYMENT_COMPLETED` (and
+     * the preview URL) be emitted prematurely, so the preview iframe hammered
+     * the URL with 404s for several seconds. A real HTTP probe closes that race.
      */
-    private async waitForServerReady(instanceId: string, processId: string, maxWaitTimeMs: number = 10000): Promise<boolean> {
+    private async waitForServerReady(instanceId: string, port: number, maxWaitTimeMs: number = 30000): Promise<boolean> {
         const startTime = Date.now();
         const pollIntervalMs = 500;
         const maxAttempts = Math.ceil(maxWaitTimeMs / pollIntervalMs);
-        
-        // Patterns that indicate the server is ready
-        const readinessPatterns = [
-            /http:\/\/[^\s]+/,           // Any HTTP URL (most reliable)
-            /ready in \d+/i,             // Vite "ready in X ms"
-            /Local:\s+http/i,            // Vite local server line
-            /Network:\s+http/i,          // Vite network server line
-            /server running/i,           // Generic server running message
-            /listening on/i              // Generic listening message
-        ];
 
-        this.logger.info('Waiting for development server', { instanceId, processId, timeoutMs: maxWaitTimeMs });
+        this.logger.info('Waiting for development server HTTP readiness', { instanceId, port, timeoutMs: maxWaitTimeMs });
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                // Get recent logs only to avoid processing old content
-                const logsResult = await this.getLogs(instanceId, true);
-                
-                if (logsResult.success && logsResult.logs.stdout) {
-                    const logs = logsResult.logs.stdout;
-                    
-                    // Check for any readiness pattern
-                    for (const pattern of readinessPatterns) {
-                        if (pattern.test(logs)) {
-                            const elapsedTime = Date.now() - startTime;
-                            this.logger.info('Development server ready', { instanceId, elapsedTimeMs: elapsedTime, attempts: `${attempt}/${maxAttempts}` });
-                            return true;
-                        }
-                    }
+                const probe = await this.executeCommand(
+                    instanceId,
+                    `curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:${port}/`,
+                );
+                const code = parseInt((probe.stdout ?? '').trim(), 10);
+                // Any 2xx/3xx means Vite is live and serving. `000` (curl's
+                // no-response sentinel) or a connection error means not up yet.
+                if (Number.isFinite(code) && code >= 200 && code < 400) {
+                    this.logger.info('Development server HTTP-ready', {
+                        instanceId,
+                        port,
+                        httpCode: code,
+                        elapsedTimeMs: Date.now() - startTime,
+                        attempts: `${attempt}/${maxAttempts}`,
+                    });
+                    return true;
                 }
-                
-                // Wait before next attempt (except on last attempt)
-                if (attempt < maxAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
-                }
-                
             } catch (error) {
-                this.logger.warn(`Error checking server readiness for ${instanceId} (attempt ${attempt}):`, error);
-                // Continue trying even if there's an error getting logs
-                if (attempt < maxAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
-                }
+                this.logger.warn(`HTTP readiness probe error for ${instanceId} (attempt ${attempt})`, error);
+            }
+
+            if (attempt < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
             }
         }
-        
-        const elapsedTime = Date.now() - startTime;
-        this.logger.warn('Development server readiness timeout', { instanceId, elapsedTimeMs: elapsedTime, totalAttempts: maxAttempts });
+
+        this.logger.warn('Development server HTTP readiness timeout', {
+            instanceId,
+            port,
+            elapsedTimeMs: Date.now() - startTime,
+            totalAttempts: maxAttempts,
+        });
         return false;
     }
 
@@ -723,20 +722,24 @@ export class SandboxSdkClient extends BaseSandboxService {
                 `VITE_LOGGER_TYPE=json monitor-cli process start --instance-id ${instanceId} --port ${port} -- bun run dev`,
             );
             this.logger.info('Development server started', { instanceId, processId: process.id });
-            
-            // Wait for the server to be ready (non-blocking - always returns the process ID)
+
+            // Block until the dev server actually serves HTTP on the port, so
+            // the caller only exposes/returns the preview URL once it is ready.
+            // This is the readiness gate: it prevents DEPLOYMENT_COMPLETED from
+            // being broadcast before the server answers requests (which caused
+            // the preview 404-poll storm). On timeout we proceed best-effort —
+            // the client's retry loop covers any residual lag — rather than
+            // failing the whole deploy.
             try {
-                const isReady = await this.waitForServerReady(instanceId, process.id, 10000);
-                if (isReady) {
-                    this.logger.info('Development server is ready', { instanceId });
-                } else {
-                    this.logger.warn('Development server may not be fully ready', { instanceId });
+                const isReady = await this.waitForServerReady(instanceId, port, 30000);
+                if (!isReady) {
+                    this.logger.warn('Development server did not reach HTTP readiness within timeout; proceeding best-effort', { instanceId, port });
                 }
             } catch (readinessError) {
                 this.logger.warn(`Error during readiness check for ${instanceId}:`, readinessError);
                 this.logger.info('Continuing with server startup despite readiness check error', { instanceId });
             }
-            
+
             return process.id;
         } catch (error) {
             this.logger.warn('Failed to start dev server', error);
