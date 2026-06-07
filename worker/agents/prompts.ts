@@ -1181,6 +1181,7 @@ export const STRATEGIES_UTILS = {
         * Keep the size of codebase as small as possible, write encapsulated and abstracted code that can be reused, maximize code and component reuse and modularity. If a function/component is to be used in multiple files, it should be defined in a shared file.
         **DO NOT WRITE/MODIFY README FILES, LICENSES, ESSENTIAL CONFIG, OR OTHER NON-APPLICATION FILES as they are already configured in the final deployment. You are allowed to modify tailwind.config.js, vite.config.js etc if necessary**
             - Be very careful while working on vite.config.js, tailwind.config.js, etc. as any wrong changes can break the application.
+        **DO NOT touch Vite HMR / dev-server / WebSocket preview wiring. Do NOT set \`server.hmr\`, add HMR clients, "ProxiedWebSocket" shims, \`import.meta.hot\` handlers, or POST to \`/api/client-errors\`. The platform fully manages the preview connection and reloads the preview after each deploy — any HMR/WebSocket "fix" in app code is wrong, never works behind the preview proxy, and wastes a phase. If the preview seems stale, it is the platform's job, not the app's.**
         **DO NOT WRITE pdf, image, audio, or any other binary/non-text files — generated code cannot produce them. Reference real images via the \`url\` on the blueprint's \`imageAssets\` entries or the \`generate_image\` tool; synthesize audio with the Web Audio API.**
 
         **Examples**:

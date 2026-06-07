@@ -73,6 +73,7 @@ export default ({ mode }: { mode: string }) => {
     server: {
       allowedHosts: true,   // This is IMPORTANT for dev server to work
       strictPort: true,     // Prevent auto-port-increment which breaks miniflare/preview mapping
+      hmr: false,           // Preview runs behind the sandbox proxy which can't carry the HMR WebSocket; leaving it on churns ("server connection lost"). Refreshes come from the platform reloading the iframe after each deploy.
     },
     resolve: {
       alias: {
