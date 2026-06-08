@@ -1053,7 +1053,6 @@ export default function Chat() {
 														lineNumbers: 'on',
 														scrollBeyondLastLine: false,
 														fontSize: 13,
-														theme: 'v1-dev',
 														automaticLayout: true,
 													}}
 													find={

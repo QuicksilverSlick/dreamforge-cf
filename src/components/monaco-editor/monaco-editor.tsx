@@ -35,45 +35,61 @@ self.MonacoEnvironment = {
 	},
 };
 
-// From GitHub Dark theme
+// Dreamforge "Forge Dark" — teal-accented dark editor theme, tuned for low eye-strain.
+// Teal is the cursor + functions only; the rest is a balanced, colour-blind-safe spread
+// (violet keywords + green strings avoid the red/green CVD trap).
 monaco.editor.defineTheme('v1-dev-dark', {
 	base: 'vs-dark',
 	inherit: true,
 	rules: [
-		{ token: '', foreground: 'c9d1d9', background: '0d1117' },
-		{ token: 'comment', foreground: '8b949e', fontStyle: 'italic' },
-		{ token: 'keyword', foreground: 'ff7b72' },
-		{ token: 'number', foreground: '79c0ff' },
-		{ token: 'string', foreground: 'a5d6ff' },
-		{ token: 'type', foreground: 'ffa657' },
-		{ token: 'class', foreground: 'd2a8ff' },
-		{ token: 'interface', foreground: 'ffdf5d' },
-		{ token: 'function', foreground: 'd2a8ff' },
-		{ token: 'member', foreground: '79c0ff' },
-		{ token: 'variable', foreground: 'c9d1d9' },
-		{ token: 'constant', foreground: 'ffab70' },
-		{ token: 'operator', foreground: 'ff7b72' },
-		{ token: 'namespace', foreground: 'ffab70' },
-		{ token: 'predefined', foreground: 'ffa657' },
-		{ token: 'invalid', foreground: 'ffffff', background: 'f85149' },
+		{ token: '', foreground: 'd6e2de', background: '0e1413' },
+		{ token: 'comment', foreground: '5e6e67', fontStyle: 'italic' },
+		{ token: 'keyword', foreground: 'b98ae6' },
+		{ token: 'number', foreground: 'e5b567' },
+		{ token: 'string', foreground: '9fd68a' },
+		{ token: 'regexp', foreground: '7fd6bc' },
+		{ token: 'type', foreground: '6fb7e8' },
+		{ token: 'class', foreground: '6fb7e8' },
+		{ token: 'interface', foreground: '6fb7e8' },
+		{ token: 'function', foreground: '1fe0c0' },
+		{ token: 'member', foreground: 'd6e2de' },
+		{ token: 'variable', foreground: 'd6e2de' },
+		{ token: 'constant', foreground: 'e8915c' },
+		{ token: 'operator', foreground: '7e8c86' },
+		{ token: 'delimiter', foreground: '7e8c86' },
+		{ token: 'namespace', foreground: '6fb7e8' },
+		{ token: 'predefined', foreground: '6fb7e8' },
+		{ token: 'tag', foreground: 'e78a9c' },
+		{ token: 'attribute.name', foreground: 'e5b567' },
+		{ token: 'attribute.value', foreground: '9fd68a' },
+		{ token: 'invalid', foreground: 'f2818f' },
 	],
 	colors: {
-		// default backgorund, overriden to match theme
-		// 'editor.background': '#0d1117',
-		'editor.background': '#171512',
-		'editor.foreground': '#c9d1d9',
-		'editorLineNumber.foreground': '#444c56',
-		'editorLineNumber.activeForeground': '#8b949e',
-		'editorCursor.foreground': '#58a6ff',
-		'editorIndentGuide.background': '#21262d',
-		'editorIndentGuide.activeBackground': '#30363d',
-		'editor.selectionBackground': '#264f78',
-		'editor.inactiveSelectionBackground': '#1f6feb44',
-		'editor.lineHighlightBackground': '#161b22',
-		'editor.wordHighlightBackground': '#3fb95040',
-		'editor.wordHighlightStrongBackground': '#ff7b7240',
-		'editor.findMatchBackground': '#ffd33d44',
-		'editor.findMatchHighlightBackground': '#ffd33d22',
+		'editor.background': '#0e1413',
+		'editor.foreground': '#d6e2de',
+		'editorLineNumber.foreground': '#48564f',
+		'editorLineNumber.activeForeground': '#8fa39b',
+		'editorCursor.foreground': '#1fe0c0',
+		'editorIndentGuide.background': '#1c2622',
+		'editorIndentGuide.activeBackground': '#2e3b36',
+		'editor.selectionBackground': '#1f4d45',
+		'editor.inactiveSelectionBackground': '#17302c',
+		'editor.lineHighlightBackground': '#161d1b',
+		'editor.wordHighlightBackground': '#1fe0c022',
+		'editor.wordHighlightStrongBackground': '#1fe0c033',
+		'editor.findMatchBackground': '#e5b56744',
+		'editor.findMatchHighlightBackground': '#e5b56722',
+		'editorBracketMatch.background': '#2a6f6333',
+		'editorBracketMatch.border': '#2a6f63',
+		'editorGutter.background': '#0e1413',
+		'editorWidget.background': '#141917',
+		'editorWidget.border': '#222b27',
+		'editorSuggestWidget.background': '#141917',
+		'editorSuggestWidget.border': '#222b27',
+		'editorHoverWidget.background': '#141917',
+		'editorHoverWidget.border': '#222b27',
+		'scrollbarSlider.background': '#2e3b3680',
+		'scrollbarSlider.hoverBackground': '#3a4a44aa',
 	},
 });
 
@@ -83,19 +99,19 @@ monaco.editor.defineTheme('v1-dev', {
 	rules: [
 		{ token: '', foreground: '000000', background: 'fbfbfc' },
 		{ token: 'comment', foreground: '6e7781', fontStyle: 'italic' },
-		{ token: 'keyword', foreground: '0092b8' },
+		{ token: 'keyword', foreground: '0e8c7a' },
 		{ token: 'number', foreground: '0550ae' },
 		{ token: 'string', foreground: '0a3069' },
-		{ token: 'type', foreground: '0092b8' },
-		{ token: 'class', foreground: '0092b8' },
-		{ token: 'interface', foreground: '0092b8' },
+		{ token: 'type', foreground: '0e8c7a' },
+		{ token: 'class', foreground: '0e8c7a' },
+		{ token: 'interface', foreground: '0e8c7a' },
 		{ token: 'function', foreground: '953800' },
 		{ token: 'member', foreground: '0550ae' },
 		{ token: 'variable', foreground: '24292f' },
 		{ token: 'constant', foreground: '0550ae' },
-		{ token: 'operator', foreground: '0092b8' },
-		{ token: 'namespace', foreground: '0092b8' },
-		{ token: 'predefined', foreground: '0092b8' },
+		{ token: 'operator', foreground: '0e8c7a' },
+		{ token: 'namespace', foreground: '0e8c7a' },
+		{ token: 'predefined', foreground: '0e8c7a' },
 		{ token: 'invalid', foreground: 'ff0000' },
 	],
 	colors: {
@@ -103,20 +119,31 @@ monaco.editor.defineTheme('v1-dev', {
 		'editor.foreground': '#24292f',
 		'editorLineNumber.foreground': '#8c959f',
 		'editorLineNumber.activeForeground': '#24292f',
-		'editorCursor.foreground': '#0092b8',
+		'editorCursor.foreground': '#0e8c7a',
 		'editorIndentGuide.background': '#d0d7de',
 		'editorIndentGuide.activeBackground': '#8c959f',
-		'editor.selectionBackground': '#0092b820',
-		'editor.inactiveSelectionBackground': '#0092b810',
-		'editor.lineHighlightBackground': '#0092b808',
-		'editor.wordHighlightBackground': '#0092b815',
-		'editor.wordHighlightStrongBackground': '#0092b820',
-		'editor.findMatchBackground': '#0092b830',
-		'editor.findMatchHighlightBackground': '#0092b815',
+		'editor.selectionBackground': '#0e8c7a20',
+		'editor.inactiveSelectionBackground': '#0e8c7a10',
+		'editor.lineHighlightBackground': '#0e8c7a08',
+		'editor.wordHighlightBackground': '#0e8c7a15',
+		'editor.wordHighlightStrongBackground': '#0e8c7a20',
+		'editor.findMatchBackground': '#0e8c7a30',
+		'editor.findMatchHighlightBackground': '#0e8c7a15',
 	},
 });
 
-monaco.editor.setTheme('v1-dev');
+monaco.editor.setTheme('v1-dev-dark');
+
+// Resolve the editor theme from the actually-rendered UI: the theme context applies a
+// `.dark` class to <html>, so reading it matches what the user sees even when the app
+// theme is 'system' (the previous `theme === 'dark'` check fell through to the light
+// theme for 'system', which is why the editor showed up white in a dark app).
+function effectiveEditorTheme(): 'v1-dev-dark' | 'v1-dev' {
+	return typeof document !== 'undefined' &&
+		document.documentElement.classList.contains('dark')
+		? 'v1-dev-dark'
+		: 'v1-dev';
+}
 
 monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
 	noSemanticValidation: true,
@@ -173,18 +200,17 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 
 
 	useEffect(() => {
-		let configuredTheme = theme;
-		if (theme === 'system') {
-			configuredTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-		}
 		editor.current = monaco.editor.create(containerRef.current!, {
 			language: createOptions.language || 'typescript',
 			minimap: { enabled: false },
-			theme: configuredTheme === 'dark' ? 'v1-dev-dark' : 'v1-dev',
 			automaticLayout: true,
 			value: defaultCode,
 			fontSize: 13,
 			...createOptions,
+			// Theme resolution is owned by this component (it must follow the live
+			// `.dark` class), so it is applied last and intentionally overrides any
+			// `theme` passed through createOptions.
+			theme: effectiveEditorTheme(),
 		});
 
 		// Add scroll listener to detect user interaction
@@ -293,7 +319,7 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 	// Update theme when app theme changes
 	useEffect(() => {
 		if (editor.current) {
-			monaco.editor.setTheme(theme === 'dark' ? 'v1-dev-dark' : 'v1-dev');
+			monaco.editor.setTheme(effectiveEditorTheme());
 		}
 	}, [theme]);
 
