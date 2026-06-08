@@ -375,8 +375,24 @@ export default function AppView() {
 		setTimeout(() => setCopySuccess(false), 2000);
 	};
 
+	// Resolve a persisted deployment id to its live URL. The field is stored
+	// inconsistently — sometimes a full `https://…` URL, sometimes a bare
+	// dispatcher worker id (e.g. `v1-foo-abc123`) that resolves to
+	// `<id>.<app-domain>`. Handle both.
+	const getDeployedUrl = (deploymentId?: string | null): string => {
+		if (!deploymentId) return '';
+		if (deploymentId.startsWith('http://') || deploymentId.startsWith('https://')) {
+			return deploymentId;
+		}
+		return `https://${deploymentId}.${window.location.host}`;
+	};
+
 	const getAppUrl = () => {
-		return app?.cloudflareUrl || app?.previewUrl || '';
+		// A deployed app has a permanent Cloudflare deployment URL that never
+		// idles — always prefer it over the ephemeral sandbox preview, which is
+		// torn down when the build goes idle (the source of the "Loading
+		// Preview / not ready" hang on previously-deployed apps).
+		return getDeployedUrl(app?.deploymentId) || app?.cloudflareUrl || app?.previewUrl || '';
 	};
 
 	const handlePreviewDeploy = async () => {
