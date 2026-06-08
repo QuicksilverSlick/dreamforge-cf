@@ -711,6 +711,23 @@ export class PhasicCodingBehavior
 
         await this.executePhaseImplementation(phaseConcept, userContext);
 
+        // Safety net: if the entry/home file still renders the template
+        // placeholder after the final phase, the model never replaced it — the
+        // deploy would show the "Creating your app" / TemplateDemo boilerplate
+        // instead of the real app. Auto-queue one corrective pass (mirrors a
+        // user saying "the placeholder is all that loads") rather than shipping
+        // the boilerplate. `setMVPGenerated()` short-circuits a re-entry into
+        // FINALIZING, so this fires at most once and cannot loop.
+        if (this.entryFilePlaceholderPresent()) {
+            this.logger.warn(
+                'Template placeholder home page survived generation; queuing one automatic replacement pass',
+            );
+            await this.queueUserRequest(
+                'The deployed app still shows the template placeholder home page (the "Creating your app" / TemplateDemo boilerplate). Completely replace the entire contents of src/pages/HomePage.tsx with the real application UI from the blueprint — it must NOT import or render TemplateDemo / HAS_TEMPLATE_DEMO. The app must render the actual UI, not the placeholder.',
+            );
+            return CurrentDevState.PHASE_GENERATING;
+        }
+
         const numFilesGenerated = this.fileManager.getGeneratedFilePaths().length;
         this.logger.info(
             `Finalization complete. Generated ${numFilesGenerated}/${this.getTotalFiles()} files.`,

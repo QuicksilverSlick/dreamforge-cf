@@ -1130,6 +1130,25 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         return analysis;
     }
 
+    /**
+     * Detect whether the app's entry/home file still renders the template
+     * placeholder boilerplate after generation — i.e. the model failed to
+     * replace it, so the deploy would show the "Creating your app" /
+     * TemplateDemo screen instead of the real app. Keyed on the
+     * template-specific `TemplateDemo` / `HAS_TEMPLATE_DEMO` identifiers, which
+     * a genuinely-replaced home page never references (so no false positives).
+     */
+    protected entryFilePlaceholderPresent(): boolean {
+        const homePage = this.fileManager
+            .getAllFiles()
+            .find((file) => file.filePath === 'src/pages/HomePage.tsx');
+        if (!homePage) {
+            return false;
+        }
+        const contents = homePage.fileContents ?? '';
+        return contents.includes('HAS_TEMPLATE_DEMO') || contents.includes('TemplateDemo');
+    }
+
     protected async applyDeterministicCodeFixes(): Promise<StaticAnalysisResponse | undefined> {
         try {
             const staticAnalysis = await this.runStaticAnalysisWithRecovery();
