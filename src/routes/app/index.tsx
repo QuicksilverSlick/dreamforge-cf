@@ -823,7 +823,7 @@ export default function AppView() {
 										<PreviewIframe
 											ref={previewIframeRef}
 											src={appUrl}
-											className="w-full h-[600px] lg:h-[800px]"
+											className="w-full h-[80vh] min-h-[600px]"
 											title={`${app.title} Preview`}
 										/>
 									) : (
