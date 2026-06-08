@@ -176,13 +176,7 @@ const worker = {
 
 			// Rewrite user-facing URLs to the internal /marketing/... paths.
 			let marketingPath: string;
-			if (pathname.startsWith('/dream-builder')) {
-				// Enterprise landing page (preserve any sub-path).
-				marketingPath = pathname.replace(
-					'/dream-builder',
-					'/marketing/dream-builder'
-				);
-			} else if (pathname === '/' || pathname === '') {
+			if (pathname === '/' || pathname === '') {
 				// Apex: request the directory itself, not /marketing/index.html.
 				// CF Assets serves the directory's index without issuing a
 				// 307 redirect to the canonical URL — which would otherwise

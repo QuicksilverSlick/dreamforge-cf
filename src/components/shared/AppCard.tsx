@@ -429,7 +429,7 @@ export const AppCard = React.memo<AppCardProps>(
 						)}
 					>
 					{/* Enhanced Preview Section with High-Quality Rendering */}
-					<div className="relative aspect-[16/9] rounded-lg overflow-hidden bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/20 dark:to-orange-900/20">
+					<div className="relative aspect-[16/9] rounded-lg overflow-hidden bg-gradient-to-br from-accent/10 to-accent/5 dark:from-accent/15 dark:to-accent/5">
 						{app.screenshotUrl ? (
 							<img
 								src={app.screenshotUrl}

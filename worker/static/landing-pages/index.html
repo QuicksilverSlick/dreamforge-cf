@@ -3,850 +3,456 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dreamforge - Build & Monetize Apps That Generate Recurring Income</title>
-    <meta name="description" content="Stop watching AI take jobs. Start building apps that pay you monthly. Open-source, production-ready, multi-LLM AI builder for aspiring entrepreneurs.">
+    <title>Dreamforge — Describe your idea. Get a real app, live in one click.</title>
+    <meta name="description" content="Describe what you want. Dreamforge builds the whole app — everything people see and everything behind the scenes — and puts it online in one click. No code. No setup.">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/logo-mark-d.jpg">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://getdreamforge.com/">
+    <meta property="og:title" content="Dreamforge — Describe your idea. Get a real app, live in one click.">
+    <meta property="og:description" content="Dreamforge builds the whole app — everything people see and everything behind the scenes — and puts it online in one click. No code. No setup.">
+    <meta property="og:image" content="https://getdreamforge.com/assets/og-image.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Dreamforge — Get a real app, live in one click.">
+    <meta name="twitter:description" content="Describe your idea. Dreamforge builds a real, working app and puts it online in one click.">
+    <meta name="twitter:image" content="https://getdreamforge.com/assets/og-image.png">
+    <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('df-theme') || 'dark');</script>
     <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,700,500&f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
     <!-- Navigation -->
     <nav class="nav">
         <div class="nav-container">
             <div class="nav-logo">
-                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M20 0L37.3205 10V30L20 40L2.67949 30V10L20 0Z" fill="url(#logo-gradient)"/>
-                    <defs>
-                        <linearGradient id="logo-gradient" x1="0" y1="0" x2="40" y2="40">
-                            <stop offset="0%" stop-color="#FF6B35"/>
-                            <stop offset="100%" stop-color="#F7931E"/>
-                        </linearGradient>
-                    </defs>
+                <svg width="30" height="30" viewBox="0 0 48 48" fill="none" style="color:var(--accent)" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16 8 H25 C34 8 40 15 40 24 C40 33 34 40 25 40 H16" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M19 6 L9.5 25 L15.5 25 L12 42 L23 22 L17 22 Z" fill="currentColor"/>
                 </svg>
                 <span class="nav-brand">Dreamforge</span>
             </div>
-            <div class="nav-links">
-                <a href="#value">Why Dreamforge</a>
-                <a href="#pricing">Pricing</a>
-                <a href="#success">Success Stories</a>
-                <a href="#faq">FAQ</a>
-                <a href="#cta" class="nav-cta">Start Building Free</a>
+            <div class="nav-right">
+                <div class="nav-links">
+                    <a href="#how">How it works</a>
+                    <a href="#why">Why Dreamforge</a>
+                    <a href="#compare">Compare</a>
+                    <a href="#pricing">Pricing</a>
+                    <a href="#faq">FAQ</a>
+                </div>
+                <button class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme">
+                    <svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6" stroke-linecap="round"/></svg>
+                    <svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" stroke-linejoin="round"/></svg>
+                </button>
+                <a href="https://app.getdreamforge.com" class="nav-cta">Start building free</a>
             </div>
         </div>
     </nav>
 
-    <!-- Hero Section -->
+    <!-- Hero -->
     <section class="hero">
-        <div class="hero-container">
-            <div class="hero-content">
-                <div class="hero-badge">
-                    <span class="badge-icon">⚡</span>
-                    <span>Open Source • Production-Ready • Multi-LLM</span>
+        <div class="hero-aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="hero-ambient"></div>
+        <div class="hero-inner">
+            <div class="hero-badge"><span class="dot pulse"></span> From an idea to a real, live app — no code required</div>
+            <h1 class="hero-title">Describe your idea.<br/><span class="line2">Get a real app, live in one click.</span></h1>
+            <p class="hero-subtitle">You don't need to know how to build it — or even exactly how to describe it. Dreamforge figures out the details, builds the whole thing, and puts it online.</p>
+
+            <form class="hero-prompt" id="promptForm">
+                <textarea class="hero-prompt-input" id="promptInput" rows="2" placeholder="A client portal where clients log in, upload documents, and pay me…" aria-label="Describe the app you want to build"></textarea>
+                <div class="hero-prompt-row">
+                    <span class="hero-prompt-hint">No code. Free to start.</span>
+                    <button type="submit" class="hero-prompt-submit">
+                        Build my app
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
                 </div>
-                <h1 class="hero-title">
-                    Stop Watching AI Take Jobs.<br/>
-                    <span class="gradient-text">Start Building Apps That Pay You.</span>
-                </h1>
-                <p class="hero-subtitle">
-                    Turn your ideas into profitable SaaS apps in hours, not months.
-                    No coding required. Deploy to production infrastructure.
-                    Generate recurring income while you sleep.
-                </p>
-                <div class="hero-cta">
-                    <a href="#cta" class="btn btn-primary btn-large">
-                        Build Your First App Free
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                    </a>
-                    <a href="#lead-gen" class="btn btn-secondary btn-large">
-                        Download Free Guide
-                    </a>
-                </div>
-                <div class="hero-proof">
-                    <div class="proof-item">
-                        <div class="proof-number">1M+</div>
-                        <div class="proof-label">Apps Built</div>
-                    </div>
-                    <div class="proof-item">
-                        <div class="proof-number">10+</div>
-                        <div class="proof-label">AI Models</div>
-                    </div>
-                    <div class="proof-item">
-                        <div class="proof-number">100%</div>
-                        <div class="proof-label">Open Source</div>
-                    </div>
+            </form>
+            <p class="hero-sub-actions"><a href="#demo">Watch it build a real app →</a></p>
+
+            <div class="cred-strip">
+                <span class="cred-label">Runs on Cloudflare — the network behind ~20% of the web</span>
+                <div class="cred-logos"><span>Fast everywhere</span><span>Always on</span><span>Enterprise-grade</span><span>Scales automatically</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Build showcase: real demo video swaps in automatically once assets/build-demo.* exists; the animated window is the fallback. -->
+    <section class="showcase" id="demo">
+        <video class="showcase-video" muted loop playsinline preload="none" poster="assets/build-demo-poster.jpg">
+            <source src="assets/build-demo.webm" type="video/webm">
+            <source src="assets/build-demo.mp4" type="video/mp4">
+        </video>
+        <div class="showcase-window">
+            <div class="win-header">
+                <div class="win-dots"><span></span><span></span><span></span></div>
+                <div class="win-title">dreamforge — building</div>
+            </div>
+            <div class="win-body">
+                <div class="win-prompt"><b>&gt;</b> "A client portal where clients log in, upload documents, and pay me."</div>
+                <div class="build-log">
+                    <div class="ln"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Designing the pages people will see</div>
+                    <div class="ln"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Setting up secure sign-in</div>
+                    <div class="ln"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Adding a database and file uploads</div>
+                    <div class="ln"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Checking everything works &amp; fixing issues</div>
+                    <div class="done"><span class="dot"></span> Your app is live — yourapp.getdreamforge.com</div>
                 </div>
             </div>
-            <div class="hero-visual">
-                <div class="hero-app-preview">
-                    <div class="app-window">
-                        <div class="app-header">
-                            <div class="app-dots">
-                                <span></span><span></span><span></span>
-                            </div>
-                            <div class="app-title">Your SaaS App</div>
+        </div>
+    </section>
+
+    <!-- Stakes (editorial) -->
+    <section class="section section-surface" id="stakes">
+        <div class="wrap">
+            <div class="stakes-layout">
+                <div class="stakes-lead">
+                    <span class="eyebrow">The problem</span>
+                    <h2 class="section-title">Most AI-built apps never make it to the real world</h2>
+                    <p class="section-subtitle">Today's AI tools make it easy to <em>start</em>. Then comes the wall — the part where your app needs real sign-ins, real data, real customers, and to actually stay online. That's where most ideas quietly stall. It's called the prototype trap.</p>
+                    <div class="beforeafter" style="margin-top:2.25rem;">
+                        <div class="ba-col ba-before">
+                            <h3>The prototype trap</h3>
+                            <ul class="ba-list">
+                                <li>A demo that falls apart when real people show up</li>
+                                <li>A patchwork of separate tools to wire together yourself</li>
+                                <li>Surprise bills that climb as you try to launch</li>
+                                <li>Private data left exposed without you realizing</li>
+                                <li>Being told to "just rebuild it properly" once you're serious</li>
+                            </ul>
                         </div>
-                        <div class="app-content">
-                            <div class="code-line">
-                                <span class="prompt">&gt;</span> "Build a subscription management dashboard"
-                            </div>
-                            <div class="code-output">
-                                <div class="output-line">✓ Planning architecture...</div>
-                                <div class="output-line">✓ Generating components...</div>
-                                <div class="output-line">✓ Deploying to Cloudflare...</div>
-                                <div class="output-success">
-                                    🚀 Live at: <span class="gradient-text">your-app.com</span>
-                                </div>
-                            </div>
+                        <div class="ba-col ba-after">
+                            <h3>The Dreamforge way</h3>
+                            <ul class="ba-list">
+                                <li>A real, working app — live and ready from day one</li>
+                                <li>Everything in one place — nothing to stitch together</li>
+                                <li>Predictable, fair pricing with no nasty surprises</li>
+                                <li>Built safely from the start, so your data stays yours</li>
+                                <li>Grows with you — no rebuild, no starting over</li>
+                            </ul>
                         </div>
                     </div>
-                    <div class="revenue-badge">
-                        <div class="revenue-label">Monthly Revenue</div>
-                        <div class="revenue-amount">$3,247</div>
-                        <div class="revenue-trend">↗ +24% this month</div>
-                    </div>
+                </div>
+                <div class="stat-lines">
+                    <div class="stat-line"><div class="stat-figure">~9%</div><div class="stat-text">of builders trust today's AI app tools for something they'd run a business on<span class="stat-source">Bubble · 2025 survey of 793 builders</span></div></div>
+                    <div class="stat-line"><div class="stat-figure">≥30%</div><div class="stat-text">of AI projects are abandoned after the first demo<span class="stat-source">Gartner · 2024</span></div></div>
+                    <div class="stat-line"><div class="stat-figure">170+</div><div class="stat-text">AI-built apps went live with private data anyone could read<span class="stat-source">CVE-2025-48757 · disclosed 2025</span></div></div>
+                    <div class="stat-line"><div class="stat-figure">1</div><div class="stat-text">popular tool's AI assistant deleted a customer's live database by mistake<span class="stat-source">Reported · July 2025</span></div></div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Stakes Section -->
-    <section class="stakes">
-        <div class="stakes-container">
-            <div class="stakes-header">
-                <h2 class="section-title">The AI Revolution Won't Wait</h2>
-                <p class="section-subtitle">
-                    You're at a crossroads. The next 12 months will determine if you're
-                    replaced by AI or empowered by it.
-                </p>
+    <!-- Value (bento) -->
+    <section class="section section-bg" id="why">
+        <div class="wrap">
+            <div class="head-center">
+                <span class="eyebrow">Why Dreamforge</span>
+                <h2 class="section-title">What if your idea just<span class="muted2">… worked?</span></h2>
+                <p class="section-subtitle">Dreamforge doesn't hand you a pretty shell with nothing behind it. It builds the real, complete app — and puts it online for you.</p>
             </div>
-            <div class="stakes-grid">
-                <div class="stake-card stake-danger">
-                    <div class="stake-icon">⚠️</div>
-                    <h3>Without Dreamforge</h3>
-                    <ul class="stake-list">
-                        <li>Watch AI automation eliminate your job security</li>
-                        <li>Miss the biggest wealth creation opportunity in decades</li>
-                        <li>Stay dependent on a single income source</li>
-                        <li>Watch others build $10K/month side hustles</li>
-                        <li>Remain stuck in the "learning to code" trap</li>
-                        <li>Pay $300+/month for closed-source AI tools that own your code</li>
-                    </ul>
+            <div class="bento">
+                <div class="bento-card span-4 reveal">
+                    <div class="bento-icon"><svg width="38" height="38" viewBox="0 0 48 48" fill="none" stroke="currentColor"><rect x="6" y="10" width="36" height="28" rx="4" stroke-width="1.8"/><path d="M6 18H42" stroke-width="1.8"/><circle cx="11" cy="14" r="1.4" fill="currentColor" stroke="none"/><circle cx="16" cy="14" r="1.4" fill="currentColor" stroke="none"/></svg></div>
+                    <h3>It actually works — for real</h3>
+                    <p>Real sign-ins, a real database, real file uploads. Your app handles real people and real data from the very first day — not just a preview that looks the part.</p>
+                    <p class="bento-note">Powered by Cloudflare's database &amp; storage</p>
                 </div>
-                <div class="stake-card stake-success">
-                    <div class="stake-icon">🚀</div>
-                    <h3>With Dreamforge</h3>
-                    <ul class="stake-list">
-                        <li>Build and launch profitable apps in days, not months</li>
-                        <li>Generate recurring revenue from multiple income streams</li>
-                        <li>Own your code - truly yours with open source</li>
-                        <li>Deploy to production infrastructure (not toy sandboxes)</li>
-                        <li>Never get locked into a single AI provider</li>
-                        <li>Start free, scale as you earn</li>
-                    </ul>
+                <div class="bento-card span-2 reveal">
+                    <div class="bento-icon"><svg width="38" height="38" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="24" cy="24" r="6"/><circle cx="10" cy="12" r="2.6" fill="currentColor" stroke="none"/><circle cx="38" cy="12" r="2.6" fill="currentColor" stroke="none"/><circle cx="10" cy="36" r="2.6" fill="currentColor" stroke="none"/><circle cx="38" cy="36" r="2.6" fill="currentColor" stroke="none"/><path d="M13 14L19 21M35 14L29 21M13 34L19 27M35 34L29 27"/></svg></div>
+                    <h3>Everything in one place</h3>
+                    <p>No juggling five services and hoping they get along. Pages, data, files, logins — one platform that works as a unit.</p>
+                    <p class="bento-note">One Cloudflare platform, not bolt-ons</p>
                 </div>
-            </div>
-            <div class="urgency-banner">
-                <div class="urgency-icon">⏰</div>
-                <div class="urgency-text">
-                    <strong>The window is closing.</strong> Every day, more people realize
-                    AI can be a tool, not a threat. Early builders are already capturing market share.
-                    Will you be one of them?
+                <div class="bento-card span-3 reveal">
+                    <div class="bento-icon"><svg width="38" height="38" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="24" cy="24" r="17"/><path d="M7 24H41M24 7C28 12 28 36 24 41M24 7C20 12 20 36 24 41"/></svg></div>
+                    <h3>Online in one click</h3>
+                    <p>When it's ready, your app goes live instantly on Cloudflare's worldwide network — fast for everyone, everywhere. Nothing to set up or configure.</p>
+                    <p class="bento-note">Live across 330+ cities, automatically</p>
                 </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Value Proposition -->
-    <section id="value" class="value">
-        <div class="value-container">
-            <div class="value-header">
-                <h2 class="section-title">Why Dreamforge Beats The Competition</h2>
-                <p class="section-subtitle">
-                    We analyzed Lovable, Bolt.new, and V0. Here's why serious builders choose Dreamforge.
-                </p>
-            </div>
-
-            <!-- Comparison Table -->
-            <div class="comparison-table">
-                <div class="comparison-header">
-                    <div class="comparison-feature">Feature</div>
-                    <div class="comparison-competitor">Lovable</div>
-                    <div class="comparison-competitor">Bolt.new</div>
-                    <div class="comparison-competitor">V0</div>
-                    <div class="comparison-dreamforge">Dreamforge</div>
+                <div class="bento-card span-3 reveal">
+                    <div class="bento-icon"><svg width="38" height="38" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21V15C16 10.6 19.6 7 24 7C28.4 7 32 10.6 32 15V21"/><rect x="10" y="21" width="28" height="20" rx="4"/><circle cx="24" cy="30" r="2.6" fill="currentColor" stroke="none"/></svg></div>
+                    <h3>Safe, and ready to grow</h3>
+                    <p>Built right from the start — no exposed data, no breaking when more people show up. The app you launch is the same one that scales to thousands of users.</p>
+                    <p class="bento-note">Secure defaults &amp; production architecture, built in</p>
                 </div>
-                <div class="comparison-row">
-                    <div class="comparison-feature">Open Source</div>
-                    <div class="comparison-competitor">❌</div>
-                    <div class="comparison-competitor">Partial</div>
-                    <div class="comparison-competitor">❌</div>
-                    <div class="comparison-dreamforge">✅ 100%</div>
+                <div class="bento-card span-2 reveal">
+                    <div class="bento-icon"><svg width="38" height="38" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8L7 24L18 40M30 8L41 24L30 40"/></svg></div>
+                    <h3>It's yours to keep</h3>
+                    <p>Your app and everything it's made of belong to you. Take it anywhere, anytime — no black box, nothing held hostage.</p>
+                    <p class="bento-note">Standard code you can export</p>
                 </div>
-                <div class="comparison-row">
-                    <div class="comparison-feature">Production Infrastructure</div>
-                    <div class="comparison-competitor">AWS/Vercel</div>
-                    <div class="comparison-competitor">Sandboxes</div>
-                    <div class="comparison-competitor">Vercel Only</div>
-                    <div class="comparison-dreamforge">✅ Cloudflare Global</div>
-                </div>
-                <div class="comparison-row">
-                    <div class="comparison-feature">Multi-LLM Support</div>
-                    <div class="comparison-competitor">❌ Claude Only</div>
-                    <div class="comparison-competitor">❌ Claude Only</div>
-                    <div class="comparison-competitor">❌ Proprietary</div>
-                    <div class="comparison-dreamforge">✅ 10+ Models</div>
-                </div>
-                <div class="comparison-row">
-                    <div class="comparison-feature">Phase-Wise Generation</div>
-                    <div class="comparison-competitor">❌ Linear</div>
-                    <div class="comparison-competitor">❌</div>
-                    <div class="comparison-competitor">❌</div>
-                    <div class="comparison-dreamforge">✅ 12 Phases</div>
-                </div>
-                <div class="comparison-row">
-                    <div class="comparison-feature">Backend Preview</div>
-                    <div class="comparison-competitor">✅</div>
-                    <div class="comparison-competitor">✅</div>
-                    <div class="comparison-competitor">❌</div>
-                    <div class="comparison-dreamforge">✅ Full Stack</div>
-                </div>
-                <div class="comparison-row">
-                    <div class="comparison-feature">Vendor Lock-In</div>
-                    <div class="comparison-competitor">⚠️ High</div>
-                    <div class="comparison-competitor">⚠️ Medium</div>
-                    <div class="comparison-competitor">⚠️ High</div>
-                    <div class="comparison-dreamforge">✅ Zero</div>
-                </div>
-                <div class="comparison-row">
-                    <div class="comparison-feature">Starting Price</div>
-                    <div class="comparison-competitor">$25/mo</div>
-                    <div class="comparison-competitor">$20/mo</div>
-                    <div class="comparison-competitor">$20/mo</div>
-                    <div class="comparison-dreamforge">✅ FREE Start</div>
-                </div>
-            </div>
-
-            <!-- Key Differentiators -->
-            <div class="differentiators">
-                <div class="diff-card">
-                    <div class="diff-icon">
-                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-                            <path d="M24 4L44 14V34L24 44L4 34V14L24 4Z" stroke="#FF6B35" stroke-width="2"/>
-                            <circle cx="24" cy="24" r="8" fill="#FF6B35"/>
-                        </svg>
-                    </div>
-                    <h3>True Open Source</h3>
-                    <p>
-                        Your code, your infrastructure, your revenue. Unlike Lovable and V0,
-                        you own everything. No vendor lock-in. No surprise price hikes.
-                        Fork it, modify it, scale it - it's yours.
-                    </p>
-                </div>
-                <div class="diff-card">
-                    <div class="diff-icon">
-                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-                            <rect x="4" y="4" width="40" height="40" rx="8" stroke="#F7931E" stroke-width="2"/>
-                            <path d="M14 24L20 30L34 16" stroke="#F7931E" stroke-width="2"/>
-                        </svg>
-                    </div>
-                    <h3>Multi-LLM Fallback Chains</h3>
-                    <p>
-                        Competitors lock you to Claude. We support 10+ AI models with intelligent
-                        fallback. If one fails, we seamlessly switch. 99.9% uptime. Zero vendor risk.
-                        You're not betting on a single AI company.
-                    </p>
-                </div>
-                <div class="diff-card">
-                    <div class="diff-icon">
-                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-                            <path d="M8 8L24 4L40 8V24C40 35 24 44 24 44C24 44 8 35 8 24V8Z" stroke="#FF6B35" stroke-width="2"/>
-                            <path d="M18 24L22 28L30 18" stroke="#FF6B35" stroke-width="2"/>
-                        </svg>
-                    </div>
-                    <h3>Production-Ready from Day One</h3>
-                    <p>
-                        Bolt.new uses sandboxes. V0 locks you to Vercel. We deploy to Cloudflare's
-                        global network - the same infrastructure serving Fortune 500s. Real databases.
-                        Real edge computing. Real scale.
-                    </p>
-                </div>
-                <div class="diff-card">
-                    <div class="diff-icon">
-                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-                            <circle cx="12" cy="24" r="4" fill="#F7931E"/>
-                            <circle cx="24" cy="24" r="4" fill="#F7931E"/>
-                            <circle cx="36" cy="24" r="4" fill="#F7931E"/>
-                            <path d="M16 24H20M28 24H32" stroke="#F7931E" stroke-width="2"/>
-                        </svg>
-                    </div>
-                    <h3>Phase-Wise Generation</h3>
-                    <p>
-                        Competitors generate code in one shot and hope. We use deterministic,
-                        12-phase generation with automated review cycles. More control.
-                        Fewer bugs. Predictable results every time.
-                    </p>
-                </div>
-                <div class="diff-card">
-                    <div class="diff-icon">
-                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-                            <rect x="8" y="8" width="32" height="32" rx="4" stroke="#FF6B35" stroke-width="2"/>
-                            <path d="M16 20H32M16 28H28" stroke="#FF6B35" stroke-width="2"/>
-                        </svg>
-                    </div>
-                    <h3>SCOF Protocol</h3>
-                    <p>
-                        Our Structured Code Output Format handles streaming from any AI model.
-                        Competitors break when models change. We're resilient. Reliable.
-                        Future-proof.
-                    </p>
-                </div>
-                <div class="diff-card">
-                    <div class="diff-icon">
-                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-                            <rect x="4" y="12" width="40" height="24" rx="4" stroke="#F7931E" stroke-width="2"/>
-                            <circle cx="24" cy="24" r="6" stroke="#F7931E" stroke-width="2"/>
-                        </svg>
-                    </div>
-                    <h3>Pay What You Use</h3>
-                    <p>
-                        No forced $25-50/month plans. Start free. Pay only for AI usage as you grow.
-                        Earn $1K/month? Spend $20. Earn $10K? Spend $200. Costs scale with revenue.
-                    </p>
+                <div class="bento-card span-4 reveal">
+                    <div class="bento-icon"><svg width="38" height="38" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 24a14 14 0 0124-9.8M38 24a14 14 0 01-24 9.8"/><path d="M34 9v6h-6M14 39v-6h6"/></svg></div>
+                    <h3>Change your mind anytime</h3>
+                    <p>Ask for a tweak and watch it update — live. Try an idea, see it instantly, and keep refining until it's exactly right. Fast to start, fast to change.</p>
+                    <p class="bento-note">Automatic reviews catch and fix problems as you go</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Dreamforge as Guide -->
-    <section class="guide">
-        <div class="guide-container">
-            <div class="guide-content">
+    <!-- Guide -->
+    <section class="section section-surface">
+        <div class="wrap">
+            <div class="guide-layout">
                 <div class="guide-empathy">
-                    <h2 class="section-title">We Get It. The AI Revolution Feels Overwhelming.</h2>
-                    <p class="guide-text">
-                        Every day, another headline about AI replacing jobs. Another startup raising millions.
-                        Another opportunity slipping away while you're stuck in tutorials, fighting syntax errors,
-                        or paying $50/month for tools that don't deliver.
-                    </p>
-                    <p class="guide-text">
-                        You've tried "learning to code" - spent months on courses only to realize production apps
-                        are nothing like tutorials. You've watched "vibe coding" demos that fall apart the moment
-                        you try something real.
-                    </p>
-                    <p class="guide-text">
-                        <strong>You don't need another coding course. You need apps that make money.</strong>
-                    </p>
+                    <span class="eyebrow">Why we built this</span>
+                    <h2 class="section-title">We've watched too many great ideas die at the demo.</h2>
+                    <p class="guide-text">It's the same story everywhere people try to build with AI today. Someone has a real idea. They get a beautiful demo in an afternoon. And then they hit the wall — the sign-ins that break, the data that disappears, the separate tools that won't talk to each other, the bill that suddenly triples, the security gap nobody warned them about.</p>
+                    <p class="guide-text">Most never launch. Not because the idea was bad — but because going from a demo to a real product is exactly where these tools quietly hand the hard part back to you.</p>
+                    <p class="guide-text"><strong>You shouldn't have to become a developer to put your idea into the world. That's the whole reason we built Dreamforge.</strong></p>
                 </div>
-                <div class="guide-authority">
-                    <h3 class="guide-authority-title">
-                        <span class="authority-badge">Official Cloudflare Product</span>
-                    </h3>
-                    <p class="guide-text">
-                        Dreamforge isn't a startup that might disappear. It's an <strong>official Cloudflare product</strong>
-                        - backed by the infrastructure serving 20% of all websites globally.
-                    </p>
-                    <div class="guide-credentials">
-                        <div class="credential">
-                            <div class="credential-icon">🏗️</div>
-                            <div class="credential-text">
-                                <strong>Production-Grade Architecture</strong>
-                                <span>Durable Objects, D1 Database, R2 Storage, Workers</span>
-                            </div>
-                        </div>
-                        <div class="credential">
-                            <div class="credential-icon">🤖</div>
-                            <div class="credential-text">
-                                <strong>62 AI Agent Files</strong>
-                                <span>10+ concurrent operations, multi-model orchestration</span>
-                            </div>
-                        </div>
-                        <div class="credential">
-                            <div class="credential-icon">⚡</div>
-                            <div class="credential-text">
-                                <strong>Battle-Tested Protocol</strong>
-                                <span>SCOF handles 10M+ code generations reliably</span>
-                            </div>
-                        </div>
-                        <div class="credential">
-                            <div class="credential-icon">🔓</div>
-                            <div class="credential-text">
-                                <strong>100% Open Source</strong>
-                                <span>Fork it, own it, monetize it - no restrictions</span>
-                            </div>
-                        </div>
-                    </div>
+                <div class="guide-card">
+                    <span class="eyebrow">Runs on Cloudflare</span>
+                    <div class="credential"><div class="credential-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div><div class="credential-text"><strong>A real place for your data</strong><span>Databases, file storage and accounts — set up automatically</span></div></div>
+                    <div class="credential"><div class="credential-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4"/><path d="M4 17l8 4 8-4"/></svg></div><div class="credential-text"><strong>Builds it carefully, not in one guess</strong><span>Plans it out, builds in steps, then checks and fixes its own work</span></div></div>
+                    <div class="credential"><div class="credential-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></div><div class="credential-text"><strong>Live around the world in one click</strong><span>Fast everywhere · always on · grows with you</span></div></div>
+                    <div class="credential"><div class="credential-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M4 14v5a2 2 0 002 2h12a2 2 0 002-2v-5"/></svg></div><div class="credential-text"><strong>Always yours</strong><span>Export your app anytime — no lock-in, no black box</span></div></div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- The Plan: 3 Steps -->
-    <section class="plan">
-        <div class="plan-container">
-            <div class="plan-header">
-                <h2 class="section-title">From Zero to Profitable App in 3 Simple Steps</h2>
-                <p class="section-subtitle">
-                    No coding. No DevOps. No vendor lock-in. Just results.
-                </p>
+    <!-- Plan -->
+    <section class="section section-bg" id="how">
+        <div class="wrap">
+            <div class="head-center">
+                <span class="eyebrow">How it works</span>
+                <h2 class="section-title">From idea to live app<span class="muted2"> in three steps</span></h2>
+                <p class="section-subtitle">No code. No setup. No starting over later.</p>
             </div>
             <div class="plan-steps">
                 <div class="plan-step">
-                    <div class="step-number">1</div>
-                    <div class="step-content">
-                        <h3 class="step-title">Describe Your App</h3>
-                        <p class="step-description">
-                            Tell Dreamforge what you want to build. "A subscription management dashboard
-                            for freelancers" or "A habit tracker with streak counting." That's it.
-                        </p>
-                        <div class="step-visual">
-                            <div class="chat-bubble">
-                                <div class="bubble-header">You</div>
-                                <div class="bubble-text">
-                                    Build a SaaS app where users can create invoices,
-                                    track payments, and manage clients. Include Stripe for subscriptions.
-                                </div>
-                            </div>
+                    <div class="step-text"><div class="step-index">STEP 01</div><h3 class="step-title">Tell it your idea</h3><p class="step-description">Describe what you want in plain words — even a rough idea is enough. Dreamforge asks the right questions and fills in the parts you wouldn't think to mention. No technical know-how required.</p></div>
+                    <div class="step-visual"><div class="chat-bubble"><div class="bubble-header">You</div><div class="bubble-text">I want an app where clients sign in, upload their documents, track payments, and book time with me.</div></div></div>
+                </div>
+                <div class="plan-step">
+                    <div class="step-text"><div class="step-index">STEP 02</div><h3 class="step-title">Watch it build the real thing</h3><p class="step-description">Dreamforge builds the whole app — the pages people see and everything behind the scenes like sign-ins, data, and file uploads — then checks its own work and fixes problems before you ever see them.</p></div>
+                    <div class="step-visual">
+                        <div class="progress-steps">
+                            <div class="progress-step complete"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Planned out your app</div>
+                            <div class="progress-step complete"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Built the pages and the design</div>
+                            <div class="progress-step complete"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Set up sign-ins, data &amp; file uploads</div>
+                            <div class="progress-step complete"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Tested everything &amp; fixed the issues</div>
+                            <div class="progress-step active"><span class="dot"></span> Putting it online…</div>
                         </div>
                     </div>
                 </div>
                 <div class="plan-step">
-                    <div class="step-number">2</div>
-                    <div class="step-content">
-                        <h3 class="step-title">Watch AI Build & Deploy</h3>
-                        <p class="step-description">
-                            Dreamforge uses 12 phases with automated reviews. Multiple AI models work together
-                            with fallback chains. Deploy to Cloudflare's global network. All automatic.
-                        </p>
-                        <div class="step-visual">
-                            <div class="progress-steps">
-                                <div class="progress-step complete">✓ Blueprint Created</div>
-                                <div class="progress-step complete">✓ Components Generated</div>
-                                <div class="progress-step complete">✓ Backend Connected</div>
-                                <div class="progress-step complete">✓ Tests Passed</div>
-                                <div class="progress-step active">→ Deploying to Cloudflare...</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="plan-step">
-                    <div class="step-number">3</div>
-                    <div class="step-content">
-                        <h3 class="step-title">Launch & Start Earning</h3>
-                        <p class="step-description">
-                            Your app is live on a custom domain. Connect Stripe. Share the link.
-                            Start collecting subscriptions. Scale from $100 to $10K MRR.
-                        </p>
-                        <div class="step-visual">
-                            <div class="launch-card">
-                                <div class="launch-icon">🚀</div>
-                                <div class="launch-url">your-saas.com</div>
-                                <div class="launch-status">✓ Live</div>
-                                <div class="launch-metrics">
-                                    <span>23 signups</span>
-                                    <span>$487 MRR</span>
-                                    <span>99.9% uptime</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="step-text"><div class="step-index">STEP 03</div><h3 class="step-title">Go live in one click</h3><p class="step-description">Your app goes online on Cloudflare's worldwide network — a real link, real visitors, always on. Change anything you like and it updates instantly, without a rebuild.</p></div>
+                    <div class="step-visual"><div class="launch-card"><div class="launch-url">yourapp.getdreamforge.com</div><div class="launch-status"><span class="dot"></span> Live on the internet</div><div class="launch-metrics"><span>Real sign-ins</span><span>Worldwide</span><span>Always on</span></div></div></div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Pricing Section -->
-    <section id="pricing" class="pricing">
-        <div class="pricing-container">
-            <div class="pricing-header">
-                <h2 class="section-title">Pricing That Scales With Your Success</h2>
-                <p class="section-subtitle">
-                    Start free. Pay only when you earn. No hidden fees. No vendor lock-in.
-                </p>
+    <!-- Comparison -->
+    <section class="section section-surface" id="compare">
+        <div class="wrap">
+            <div class="head-center">
+                <span class="eyebrow">Honest comparison</span>
+                <h2 class="section-title">The difference is<span class="muted2"> what's underneath</span></h2>
+                <p class="section-subtitle">Most tools can make something that looks like an app. The real question is whether it works when it counts — and whether it's truly yours.</p>
+            </div>
+            <div class="comparison-table">
+                <div class="comparison-header">
+                    <div class="comparison-feature">What matters when you launch</div>
+                    <div class="comparison-competitor">Lovable</div>
+                    <div class="comparison-competitor">Bolt.new</div>
+                    <div class="comparison-competitor">v0</div>
+                    <div class="comparison-dreamforge">Dreamforge</div>
+                </div>
+                <div class="comparison-row">
+                    <div class="comparison-feature">A backend that actually works</div>
+                    <div class="comparison-competitor">Rented from others</div>
+                    <div class="comparison-competitor">Limited</div>
+                    <div class="comparison-competitor">Mostly the front</div>
+                    <div class="comparison-dreamforge"><span class="cell-yes"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Real &amp; built in</span></div>
+                </div>
+                <div class="comparison-row">
+                    <div class="comparison-feature">Everything in one place</div>
+                    <div class="comparison-competitor">Stitched together</div>
+                    <div class="comparison-competitor">Add-ons</div>
+                    <div class="comparison-competitor">Separate services</div>
+                    <div class="comparison-dreamforge"><span class="cell-yes"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>One platform</span></div>
+                </div>
+                <div class="comparison-row">
+                    <div class="comparison-feature">Goes live in one click</div>
+                    <div class="comparison-competitor cell-muted"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                    <div class="comparison-competitor cell-muted"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                    <div class="comparison-competitor">One host only</div>
+                    <div class="comparison-dreamforge"><span class="cell-yes"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Worldwide</span></div>
+                </div>
+                <div class="comparison-row">
+                    <div class="comparison-feature">Fast everywhere · no surprise fees</div>
+                    <div class="comparison-competitor cell-muted"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+                    <div class="comparison-competitor cell-muted"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+                    <div class="comparison-competitor">Limited</div>
+                    <div class="comparison-dreamforge"><span class="cell-yes"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>330+ cities</span></div>
+                </div>
+                <div class="comparison-row">
+                    <div class="comparison-feature">Your app is yours to keep</div>
+                    <div class="comparison-competitor">Partly</div>
+                    <div class="comparison-competitor cell-muted"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                    <div class="comparison-competitor cell-muted"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                    <div class="comparison-dreamforge"><span class="cell-yes"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Fully</span></div>
+                </div>
+                <div class="comparison-row">
+                    <div class="comparison-feature">Free to start</div>
+                    <div class="comparison-competitor cell-muted"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                    <div class="comparison-competitor cell-muted"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                    <div class="comparison-competitor cell-muted"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                    <div class="comparison-dreamforge"><span class="cell-yes"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Free</span></div>
+                </div>
+            </div>
+            <p class="comparison-note">Comparison reflects publicly documented behavior as of 2026, provided for honest comparison. Trademarks belong to their respective owners.</p>
+        </div>
+    </section>
+
+    <!-- Explainer -->
+    <section class="section section-bg">
+        <div class="wrap">
+            <div class="head-center">
+                <span class="eyebrow">Under the hood</span>
+                <h2 class="section-title">For the curious:<span class="muted2"> how it builds a real app</span></h2>
+            </div>
+            <div class="explainer-grid">
+                <div class="explainer-text">
+                    <p>You never have to read this part — but if you want to know what's happening under the hood, here it is. Dreamforge turns a plain-language idea into a working, published app through a careful, step-by-step process rather than a single one-shot guess. It writes a plan, builds the app in reviewable stages, and runs automated checks — testing and fixing problems before you ever see them.</p>
+                    <p>The behind-the-scenes part is real. Dreamforge sets up and connects Cloudflare's own building blocks — a real SQL database (D1), file storage (R2), stateful services (Durable Objects), and fast key-value storage (KV) — as one integrated system. There's no separate database company to sign up for, no glue code between services, and no surprise data-transfer fees.</p>
+                    <p>When it's ready, it publishes to Cloudflare's global network in one click. The result is a genuine, complete product on professional infrastructure — and the code is standard React and Cloudflare Workers, so a developer can read it, export it, and own it.</p>
+                </div>
+                <div class="explainer-aside">
+                    <h4>The pipeline</h4>
+                    <ul>
+                        <li><strong>Blueprint</strong> — your idea becomes a clear plan</li>
+                        <li><strong>Step-by-step build</strong> — code created in reviewable stages</li>
+                        <li><strong>Automatic checks</strong> — testing and validation as it goes</li>
+                        <li><strong>Self-healing</strong> — it finds and fixes its own errors</li>
+                        <li><strong>Real data layer</strong> — D1, R2, Durable Objects, KV</li>
+                        <li><strong>One-click publish</strong> — live on Cloudflare's edge</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="section section-surface" id="pricing">
+        <div class="wrap">
+            <div class="head-center">
+                <span class="eyebrow">Pricing</span>
+                <h2 class="section-title">Start free.<span class="muted2"> Grow when you're ready.</span></h2>
+                <p class="section-subtitle">Build and launch your first real app at no cost. Simple, predictable pricing — no surprise bills as you grow.</p>
             </div>
             <div class="pricing-toggle">
                 <button class="toggle-btn active" data-period="monthly">Monthly</button>
-                <button class="toggle-btn" data-period="annual">
-                    Annual <span class="save-badge">Save 20%</span>
-                </button>
+                <button class="toggle-btn" data-period="annual">Annual <span class="save-badge">−20%</span></button>
             </div>
             <div class="pricing-grid">
-                <!-- Starter Tier -->
                 <div class="pricing-card">
-                    <div class="pricing-badge">Free Forever</div>
+                    <div class="pricing-badge">Free forever</div>
                     <h3 class="pricing-title">Starter</h3>
-                    <div class="pricing-price">
-                        <span class="price-currency">$</span>
-                        <span class="price-amount">0</span>
-                        <span class="price-period">/month</span>
-                    </div>
-                    <p class="pricing-description">Perfect for testing ideas and learning</p>
-                    <ul class="pricing-features">
-                        <li>✓ 1 app deployment</li>
-                        <li>✓ 100K AI tokens/month</li>
-                        <li>✓ Cloudflare Workers deployment</li>
-                        <li>✓ D1 Database (1GB)</li>
-                        <li>✓ Community support</li>
-                        <li>✓ Open source - fork anytime</li>
-                        <li>⚡ Shared AI pool</li>
-                    </ul>
-                    <a href="#cta" class="btn btn-outline btn-block">Start Building Free</a>
+                    <div class="pricing-price"><span class="price-currency">$</span><span class="price-amount">0</span><span class="price-period">/month</span></div>
+                    <p class="pricing-description">Build and launch your first real app</p>
+                    <ul class="pricing-features"><li>1 app, live on the internet</li><li>Real sign-ins, data &amp; file uploads</li><li>Goes live in one click</li><li>Export your app anytime</li><li>Community support</li></ul>
+                    <a href="https://app.getdreamforge.com" class="btn btn-outline btn-block">Start building free</a>
                 </div>
-
-                <!-- Builder Tier -->
                 <div class="pricing-card pricing-card-featured">
-                    <div class="pricing-badge pricing-badge-popular">Most Popular</div>
-                    <h3 class="pricing-title">Builder</h3>
-                    <div class="pricing-price">
-                        <span class="price-currency">$</span>
-                        <span class="price-amount" data-monthly="49" data-annual="39">49</span>
-                        <span class="price-period">/month</span>
-                    </div>
-                    <p class="pricing-description">For serious builders earning their first $1K MRR</p>
-                    <ul class="pricing-features">
-                        <li>✓ 5 app deployments</li>
-                        <li>✓ 1M AI tokens/month</li>
-                        <li>✓ Custom domains</li>
-                        <li>✓ D1 Database (10GB)</li>
-                        <li>✓ R2 Storage (10GB)</li>
-                        <li>✓ Durable Objects</li>
-                        <li>✓ Priority AI models</li>
-                        <li>✓ Email support</li>
-                        <li>⚡ Multi-LLM fallback chains</li>
-                        <li>⚡ Advanced analytics</li>
-                    </ul>
-                    <a href="#cta" class="btn btn-primary btn-block">Start 14-Day Trial</a>
-                </div>
-
-                <!-- Pro Tier -->
-                <div class="pricing-card">
-                    <div class="pricing-badge">Scale to $10K MRR</div>
+                    <div class="pricing-badge pricing-badge-popular">Most popular</div>
                     <h3 class="pricing-title">Pro</h3>
-                    <div class="pricing-price">
-                        <span class="price-currency">$</span>
-                        <span class="price-amount" data-monthly="149" data-annual="119">149</span>
-                        <span class="price-period">/month</span>
-                    </div>
-                    <p class="pricing-description">For entrepreneurs scaling multiple revenue streams</p>
-                    <ul class="pricing-features">
-                        <li>✓ Unlimited apps</li>
-                        <li>✓ 5M AI tokens/month</li>
-                        <li>✓ Custom domains unlimited</li>
-                        <li>✓ D1 Database (100GB)</li>
-                        <li>✓ R2 Storage (100GB)</li>
-                        <li>✓ Durable Objects unlimited</li>
-                        <li>✓ Priority support (4hr response)</li>
-                        <li>✓ White-label options</li>
-                        <li>⚡ GPT-4, Claude, Gemini Pro</li>
-                        <li>⚡ Custom model endpoints</li>
-                        <li>⚡ API access</li>
-                        <li>⚡ Advanced security</li>
-                    </ul>
-                    <a href="#cta" class="btn btn-outline btn-block">Start 14-Day Trial</a>
+                    <div class="pricing-price"><span class="price-currency">$</span><span class="price-amount" data-monthly="49" data-annual="39">49</span><span class="price-period">/month</span></div>
+                    <p class="pricing-description">For people building something real</p>
+                    <ul class="pricing-features"><li>Multiple apps &amp; your own web address</li><li>More data &amp; storage as you grow</li><li>Faster builds &amp; priority AI</li><li>Smarter results with multiple AI models</li><li>Email support</li><li>Everything in Starter</li></ul>
+                    <a href="https://app.getdreamforge.com" class="btn btn-primary btn-block">Start building</a>
+                </div>
+                <div class="pricing-card">
+                    <div class="pricing-badge">For teams</div>
+                    <h3 class="pricing-title">Scale</h3>
+                    <div class="pricing-price"><span class="price-currency">$</span><span class="price-amount" data-monthly="149" data-annual="119">149</span><span class="price-period">/month</span></div>
+                    <p class="pricing-description">For teams and agencies building at volume</p>
+                    <ul class="pricing-features"><li>Unlimited apps &amp; web addresses</li><li>The highest limits</li><li>Bring your own AI models</li><li>Developer access &amp; white-label</li><li>Priority support</li><li>Everything in Pro</li></ul>
+                    <a href="https://app.getdreamforge.com" class="btn btn-outline btn-block">Start building</a>
                 </div>
             </div>
             <div class="pricing-guarantee">
-                <div class="guarantee-icon">🛡️</div>
-                <div class="guarantee-text">
-                    <strong>60-Day Money-Back Guarantee</strong> - If you don't launch a profitable app
-                    in 60 days, we'll refund every penny. No questions asked.
-                </div>
+                <div class="g-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>
+                <div class="g-text"><strong>No lock-in, ever.</strong> Start free with no credit card. Your app is always yours — export it and take it with you whenever you want.</div>
             </div>
         </div>
     </section>
 
-    <!-- Success Stories / Transformation -->
-    <section id="success" class="success">
-        <div class="success-container">
-            <div class="success-header">
-                <h2 class="section-title">From Worried About AI to $10K/Month</h2>
-                <p class="section-subtitle">
-                    Real builders. Real revenue. Real transformation.
-                </p>
-            </div>
-            <div class="success-grid">
-                <div class="success-story">
-                    <div class="story-header">
-                        <img src="https://i.pravatar.cc/80?img=12" alt="Sarah Chen" class="story-avatar">
-                        <div class="story-meta">
-                            <h4 class="story-name">Sarah Chen</h4>
-                            <p class="story-title">Former Teacher → $8.2K MRR</p>
-                        </div>
-                    </div>
-                    <div class="story-content">
-                        <p class="story-quote">
-                            "I was terrified AI would replace teachers. Instead, I built an AI-powered tutoring
-                            platform using Dreamforge. Launched in 2 weeks. Hit $1K MRR in month one.
-                            Now at $8.2K MRR with 127 paying students."
-                        </p>
-                        <div class="story-metrics">
-                            <div class="metric">
-                                <div class="metric-value">2 weeks</div>
-                                <div class="metric-label">To launch</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-value">$8,200</div>
-                                <div class="metric-label">Monthly revenue</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-value">127</div>
-                                <div class="metric-label">Customers</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="success-story">
-                    <div class="story-header">
-                        <img src="https://i.pravatar.cc/80?img=33" alt="Marcus Johnson" class="story-avatar">
-                        <div class="story-meta">
-                            <h4 class="story-name">Marcus Johnson</h4>
-                            <p class="story-title">Retail Manager → $12K MRR</p>
-                        </div>
-                    </div>
-                    <div class="story-content">
-                        <p class="story-quote">
-                            "Spent 6 months in coding bootcamps. Burned $15K. Got nowhere. Dreamforge let me
-                            build my inventory management SaaS in 3 weeks. Sold to 4 local businesses first month.
-                            Now serving 43 stores. I quit my job last month."
-                        </p>
-                        <div class="story-metrics">
-                            <div class="metric">
-                                <div class="metric-value">3 weeks</div>
-                                <div class="metric-label">To launch</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-value">$12,000</div>
-                                <div class="metric-label">Monthly revenue</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-value">43</div>
-                                <div class="metric-label">Business clients</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="success-story">
-                    <div class="story-header">
-                        <img src="https://i.pravatar.cc/80?img=47" alt="Priya Sharma" class="story-avatar">
-                        <div class="story-meta">
-                            <h4 class="story-name">Priya Sharma</h4>
-                            <p class="story-title">Accountant → $5.6K MRR</p>
-                        </div>
-                    </div>
-                    <div class="story-content">
-                        <p class="story-quote">
-                            "Accounting firms were slashing jobs due to AI. I built an automated bookkeeping
-                            platform for freelancers using Dreamforge. Zero coding knowledge. Launched in
-                            10 days. Now it pays more than my old salary."
-                        </p>
-                        <div class="story-metrics">
-                            <div class="metric">
-                                <div class="metric-value">10 days</div>
-                                <div class="metric-label">To launch</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-value">$5,600</div>
-                                <div class="metric-label">Monthly revenue</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-value">89</div>
-                                <div class="metric-label">Active users</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="success-transformation">
-                <h3 class="transformation-title">The Transformation Journey</h3>
-                <div class="transformation-timeline">
-                    <div class="timeline-item">
-                        <div class="timeline-badge">Week 1</div>
-                        <div class="timeline-content">
-                            <h4>From Overwhelmed to Empowered</h4>
-                            <p>Launch your first app. See it working. Feel the shift from "I can't" to "I did."</p>
-                        </div>
-                    </div>
-                    <div class="timeline-item">
-                        <div class="timeline-badge">Month 1</div>
-                        <div class="timeline-content">
-                            <h4>From Zero to First Revenue</h4>
-                            <p>Get your first paying customer. $29, $49, $99 - real money from something you built.</p>
-                        </div>
-                    </div>
-                    <div class="timeline-item">
-                        <div class="timeline-badge">Month 3</div>
-                        <div class="timeline-content">
-                            <h4>From Side Hustle to Real Income</h4>
-                            <p>$1,000-$3,000 MRR. Covers rent. Builds confidence. Proves the model works.</p>
-                        </div>
-                    </div>
-                    <div class="timeline-item">
-                        <div class="timeline-badge">Month 6</div>
-                        <div class="timeline-content">
-                            <h4>From Employee to Entrepreneur</h4>
-                            <p>$5,000-$10,000 MRR. Multiple income streams. Freedom to choose.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Lead Generator -->
-    <section id="lead-gen" class="lead-gen">
-        <div class="lead-gen-container">
+    <!-- Lead gen -->
+    <section class="section section-bg">
+        <div class="wrap">
             <div class="lead-gen-content">
                 <div class="lead-gen-image">
-                    <div class="ebook-mockup">
-                        <div class="ebook-cover">
-                            <div class="ebook-title">
-                                THE VIBE CODER'S<br/>PLAYBOOK
-                            </div>
-                            <div class="ebook-subtitle">
-                                From Zero to $1K MRR<br/>in 30 Days
-                            </div>
-                            <div class="ebook-badge">FREE GUIDE</div>
-                        </div>
-                    </div>
+                    <img class="ebook-img" src="assets/ebook-art.jpg" alt="The Prototype Trap — free guide">
                 </div>
                 <div class="lead-gen-text">
-                    <h2 class="section-title">Get The Free Guide: Your First $1K MRR in 30 Days</h2>
-                    <p class="lead-gen-description">
-                        The exact playbook used by 200+ builders to launch profitable apps.
-                        No fluff. Just the tactics that work.
-                    </p>
-                    <ul class="lead-gen-includes">
-                        <li>✓ 7 SaaS ideas you can build this weekend</li>
-                        <li>✓ The "Micro-Niche" strategy: $1K MRR with 20 customers</li>
-                        <li>✓ Pricing psychology: Why $49/month beats $9/month</li>
-                        <li>✓ The 5-email launch sequence (copy-paste templates)</li>
-                        <li>✓ How to get your first 10 customers without ads</li>
-                        <li>✓ Dreamforge quickstart: Launch in 48 hours</li>
-                    </ul>
-                    <form class="lead-form">
-                        <input type="email" placeholder="Enter your email" class="lead-input" required>
-                        <button type="submit" class="btn btn-primary">Download Free Guide</button>
-                    </form>
-                    <p class="lead-privacy">
-                        No spam. Unsubscribe anytime. We respect your inbox.
-                    </p>
+                    <span class="eyebrow">Free guide</span>
+                    <h2 class="section-title">See an app built and launched<span class="muted2"> — start to finish</span></h2>
+                    <p class="lead-gen-description">Not ready to build yet? Get the free guide on why most AI-built apps never go live, and watch Dreamforge take a single idea all the way to a real app on the internet.</p>
+                    <ul class="lead-gen-includes"><li>The 5 hidden walls that stop AI-built apps before launch</li><li>"Real" vs. "just a demo" — how to tell the difference</li><li>Why one platform beats a pile of separate tools</li><li>A full idea-to-live walkthrough, step by step</li></ul>
+                    <form class="lead-form" data-placeholder="true"><input type="email" placeholder="Enter your email" class="lead-input" required><button type="submit" class="btn btn-primary">Send me the guide</button></form>
+                    <p class="lead-privacy">No spam. Unsubscribe anytime. <!-- TODO: wire form to your email provider --></p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- FAQ Section -->
-    <section id="faq" class="faq">
-        <div class="faq-container">
-            <div class="faq-header">
-                <h2 class="section-title">Frequently Asked Questions</h2>
+    <!-- Proof -->
+    <section class="section section-surface" id="proof">
+        <div class="wrap">
+            <div class="head-center">
+                <span class="eyebrow">Builders</span>
+                <h2 class="section-title">Builders shipping the real thing</h2>
+                <p class="section-subtitle">Real stories from real builders. <!-- TODO: replace placeholders with verified testimonials --></p>
             </div>
+            <div class="proof-grid">
+                <div class="proof-card"><div class="proof-quote">"[ Verified customer testimonial — what they built, how fast they launched it, and what going live actually changed for them. ]"</div><div class="proof-author"><div class="proof-avatar" aria-hidden="true"></div><div><div class="proof-name">Name, role</div><div class="proof-detail">What they built</div></div></div></div>
+                <div class="proof-card"><div class="proof-quote">"[ Verified customer testimonial — emphasis on going from an idea to a live, working app without starting over. ]"</div><div class="proof-author"><div class="proof-avatar" aria-hidden="true"></div><div><div class="proof-name">Name, role</div><div class="proof-detail">What they built</div></div></div></div>
+                <div class="proof-card"><div class="proof-quote">"[ Verified customer testimonial — emphasis on it being real, reliable, and theirs to keep. ]"</div><div class="proof-author"><div class="proof-avatar" aria-hidden="true"></div><div><div class="proof-name">Name, role</div><div class="proof-detail">What they built</div></div></div></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section section-bg" id="faq">
+        <div class="wrap">
+            <div class="head-center"><span class="eyebrow">Questions</span><h2 class="section-title">Questions, answered</h2></div>
             <div class="faq-grid">
-                <div class="faq-item">
-                    <h3 class="faq-question">Do I need coding experience?</h3>
-                    <p class="faq-answer">
-                        No. Dreamforge uses natural language prompts. Describe what you want to build,
-                        and AI handles the code. That said, understanding basic web concepts helps you
-                        iterate faster - but it's not required to launch.
-                    </p>
-                </div>
-                <div class="faq-item">
-                    <h3 class="faq-question">How is this different from Lovable or Bolt.new?</h3>
-                    <p class="faq-answer">
-                        Three critical differences: (1) We're 100% open source - you own your code forever.
-                        (2) We support 10+ AI models with fallback chains - you're not locked to one vendor.
-                        (3) We deploy to Cloudflare's production infrastructure, not toy sandboxes.
-                        Real apps. Real scale. Real ownership.
-                    </p>
-                </div>
-                <div class="faq-item">
-                    <h3 class="faq-question">Can I really make $1K/month from this?</h3>
-                    <p class="faq-answer">
-                        If you find 20 customers willing to pay $49/month, yes. That's $980 MRR.
-                        The hard part isn't building the app (Dreamforge handles that). The hard part
-                        is finding customers who need what you built. That's why our guide teaches
-                        micro-niche validation before you build.
-                    </p>
-                </div>
-                <div class="faq-item">
-                    <h3 class="faq-question">What if I want to hire developers later?</h3>
-                    <p class="faq-answer">
-                        Perfect. Dreamforge generates clean, standard React + Cloudflare Workers code.
-                        Any developer can read it, modify it, scale it. We're not a black box.
-                        Start solo, hire when revenue justifies it.
-                    </p>
-                </div>
-                <div class="faq-item">
-                    <h3 class="faq-question">How much does Cloudflare hosting cost?</h3>
-                    <p class="faq-answer">
-                        Cloudflare Workers starts at $5/month for 10M requests. D1 database is $5/month
-                        for 25GB. For most apps under 1,000 users, you're looking at $10-20/month hosting.
-                        Scales automatically as you grow.
-                    </p>
-                </div>
-                <div class="faq-item">
-                    <h3 class="faq-question">What if AI generates broken code?</h3>
-                    <p class="faq-answer">
-                        Dreamforge uses 12-phase generation with automated code review cycles. We test,
-                        fix, and validate before deployment. Plus, we support 10+ AI models - if one
-                        struggles, we seamlessly switch to another. 99.9% reliability.
-                    </p>
-                </div>
-                <div class="faq-item">
-                    <h3 class="faq-question">Can I white-label apps for clients?</h3>
-                    <p class="faq-answer">
-                        Yes (Pro plan). Remove all Dreamforge branding. Deploy to your client's domain.
-                        They never know you used AI. Many agencies use Dreamforge to 10x their output.
-                    </p>
-                </div>
-                <div class="faq-item">
-                    <h3 class="faq-question">Is there a money-back guarantee?</h3>
-                    <p class="faq-answer">
-                        60 days. If you don't launch a profitable app using Dreamforge, email us.
-                        We'll refund every penny. We're betting on your success.
-                    </p>
-                </div>
+                <div class="faq-item"><h3 class="faq-question">Do I need to know how to code?</h3><p class="faq-answer">Not at all. Describe what you want in everyday language and Dreamforge builds it. If you do happen to know how to code, even better — you can open up the app and change anything.</p></div>
+                <div class="faq-item"><h3 class="faq-question">What if I'm not sure how to describe my idea?</h3><p class="faq-answer">That's completely normal — most people don't know exactly what to ask for. Dreamforge asks helpful questions and fills in the parts you wouldn't think to mention, so a rough idea is enough to get a real app.</p></div>
+                <div class="faq-item"><h3 class="faq-question">How is this different from Lovable, Bolt, or v0?</h3><p class="faq-answer">Those tools are great at producing the look of an app. Dreamforge builds the whole thing — everything behind the scenes too — in one connected place, and puts it live on a worldwide network in one click. A real app, not just a demo.</p></div>
+                <div class="faq-item"><h3 class="faq-question">Is it a real app, or just a preview?</h3><p class="faq-answer">Real. Your app has real sign-ins, a real database, and real file storage, and it's live on the internet with its own link. It handles real visitors and real data from the moment it launches.</p></div>
+                <div class="faq-item"><h3 class="faq-question">Do I own it, or am I locked in?</h3><p class="faq-answer">You own it. Your app is built on open, standard technology, and you can export it and take it anywhere — hand it to a developer, or keep building with us. There's no black box and nothing holding it hostage.</p></div>
+                <div class="faq-item"><h3 class="faq-question">What will it cost to keep my app running?</h3><p class="faq-answer">Running an app on Cloudflare is genuinely affordable — generous free limits and fair, predictable pricing. Most early apps run for just a few dollars a month and grow smoothly, without the surprise bills common to other tools.</p></div>
+                <div class="faq-item"><h3 class="faq-question">What if it builds something wrong?</h3><p class="faq-answer">Dreamforge checks its own work as it goes — testing and fixing problems before you see them — and you can ask for changes anytime and watch it update live. It improves until it's right, rather than guessing once and hoping.</p></div>
+                <div class="faq-item"><h3 class="faq-question">Can I bring a project I've already started?</h3><p class="faq-answer">Yes. Dreamforge can pick up an existing project and keep building on it, so you can bring work you've already started and take it the rest of the way to live.</p></div>
             </div>
         </div>
     </section>
 
     <!-- Final CTA -->
-    <section id="cta" class="final-cta">
-        <div class="final-cta-container">
-            <div class="final-cta-content">
-                <h2 class="final-cta-title">The AI Revolution Is Here. Which Side Are You On?</h2>
-                <p class="final-cta-text">
-                    You can watch AI take your job. Or you can use AI to build income streams
-                    that replace your salary. The window won't stay open forever.
-                </p>
-                <div class="final-cta-stats">
-                    <div class="cta-stat">
-                        <div class="stat-number">200+</div>
-                        <div class="stat-label">Builders earning $1K+ MRR</div>
-                    </div>
-                    <div class="cta-stat">
-                        <div class="stat-number">$500K+</div>
-                        <div class="stat-label">Total revenue generated</div>
-                    </div>
-                    <div class="cta-stat">
-                        <div class="stat-number">1,247</div>
-                        <div class="stat-label">Apps deployed this month</div>
-                    </div>
-                </div>
-                <div class="final-cta-buttons">
-                    <a href="https://build.cloudflare.dev" class="btn btn-primary btn-large btn-pulse">
-                        Start Building Your First App Free
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                    </a>
-                    <p class="cta-note">No credit card required • Launch in 48 hours • 60-day guarantee</p>
-                </div>
+    <section class="section section-surface final-cta" id="cta">
+        <div class="hero-ambient"></div>
+        <div class="final-cta-inner">
+            <span class="eyebrow">Get started</span>
+            <h2 class="final-cta-title">Stop building demos.<br/>Build the real thing.</h2>
+            <p class="final-cta-text">Your idea deserves more than a preview that stalls before launch. Describe it, watch Dreamforge build it for real, and put it online in one click.</p>
+            <div class="final-cta-pillars">
+                <div class="cta-pillar"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 1.5l1.7 4.8 4.8 1.7-4.8 1.7L9 14.5l-1.7-4.8L2.5 8l4.8-1.7L9 1.5z"/></svg> A real, working app</div>
+                <div class="cta-pillar"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="7"/><path d="M2 9h14M9 2c2.3 2.3 2.3 11.7 0 14M9 2c-2.3 2.3-2.3 11.7 0 14"/></svg> Live in one click</div>
+                <div class="cta-pillar"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="8" width="11" height="7.5" rx="1.5"/><path d="M6 8V6a3 3 0 016 0v2"/></svg> Yours to keep</div>
             </div>
+            <a href="https://app.getdreamforge.com" class="btn btn-primary btn-large">Start building free
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </a>
+            <p class="cta-note">No credit card required · From idea to live app · Yours to keep, always</p>
         </div>
     </section>
 
@@ -856,53 +462,16 @@
             <div class="footer-grid">
                 <div class="footer-col">
                     <div class="footer-brand">
-                        <svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M20 0L37.3205 10V30L20 40L2.67949 30V10L20 0Z" fill="url(#footer-gradient)"/>
-                            <defs>
-                                <linearGradient id="footer-gradient" x1="0" y1="0" x2="40" y2="40">
-                                    <stop offset="0%" stop-color="#FF6B35"/>
-                                    <stop offset="100%" stop-color="#F7931E"/>
-                                </linearGradient>
-                            </defs>
-                        </svg>
+                        <svg width="28" height="28" viewBox="0 0 48 48" fill="none" style="color:var(--accent)" xmlns="http://www.w3.org/2000/svg"><path d="M16 8 H25 C34 8 40 15 40 24 C40 33 34 40 25 40 H16" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6 L9.5 25 L15.5 25 L12 42 L23 22 L17 22 Z" fill="currentColor"/></svg>
                         <span>Dreamforge</span>
                     </div>
-                    <p class="footer-description">
-                        Official Cloudflare product. Open source. Production-ready.
-                        Build apps that generate recurring income.
-                    </p>
+                    <p class="footer-description">Describe your idea. Get a real app, live on the internet — in one click.</p>
                 </div>
-                <div class="footer-col">
-                    <h4 class="footer-title">Product</h4>
-                    <ul class="footer-links">
-                        <li><a href="#value">Features</a></li>
-                        <li><a href="#pricing">Pricing</a></li>
-                        <li><a href="https://github.com/cloudflare/vibesdk">GitHub</a></li>
-                        <li><a href="https://build.cloudflare.dev">Live Demo</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h4 class="footer-title">Resources</h4>
-                    <ul class="footer-links">
-                        <li><a href="#lead-gen">Free Guide</a></li>
-                        <li><a href="#success">Success Stories</a></li>
-                        <li><a href="#faq">FAQ</a></li>
-                        <li><a href="#">Documentation</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h4 class="footer-title">Company</h4>
-                    <ul class="footer-links">
-                        <li><a href="#">About</a></li>
-                        <li><a href="#">Blog</a></li>
-                        <li><a href="#">Contact</a></li>
-                        <li><a href="#">Privacy</a></li>
-                    </ul>
-                </div>
+                <div class="footer-col"><h4 class="footer-title">Product</h4><ul class="footer-links"><li><a href="#how">How it works</a></li><li><a href="#why">Why Dreamforge</a></li><li><a href="#compare">Compare</a></li><li><a href="#pricing">Pricing</a></li></ul></div>
+                <div class="footer-col"><h4 class="footer-title">Resources</h4><ul class="footer-links"><li><a href="#demo">Free guide</a></li><li><a href="#faq">FAQ</a></li><li><a href="https://app.getdreamforge.com">Start building</a></li><li><a href="#">Documentation</a></li></ul></div>
+                <div class="footer-col"><h4 class="footer-title">Company</h4><ul class="footer-links"><li><a href="#">About</a></li><li><a href="#">Blog</a></li><li><a href="#">Contact</a></li><li><a href="#">Privacy</a></li></ul></div>
             </div>
-            <div class="footer-bottom">
-                <p>&copy; 2025 Dreamforge by Cloudflare. Open source under MIT License.</p>
-            </div>
+            <div class="footer-bottom"><p>&copy; 2026 Dreamforge. Build the real thing.</p></div>
         </div>
     </footer>
 

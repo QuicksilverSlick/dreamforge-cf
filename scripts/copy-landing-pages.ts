@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, existsSync } from 'fs';
+import { copyFileSync, mkdirSync, existsSync, cpSync } from 'fs';
 import { join } from 'path';
 
 /**
@@ -13,8 +13,8 @@ import { join } from 'path';
  *                                resolves `assets.directory` to `../client`.
  *     dreamforge_cf/           — pre-bundled worker (from @cloudflare/vite-plugin)
  *
- * This script writes into `dist/client/marketing/` (and `.../dream-builder/`)
- * because that's the path the worker rewrites to in `worker/index.ts`:
+ * This script writes into `dist/client/marketing/` because that's the path the
+ * worker rewrites to in `worker/index.ts`:
  *     marketingPath = '/marketing/'
  *     env.ASSETS.fetch(marketingPath)
  *
@@ -24,11 +24,9 @@ import { join } from 'path';
 
 const PROJECT_ROOT = process.cwd();
 const SRC_INDIVIDUAL = join(PROJECT_ROOT, 'worker', 'static', 'landing-pages');
-const SRC_ENTERPRISE = join(SRC_INDIVIDUAL, 'dream-builder');
 
 const ASSETS_DIR = join(PROJECT_ROOT, 'dist', 'client');
 const MARKETING_DIR = join(ASSETS_DIR, 'marketing');
-const DREAM_BUILDER_DIR = join(MARKETING_DIR, 'dream-builder');
 
 if (!existsSync(ASSETS_DIR)) {
 	throw new Error(
@@ -36,20 +34,25 @@ if (!existsSync(ASSETS_DIR)) {
 	);
 }
 mkdirSync(MARKETING_DIR, { recursive: true });
-mkdirSync(DREAM_BUILDER_DIR, { recursive: true });
 
 const FILES = ['index.html', 'styles.css', 'script.js'] as const;
+// Optional top-level files (copied only if present) and the shared image assets dir.
+const OPTIONAL_FILES = ['favicon.svg'] as const;
 
 console.log('📄 Copying individual landing page to dist/client/marketing/...');
 for (const file of FILES) {
 	copyFileSync(join(SRC_INDIVIDUAL, file), join(MARKETING_DIR, file));
 }
-
-console.log('📄 Copying enterprise landing page to dist/client/marketing/dream-builder/...');
-for (const file of FILES) {
-	copyFileSync(join(SRC_ENTERPRISE, file), join(DREAM_BUILDER_DIR, file));
+for (const file of OPTIONAL_FILES) {
+	const src = join(SRC_INDIVIDUAL, file);
+	if (existsSync(src)) copyFileSync(src, join(MARKETING_DIR, file));
 }
 
-console.log('✅ Landing pages copied successfully!');
-console.log('  - Individual: dist/client/marketing/');
-console.log('  - Enterprise: dist/client/marketing/dream-builder/');
+const SRC_ASSETS = join(SRC_INDIVIDUAL, 'assets');
+if (existsSync(SRC_ASSETS)) {
+	console.log('🖼️  Copying brand image assets to dist/client/marketing/assets/...');
+	cpSync(SRC_ASSETS, join(MARKETING_DIR, 'assets'), { recursive: true });
+}
+
+console.log('✅ Landing page copied successfully!');
+console.log('  - Marketing: dist/client/marketing/');

@@ -99,6 +99,18 @@ export default function Home() {
 		adjustTextareaHeight();
 	}, []);
 
+	// Deep-link from the marketing site: `?prompt=<idea>` prefills the box and
+	// kicks off the build immediately (auth flow preserves the intended URL).
+	useEffect(() => {
+		const incoming = new URLSearchParams(window.location.search).get('prompt');
+		if (incoming && incoming.trim()) {
+			const value = incoming.trim();
+			setQuery(value);
+			handleCreateApp(value, agentMode);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
 	// Typewriter effect
 	useEffect(() => {
 		const currentPhrase = placeholderPhrases[currentPlaceholderPhraseIndex];

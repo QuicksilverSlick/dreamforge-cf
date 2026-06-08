@@ -39,7 +39,7 @@ export function CSSIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export const DreamforgeIcon = (props: React.ImgHTMLAttributes<HTMLImageElement>) => (
-	<img src="/dreamforge-logo.png" alt="Dreamforge" {...props} />
+	<img src="/dreamforge-mark.svg" alt="Dreamforge" {...props} />
 );
 
 export const AIAvatar = (props: React.ImgHTMLAttributes<HTMLImageElement>) => (
