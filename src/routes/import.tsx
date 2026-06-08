@@ -64,7 +64,7 @@ export default function ImportPage() {
                 >
                     {/* Header */}
                     <div className="mb-8">
-                        <h1 className="text-6xl font-bold mb-3 font-[departureMono] text-accent">
+                        <h1 className="text-6xl font-bold mb-3 font-display text-accent">
                             IMPORT PROJECT
                         </h1>
                         <p className="text-text-tertiary text-lg">
