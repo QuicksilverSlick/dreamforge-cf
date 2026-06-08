@@ -28,9 +28,12 @@ refresh / come back later → it doesn't load, and I have to hit Reset."*
   `8001-a565feac`, 2026-06-07: `Waiting for development server HTTP readiness`
   → `Development server HTTP-ready` after ~5s, 0 timeouts). Confirms the dev
   server serves real HTTP before `previewURL` / `DEPLOYMENT_COMPLETED`. → fixes #1.
-- **Slice 2 — Reliable idle-revive on return**
-  On preview 404 (dead container), auto-recreate without manual Reset; on
-  chat-page load, health-check + revive even on a fresh WS. → fixes #3.
+- **Slice 2 — Reliable idle-revive on return** ✅ SHIPPED. Server already revives
+  on a redeploy request (#76 self-heal + #77 full-app + #1 readiness). Client
+  (`preview-iframe.tsx`) fixed to actually send it on return: redeploy retried
+  on every attempt ≥ threshold (was a single `===` that no-op'd if the WS wasn't
+  open yet) + a bounded auto-revive that reloads when a (re)connected WebSocket
+  arrives while the preview is errored. → fixes #3.
 - **Slice 3 — Kill HMR churn** ✅ SHIPPED. Template repo `reference/vite-reference/
   vite.config.ts` sets `server.hmr: false` (preview proxy can't carry the HMR WS)
   + guards the reload-trigger plugin's `server.ws.send`; refreshes come from the

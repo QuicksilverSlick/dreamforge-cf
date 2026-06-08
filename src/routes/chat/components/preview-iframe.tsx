@@ -50,6 +50,9 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 		const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 		const hasRequestedRedeployRef = useRef(false);
         const postLoadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+		// Bounds the WebSocket-reconnect auto-revive (below) so a container that
+		// genuinely can't come back doesn't reload-loop forever.
+		const autoReviveCountRef = useRef(0);
 		// ====================================================================
 		// Core Loading Logic
 		// ====================================================================
@@ -210,8 +213,13 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 				
 				console.log(`Preview not ready. Retrying in ${Math.ceil(delay / 1000)}s (attempt ${nextAttempt}/${MAX_RETRIES})`);
 
-				// Auto-redeploy after 3 failed attempts
-				if (nextAttempt === REDEPLOY_AFTER_ATTEMPT) {
+				// Auto-redeploy once the preview keeps 404ing (e.g. returning to
+				// an idled-out container). Use >= rather than == so that if the
+				// WebSocket isn't open yet at the threshold attempt, we keep
+				// trying on each subsequent attempt until the request actually
+				// sends — `requestRedeploy` no-ops without the socket and its own
+				// guard prevents duplicates once it succeeds.
+				if (nextAttempt >= REDEPLOY_AFTER_ATTEMPT) {
 					requestRedeploy();
 				}
 
@@ -262,6 +270,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 
 			console.log('Preview src changed, starting load:', src);
 			hasRequestedRedeployRef.current = false;
+			autoReviveCountRef.current = 0;
 			
 			if (retryTimeoutRef.current) {
 				clearTimeout(retryTimeoutRef.current);
@@ -313,6 +322,26 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 				forceReload();
 			}
 		}, [manualRefreshTrigger, forceReload]);
+
+		/**
+		 * Effect: Auto-revive on WebSocket (re)connect.
+		 *
+		 * Returning to an idled-out build: the container is dead, the preview
+		 * 404s through all retries into `error`, and the agent WebSocket often
+		 * isn't open until after that. When a (re)connected socket arrives while
+		 * the preview is errored, reload — which re-runs the retry loop and, with
+		 * the socket now open, fires the redeploy that recreates the container.
+		 * Bounded by `autoReviveCountRef` so a container that truly can't come
+		 * back doesn't loop forever (after which the manual Reset remains).
+		 */
+		useEffect(() => {
+			if (!webSocket || webSocket.readyState !== WebSocket.OPEN) return;
+			if (loadState.status === 'error' && autoReviveCountRef.current < 2) {
+				autoReviveCountRef.current += 1;
+				console.log('WebSocket connected while preview errored; auto-reviving preview');
+				forceReload();
+			}
+		}, [webSocket, loadState.status, forceReload]);
 
 		/**
 		 * Effect: Cleanup on unmount
