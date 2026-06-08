@@ -381,10 +381,16 @@ export default function AppView() {
 	// `<id>.<app-domain>`. Handle both.
 	const getDeployedUrl = (deploymentId?: string | null): string => {
 		if (!deploymentId) return '';
-		if (deploymentId.startsWith('http://') || deploymentId.startsWith('https://')) {
-			return deploymentId;
-		}
-		return `https://${deploymentId}.${window.location.host}`;
+		const id = deploymentId.trim();
+		if (!id) return '';
+		// Already a full URL (any scheme) → use verbatim. `includes` rather than
+		// `startsWith` so a stray leading character can't fall through and get
+		// wrapped into a malformed `https://https://….app-domain` URL.
+		if (id.includes('://')) return id;
+		// Already a bare hostname (has a dot, no scheme) → just add the scheme.
+		if (id.includes('.')) return `https://${id}`;
+		// Bare dispatcher id (e.g. `v1-foo-abc123`) → resolve to the app domain.
+		return `https://${id}.${window.location.host}`;
 	};
 
 	const getAppUrl = () => {
