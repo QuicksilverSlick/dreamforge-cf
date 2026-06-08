@@ -5,6 +5,7 @@ import { Blueprint, BlueprintSchemaLite, ClientReportedErrorSchema, ClientReport
 import { IssueReport } from "./domain/values/IssueReport";
 import { FileState, MAX_PHASES } from "./core/state";
 import { CODE_SERIALIZERS, CodeSerializerType } from "./utils/codeSerializers";
+import { DESIGN_SKILLS_GUIDANCE } from "./prompts/designSkills";
 
 export const PROMPT_UTILS = {
     /**
@@ -1235,8 +1236,10 @@ FRONTEND_FIRST_CODING: `<PHASES GENERATION STRATEGY>
 
     ${STRATEGIES_UTILS.CODING_GUIDELINES}
 
+    ${DESIGN_SKILLS_GUIDANCE}
+
     **Make sure to implement all the features and functionality requested by the user and more. The application should be fully complete by the end of the last phase. There should be no compromises**
-</PHASES GENERATION STRATEGY>`, 
+</PHASES GENERATION STRATEGY>`,
 }
 
 export interface GeneralSystemPromptBuilderParams {
