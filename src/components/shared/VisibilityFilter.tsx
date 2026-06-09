@@ -9,27 +9,9 @@ interface VisibilityFilterProps {
 }
 
 const visibilityOptions = [
-  { 
-    value: 'all', 
-    label: 'All', 
-    icon: Sparkles,
-    color: 'from-violet-500/20 to-purple-500/20',
-    activeColor: 'from-violet-500/10 to-purple-500/10'
-  },
-  { 
-    value: 'public', 
-    label: 'Public', 
-    icon: Globe,
-    color: 'from-green-500/20 to-emerald-500/20',
-    activeColor: 'from-green-500/10 to-emerald-500/10'
-  },
-  { 
-    value: 'private', 
-    label: 'Private', 
-    icon: Lock,
-    color: 'from-accent/20 to-accent/10',
-    activeColor: 'from-accent/10 to-accent/5'
-  },
+  { value: 'all', label: 'All', icon: Sparkles },
+  { value: 'public', label: 'Public', icon: Globe },
+  { value: 'private', label: 'Private', icon: Lock },
 ];
 
 export function VisibilityFilter({
