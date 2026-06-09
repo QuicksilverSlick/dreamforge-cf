@@ -387,7 +387,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 			const delaySeconds = Math.ceil(delay / 1000);
 
 			return (
-				<div className={`${className} relative flex flex-col items-center justify-center bg-bg-3 border border-text/10 rounded-lg`}>
+				<div className={`${className} relative flex flex-col items-center justify-center bg-bg-3 border border-border-primary rounded-lg`}>
                     {loadState.status === 'postload' && loadState.loadedSrc && (
                         <iframe
                             ref={ref}
@@ -431,7 +431,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 
 		// Error state - after max retries
 		return (
-			<div className={`${className} flex flex-col items-center justify-center bg-bg-3 border border-text/10 rounded-lg`}>
+			<div className={`${className} flex flex-col items-center justify-center bg-bg-3 border border-border-primary rounded-lg`}>
 				<div className="text-center p-8 max-w-md">
 					<AlertCircle className="size-8 text-orange-500 mx-auto mb-4" />
 					<h3 className="text-lg font-medium text-text-primary mb-2">

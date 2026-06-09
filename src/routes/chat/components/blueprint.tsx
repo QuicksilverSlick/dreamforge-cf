@@ -38,7 +38,7 @@ export function Blueprint({
 										blueprint.colorPalette?.map((color, index) => (
 											<div
 												key={`color-${index}`}
-												className="size-6 rounded-md border border-text/10 flex items-center justify-center"
+												className="size-6 rounded-md border border-border-primary flex items-center justify-center"
 												style={{ backgroundColor: color }}
 												title={color}
 											>
@@ -71,7 +71,7 @@ export function Blueprint({
 								return (
 									<span
 										key={`framework-${framework}-${index}`}
-										className="flex items-center text-xs border border-text/20 rounded-full px-2 py-0.5 text-text-primary/90 hover:border-white/40 transition-colors"
+										className="flex items-center text-xs border border-border-primary rounded-full px-2 py-0.5 text-text-primary/90 hover:border-accent/40 transition-colors"
 									>
 										<span className="font-medium">{name}</span>
 										{version && (
@@ -201,7 +201,7 @@ export function Blueprint({
 										</h5>
 										<div className="space-y-2">
 											{blueprint.initialPhase.files.map((file, fileIndex) => (
-												<div key={`initial-phase-file-${fileIndex}`} className="border-l-2 border-text/10 pl-3">
+												<div key={`initial-phase-file-${fileIndex}`} className="border-l-2 border-border-primary pl-3">
 													<div className="font-mono text-xs text-text-50/80">{file.path}</div>
 													<div className="text-xs text-text-50/60">{file.purpose}</div>
 												</div>
