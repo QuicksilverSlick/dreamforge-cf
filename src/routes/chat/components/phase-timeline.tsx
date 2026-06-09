@@ -521,7 +521,7 @@ export function PhaseTimeline({
                                             handleDeployToCloudflare(chatId);
                                         }}
                                         disabled={!!isDeploying}
-                                        className="ml-2 flex items-center gap-1.5 px-2.5 py-1 bg-accent hover:bg-accent/90 disabled:bg-accent/50 text-white rounded-full text-xs font-medium transition-colors disabled:cursor-not-allowed"
+                                        className="ml-2 flex items-center gap-1.5 px-2.5 py-1 bg-accent/12 hover:bg-accent/20 disabled:opacity-50 text-accent border border-accent/30 rounded-full text-xs font-medium transition-colors disabled:cursor-not-allowed"
                                         title={isDeploying ? 'Deploying...' : 'Deploy to Cloudflare'}
                                         aria-label={isDeploying ? 'Deploying' : 'Deploy to Cloudflare'}
                                     >
@@ -611,7 +611,7 @@ export function PhaseTimeline({
 															handleDeployToCloudflare(chatId);
 														}}
 														disabled={isDeploying}
-														className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent/90 disabled:bg-accent/50 text-white rounded-lg text-xs font-medium transition-colors disabled:cursor-not-allowed"
+														className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/12 hover:bg-accent/20 disabled:opacity-50 text-accent border border-accent/30 rounded-lg text-xs font-medium transition-colors disabled:cursor-not-allowed"
 													>
 														{isDeploying ? (
 															<StatusLoader size="sm" color="accent" />
