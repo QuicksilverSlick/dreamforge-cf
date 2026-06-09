@@ -20,8 +20,8 @@ export function UserMessage({ message }: { message: string }) {
 	return (
 		<div className="flex gap-3">
 			<div className="align-text-top pl-1">
-				<div className="size-6 flex items-center justify-center rounded-full bg-accent text-text-on-brand">
-					<span className="text-xs">U</span>
+				<div className="size-6 flex items-center justify-center rounded-full bg-accent text-text-inverted">
+					<span className="text-xs font-semibold">U</span>
 				</div>
 			</div>
 			<div className="flex flex-col gap-2 min-w-0">

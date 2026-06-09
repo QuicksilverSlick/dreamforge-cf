@@ -727,7 +727,7 @@ export default function Chat() {
 								<button
 									type="submit"
 									disabled={!newMessage.trim() || isChatDisabled}
-									className="p-1.5 rounded-md bg-accent/90 hover:bg-accent/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent text-white disabled:text-text-primary transition-colors"
+									className="p-1.5 rounded-md bg-accent/90 hover:bg-accent/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent text-text-inverted disabled:text-text-primary transition-colors"
 								>
 									<ArrowRight className="size-4" />
 								</button>

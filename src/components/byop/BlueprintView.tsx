@@ -99,7 +99,7 @@ export function BlueprintView({
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => setShowConfirmModal(true)}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-accent text-black font-semibold rounded-lg hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 hover:shadow-accent/30"
+                        className="flex items-center gap-2 px-6 py-2.5 bg-accent text-text-inverted font-semibold rounded-lg hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 hover:shadow-accent/30"
                     >
                         <Rocket className="w-5 h-5" />
                         Start Building
@@ -242,7 +242,7 @@ export function BlueprintView({
                     <ol className="space-y-2">
                         {nextSteps.map((step, i) => (
                             <li key={i} className="flex items-start gap-3">
-                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-accent text-black text-sm font-bold flex-shrink-0">
+                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-accent text-text-inverted text-sm font-bold flex-shrink-0">
                                     {i + 1}
                                 </span>
                                 <span className="text-text-secondary pt-0.5">{step}</span>
@@ -415,7 +415,7 @@ export function BlueprintView({
                                 <button
                                     onClick={handleStartBuilding}
                                     disabled={isStarting}
-                                    className="flex items-center gap-2 px-6 py-2 bg-accent text-black font-semibold rounded-lg hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-2 px-6 py-2 bg-accent text-text-inverted font-semibold rounded-lg hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isStarting ? (
                                         <>
