@@ -79,7 +79,7 @@ export function handleRateLimitError(
     let displayMessage = rateLimitError.message;
     
     if (rateLimitError.suggestions && rateLimitError.suggestions.length > 0) {
-        displayMessage += `\n\n💡 Suggestions:\n${rateLimitError.suggestions.map(s => `• ${s}`).join('\n')}`;
+        displayMessage += `\n\nSuggestions:\n${rateLimitError.suggestions.map(s => `• ${s}`).join('\n')}`;
     }
     
     toast.error(displayMessage);
@@ -95,7 +95,7 @@ export function handleRateLimitError(
     
     return createAIMessage(
         `rate_limit_${Date.now()}`,
-        `⏱️ ${displayMessage}`
+        displayMessage
     );
 }
 

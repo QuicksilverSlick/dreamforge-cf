@@ -545,7 +545,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setCloudflareDeploymentUrl('');
                 setIsRedeployReady(true);
                 
-                sendMessage(createAIMessage('cloudflare_deployment_error', `❌ Deployment failed: ${message.error}\n\n🔄 You can try deploying again.`));
+                sendMessage(createAIMessage('cloudflare_deployment_error', `Deployment failed: ${message.error}\n\nYou can try deploying again.`));
 
                 toast.error(`Error: ${message.error}`);
                 
@@ -573,7 +573,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'github_export_error': {
-                sendMessage(createAIMessage('github_export_error', `❌ GitHub export failed: ${message.error}`));
+                sendMessage(createAIMessage('github_export_error', `GitHub export failed: ${message.error}`));
 
                 toast.error(`Error: ${message.error}`);
                 
@@ -652,7 +652,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 const errorData = message;
                 setMessages(prev => [
                     ...prev,
-                    createAIMessage(`error_${Date.now()}`, `❌ ${errorData.error}`)
+                    createAIMessage(`error_${Date.now()}`, errorData.error)
                 ]);
                 
                 onDebugMessage?.(
@@ -702,7 +702,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             case 'image_generation_started': {
                 sendMessage(createAIMessage(
                     `image_generation_started_${Date.now()}`,
-                    `🎨 Generating ${message.count} image asset${message.count !== 1 ? 's' : ''}…`,
+                    `Generating ${message.count} image asset${message.count !== 1 ? 's' : ''}…`,
                 ));
                 break;
             }
@@ -724,7 +724,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         .join('\n');
                     sendMessage(createAIMessage(
                         `image_generation_completed_${Date.now()}`,
-                        `🖼️ ${message.message}\n${list}`,
+                        `${message.message}\n${list}`,
                     ));
                 }
                 break;
