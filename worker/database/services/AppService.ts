@@ -7,6 +7,7 @@ import * as schema from '../schema';
 import { eq, and, or, desc, asc, sql, isNull, inArray } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
 import { formatRelativeTime } from '../../utils/timeFormatter';
+import { ScreenshotSecurity } from '../../utils/screenshot-security';
 import type {
     EnhancedAppData,
     AppWithFavoriteStatus,
@@ -39,6 +40,18 @@ export class AppService extends BaseService {
         STARS: 3,
         FORKS: 5
     };
+
+    /**
+     * Sign every app's screenshot URL so the client can load it through the
+     * token-gated `/api/screenshots/...` route. Stored URLs are unsigned, so
+     * any read path that returns apps to the client must pass through here —
+     * otherwise the `<img>` requests 404 and the card falls back to its
+     * placeholder. Non-screenshot URLs (e.g. Cloudflare Images) pass through
+     * untouched.
+     */
+    private enrichScreenshotUrls<T extends { id: string; screenshotUrl?: string | null }>(apps: T[]): Promise<T[]> {
+        return new ScreenshotSecurity(this.env).enrichUrls(apps);
+    }
 
 
 
@@ -150,7 +163,7 @@ export class AppService extends BaseService {
             });
 
             return {
-                data: appsWithAnalytics,
+                data: await this.enrichScreenshotUrls(appsWithAnalytics),
                 pagination: {
                     limit,
                     offset,
@@ -320,11 +333,11 @@ export class AppService extends BaseService {
 
         const favoriteSet = new Set(favorites.map(f => f.appId));
 
-        return apps.map(app => ({
+        return this.enrichScreenshotUrls(apps.map(app => ({
             ...app,
             isFavorite: favoriteSet.has(app.id),
             updatedAtFormatted: formatRelativeTime(app.updatedAt)
-        }));
+        })));
     }
 
     /**
@@ -354,11 +367,11 @@ export class AppService extends BaseService {
             ))
             .orderBy(desc(schema.apps.updatedAt));
 
-        return results.map(row => ({
+        return this.enrichScreenshotUrls(results.map(row => ({
             ...row.app,
             isFavorite: true as const,
             updatedAtFormatted: formatRelativeTime(row.app.updatedAt)
-        }));
+        })));
     }
 
 
@@ -456,11 +469,12 @@ export class AppService extends BaseService {
             ))
             .get();
 
-        return {
+        const [enriched] = await this.enrichScreenshotUrls([{
             ...app,
             isFavorite: !!favorite,
             updatedAtFormatted: formatRelativeTime(app.updatedAt)
-        };
+        }]);
+        return enriched;
     }
 
     /**
@@ -584,7 +598,7 @@ export class AppService extends BaseService {
                 .then(r => !!r) : false
         ]);
         
-        return {
+        const [enriched] = await this.enrichScreenshotUrls([{
             ...app,
             userName: appResult.userName,
             userAvatar: appResult.userAvatar,
@@ -592,7 +606,8 @@ export class AppService extends BaseService {
             userStarred: userHasStarred,
             userFavorited: isFavorite,
             viewCount
-        };
+        }]);
+        return enriched;
     }
 
     /**
@@ -703,7 +718,7 @@ export class AppService extends BaseService {
                 .limit(limit)
                 .offset(offset);
                 
-            return results.map(r => ({
+            return this.enrichScreenshotUrls(results.map(r => ({
                 ...r.app,
                 userName: r.userName,
                 userAvatar: r.userAvatar,
@@ -713,7 +728,7 @@ export class AppService extends BaseService {
                 likeCount: 0,
                 userStarred: false,
                 userFavorited: true // These are favorited apps
-            }));
+            })));
         }
 
         const basicApps = await this.executeRankedQuery(
@@ -733,7 +748,7 @@ export class AppService extends BaseService {
         const appIds = basicApps.map((row: RankedAppQueryResult) => row.app.id);
         const { userStars, userFavorites } = await this.addUserSpecificAppData(appIds, userId);
         
-        return basicApps.map((row: RankedAppQueryResult) => ({
+        return this.enrichScreenshotUrls(basicApps.map((row: RankedAppQueryResult) => ({
             ...row.app,
             userName: row.userName,
             userAvatar: row.userAvatar,
@@ -743,7 +758,7 @@ export class AppService extends BaseService {
             likeCount: 0,
             userStarred: userStars.has(row.app.id),
             userFavorited: userFavorites.has(row.app.id)
-        }));
+        })));
     }
 
     /**
