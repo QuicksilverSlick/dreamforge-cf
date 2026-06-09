@@ -171,9 +171,9 @@ export function DeploymentControls({
 					subtitle: "It's Free! Deploys to Cloudflare Workers for Platform",
 					buttonDisabled: false,
 					buttonVariant: "primary" as const,
-					buttonClass: "bg-accent text-white border-accent dark:border-accent hover:scale-105"
+					buttonClass: "bg-accent/12 hover:bg-accent/20 text-accent border border-accent/30 hover:scale-[1.02]"
 				};
-			
+
 			case DeploymentState.DEPLOYING:
 				return {
 					panelClass: "bg-blue-50/40 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-800/30 shadow-sm dark:shadow-blue-900/20",
@@ -185,7 +185,7 @@ export function DeploymentControls({
 					subtitle: "Please wait while your application is being deployed...",
 					buttonDisabled: true,
 					buttonVariant: "primary" as const,
-					buttonClass: "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white border-blue-500 dark:border-blue-600 scale-105 shadow-lg dark:shadow-blue-900/50"
+					buttonClass: "bg-blue-500/12 text-blue-500 border border-blue-500/30 cursor-wait"
 				};
 			
 			case DeploymentState.REDEPLOYING:
@@ -199,7 +199,7 @@ export function DeploymentControls({
 					subtitle: "Please wait while your application is being redeployed...",
 					buttonDisabled: true,
 					buttonVariant: "primary" as const,
-					buttonClass: "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white border-blue-500 dark:border-blue-600 scale-105 shadow-lg dark:shadow-blue-900/50"
+					buttonClass: "bg-blue-500/12 text-blue-500 border border-blue-500/30 cursor-wait"
 				};
 			
 			case DeploymentState.ERROR:
@@ -213,8 +213,8 @@ export function DeploymentControls({
 					subtitle: "Error in deployment, please try again",
 					buttonDisabled: !isPhase1Complete,
 					buttonVariant: "primary" as const,
-					buttonClass: isPhase1Complete 
-						? "bg-accent hover:bg-accent/90 dark:bg-accent dark:hover:bg-accent/90 text-white border-accent dark:border-accent hover:scale-105"
+					buttonClass: isPhase1Complete
+						? "bg-accent/12 hover:bg-accent/20 text-accent border border-accent/30 hover:scale-[1.02]"
 						: "bg-bg-3 dark:bg-bg-3 text-text-tertiary dark:text-text-tertiary border-muted dark:border-muted cursor-not-allowed"
 				};
 			
@@ -369,7 +369,7 @@ export function DeploymentControls({
 						<Button
 							onClick={() => deploymentUrl && window.open(deploymentUrl, '_blank')}
 							variant="primary"
-							className="h-10 text-sm bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 text-white border-green-600 dark:border-green-700 font-medium shadow-sm hover:shadow-md dark:hover:shadow-green-900/50 transition-all duration-200 hover:scale-[1.02]"
+							className="h-10 text-sm bg-accent/12 hover:bg-accent/20 text-accent border border-accent/30 font-medium transition-all duration-200 hover:scale-[1.02]"
 						>
 							<ExternalLink className="w-4 h-4 mr-2" />
 							View Live
@@ -384,7 +384,7 @@ export function DeploymentControls({
 								className={clsx(
 									"h-10 text-sm font-medium transition-all duration-200 shadow-sm",
 									localVisibility === 'private'
-										? "bg-accent hover:bg-accent/90 text-white border-accent hover:shadow-md hover:scale-[1.02]"
+										? "bg-accent/12 hover:bg-accent/20 text-accent border border-accent/30 hover:scale-[1.02]"
 										: "bg-bg-3 hover:bg-bg-4 text-text-primary border-border-primary hover:shadow-sm hover:scale-[1.02]"
 								)}
 							>
@@ -416,7 +416,7 @@ export function DeploymentControls({
 								className={clsx(
 									"h-10 text-sm font-medium transition-all duration-200 shadow-sm",
 									!isDeploying
-										? "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white border-blue-500 dark:border-blue-600 hover:shadow-md dark:hover:shadow-blue-900/50 hover:scale-[1.02]" 
+										? "bg-blue-500/12 hover:bg-blue-500/20 text-blue-500 border border-blue-500/30 hover:scale-[1.02]"
 										: "bg-bg-3 dark:bg-bg-3 text-text-tertiary dark:text-text-tertiary border-muted dark:border-muted cursor-not-allowed"
 								)}
 							>
