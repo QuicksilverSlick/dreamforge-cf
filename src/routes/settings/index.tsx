@@ -9,6 +9,9 @@ import {
 	Key,
 	Lock,
     Settings,
+	CreditCard,
+	Database,
+	Triangle,
 } from 'lucide-react';
 import { ModelConfigTabs } from '@/components/model-config-tabs';
 import type {
@@ -470,16 +473,17 @@ export default function SettingsPage() {
 			return <LogoComponent className={className} />;
 		}
 
-		// Fallback to emoji for unknown providers
-		const emojiMap: Record<string, string> = {
-			stripe: '💳',
-			github: '🐙',
-			vercel: '▲',
-			supabase: '🗄️',
-			custom: '🔑',
+		// Fallback to a branded lucide icon for providers without a brand logo
+		const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+			stripe: CreditCard,
+			github: Github,
+			vercel: Triangle,
+			supabase: Database,
+			custom: Key,
 		};
+		const FallbackIcon = iconMap[provider] || Key;
 
-		return <span className="text-lg">{emojiMap[provider] || '🔑'}</span>;
+		return <FallbackIcon className={className} />;
 	};
 
 	// Load agent configurations dynamically from API
@@ -1180,7 +1184,7 @@ export default function SettingsPage() {
 																			<div className="flex items-start">
 																				<span className="text-lg">
 																					{
-																						template.icon
+																						getProviderLogo(template.provider, 'h-5 w-5')
 																					}
 																				</span>
 																				<div className="flex items-start">
@@ -1266,7 +1270,7 @@ export default function SettingsPage() {
 													>
 														<div className="flex items-center gap-3">
 															<span className="text-lg">
-																🔑
+																<Key className="size-5 text-text-tertiary" />
 															</span>
 															<div className="text-left">
 																<div className="font-medium">
@@ -1306,7 +1310,7 @@ export default function SettingsPage() {
 															<div className="flex items-center gap-3 p-3 bg-bg-3/50 rounded-lg">
 																<span className="text-xl">
 																	{
-																		template.icon
+																		getProviderLogo(template.provider, 'h-5 w-5')
 																	}
 																</span>
 																<div>
@@ -1692,8 +1696,8 @@ export default function SettingsPage() {
 									<div className="flex items-center gap-3">
 										<div className="h-5 w-5 rounded-full bg-bg-3 flex items-center justify-center">
 											{user?.provider === 'google'
-												? '🇬'
-												: '🐙'}
+												? <GoogleLogo className="h-3.5 w-3.5" />
+												: <Github className="h-3.5 w-3.5" />}
 										</div>
 										<div>
 											<p className="text-sm font-medium capitalize">
