@@ -296,7 +296,7 @@ export function useChat({
 
 					// Send success message to user
 					if (isRetry) {
-						sendMessage(createAIMessage('websocket_reconnected', '🔌 Connection restored! Continuing with code generation...'));
+						sendMessage(createAIMessage('websocket_reconnected', 'Connection restored! Continuing with code generation...'));
 					}
 
 					// Always request conversation state explicitly (running/full history)
@@ -359,7 +359,7 @@ export function useChat({
 			
 			if (retryCount.current >= maxRetries) {
 				logger.error(`💥 WebSocket connection failed permanently after ${maxRetries + 1} attempts`);
-				sendMessage(createAIMessage('websocket_failed', `🚨 Connection failed permanently after ${maxRetries + 1} attempts.\n\n❌ Reason: ${reason}\n\n🔄 Please refresh the page to try again.`));
+				sendMessage(createAIMessage('websocket_failed', `Connection failed permanently after ${maxRetries + 1} attempts.\n\nReason: ${reason}\n\nPlease refresh the page to try again.`));
 				
 				// Debug logging for permanent failure
 				onDebugMessage?.('error',
@@ -379,7 +379,7 @@ export function useChat({
 
 			logger.warn(`🔄 Retrying WebSocket connection in ${actualDelay / 1000}s (attempt ${retryCount.current + 1}/${maxRetries + 1})`);
 			
-			sendMessage(createAIMessage('websocket_retrying', `🔄 Connection failed. Retrying in ${Math.ceil(actualDelay / 1000)} seconds... (attempt ${retryCount.current + 1}/${maxRetries + 1})\n\n❌ Reason: ${reason}`, true));
+			sendMessage(createAIMessage('websocket_retrying', `Connection failed. Retrying in ${Math.ceil(actualDelay / 1000)} seconds... (attempt ${retryCount.current + 1}/${maxRetries + 1})\n\nReason: ${reason}`, true));
 
 			const timeoutId = setTimeout(() => {
 				connectWithRetry(wsUrl, { disableGenerate, isRetry: true });
@@ -584,7 +584,7 @@ export function useChat({
 						setIsRedeployReady(false);
 						
 						// Show timeout message
-						sendMessage(createAIMessage('deployment_timeout', `⏰ Deployment timed out after 1 minute.\n\n🔄 Please try deploying again. The server may be busy.`));
+						sendMessage(createAIMessage('deployment_timeout', `Deployment timed out after 1 minute.\n\nPlease try deploying again. The server may be busy.`));
 						
 						// Debug logging for timeout
 						onDebugMessage?.('warning', 
@@ -612,7 +612,7 @@ export function useChat({
 			setCloudflareDeploymentUrl('');
 			setIsRedeployReady(false);
 			
-			sendMessage(createAIMessage('deployment_error', `❌ Failed to initiate deployment: ${error instanceof Error ? error.message : 'Unknown error'}\n\n🔄 You can try again.`));
+			sendMessage(createAIMessage('deployment_error', `Failed to initiate deployment: ${error instanceof Error ? error.message : 'Unknown error'}\n\nYou can try again.`));
 		}
 	}, [websocket, sendMessage, isDeploying, onDebugMessage]);
 

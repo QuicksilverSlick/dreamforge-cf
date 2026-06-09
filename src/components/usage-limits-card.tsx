@@ -163,7 +163,7 @@ export function UsageLimitsCard({ className, onConnectToken }: UsageLimitsCardPr
 					<Alert className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/20">
 						<CheckCircle2 className="h-4 w-4 text-green-600" />
 						<AlertDescription className="text-green-700 dark:text-green-400">
-							You have unlimited access! 🎉
+							You have unlimited access!
 						</AlertDescription>
 					</Alert>
 				) : (

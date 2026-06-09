@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, RefreshCw, GitBranch, Star, GitFork, Code, Calendar } from 'lucide-react';
+import { Search, RefreshCw, GitBranch, Star, GitFork, Code, Calendar, AlertTriangle } from 'lucide-react';
 import type { GitHubRepository } from '@/api-types-byop';
 
 interface GitHubRepositoryListProps {
@@ -58,7 +58,7 @@ export function GitHubRepositoryList({
     if (error && repositories.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
-                <div className="text-6xl">⚠️</div>
+                <AlertTriangle className="size-14 text-amber-500" />
                 <h3 className="text-xl font-semibold text-text-primary">Failed to load repositories</h3>
                 <p className="text-text-tertiary text-center max-w-md">{error}</p>
                 <button

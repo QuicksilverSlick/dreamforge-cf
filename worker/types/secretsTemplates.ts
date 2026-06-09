@@ -6,7 +6,6 @@ export interface SecretTemplate {
 	displayName: string;
 	envVarName: string;
 	provider: string;
-	icon: string;
 	description: string;
 	instructions: string;
 	placeholder: string;
@@ -23,7 +22,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'Stripe Secret Key',
 			envVarName: 'STRIPE_SECRET_KEY',
 			provider: 'stripe',
-			icon: '💳',
 			description: 'Stripe secret key for payment processing',
 			instructions:
 				'Go to Stripe Dashboard → Developers → API keys → Secret key',
@@ -37,7 +35,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'Stripe Publishable Key',
 			envVarName: 'STRIPE_PUBLISHABLE_KEY',
 			provider: 'stripe',
-			icon: '💳',
 			description: 'Stripe publishable key for frontend integration',
 			instructions:
 				'Go to Stripe Dashboard → Developers → API keys → Publishable key',
@@ -53,7 +50,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'OpenAI API Key',
 			envVarName: 'OPENAI_API_KEY',
 			provider: 'openai',
-			icon: '🤖',
 			description: 'OpenAI API key for GPT and other AI models',
 			instructions:
 				'Go to OpenAI Platform → API keys → Create new secret key',
@@ -67,7 +63,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'Anthropic API Key',
 			envVarName: 'ANTHROPIC_API_KEY',
 			provider: 'anthropic',
-			icon: '🧠',
 			description: 'Anthropic Claude API key',
 			instructions: 'Go to Anthropic Console → API Keys → Create Key',
 			placeholder: 'sk-ant-...',
@@ -80,7 +75,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'Google Gemini API Key',
 			envVarName: 'GOOGLE_AI_STUDIO_API_KEY',
 			provider: 'google-ai-studio',
-			icon: '🔷',
 			description: 'Google Gemini AI API key',
 			instructions: 'Go to Google AI Studio → Get API key',
 			placeholder: 'AI...',
@@ -93,7 +87,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'OpenRouter API Key',
 			envVarName: 'OPENROUTER_API_KEY',
 			provider: 'openrouter',
-			icon: '🔀',
 			description: 'OpenRouter API key for multiple AI providers',
 			instructions: 'Go to OpenRouter → Account → Keys → Create new key',
 			placeholder: 'sk-or-...',
@@ -108,7 +101,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'OpenAI (BYOK)',
 			envVarName: 'OPENAI_API_KEY_BYOK',
 			provider: 'openai',
-			icon: '🤖',
 			description:
 				'Use your OpenAI API key for GPT models via Cloudflare AI Gateway',
 			instructions:
@@ -123,7 +115,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'Anthropic (BYOK)',
 			envVarName: 'ANTHROPIC_API_KEY_BYOK',
 			provider: 'anthropic',
-			icon: '🧠',
 			description:
 				'Use your Anthropic API key for Claude models via Cloudflare AI Gateway',
 			instructions: 'Go to Anthropic Console → API Keys → Create Key',
@@ -137,7 +128,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'Google AI Studio (BYOK)',
 			envVarName: 'GOOGLE_AI_STUDIO_API_KEY_BYOK',
 			provider: 'google-ai-studio',
-			icon: '🔷',
 			description:
 				'Use your Google AI API key for Gemini models via Cloudflare AI Gateway',
 			instructions: 'Go to Google AI Studio → Get API Key',
@@ -151,7 +141,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'Cerebras (BYOK)',
 			envVarName: 'CEREBRAS_API_KEY_BYOK',
 			provider: 'cerebras',
-			icon: '🧮',
 			description:
 				'Use your Cerebras API key for high-performance inference via Cloudflare AI Gateway',
 			instructions: 'Go to Cerebras Platform → API Keys → Create new key',
@@ -167,7 +156,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'GitHub Personal Access Token',
 			envVarName: 'GITHUB_TOKEN',
 			provider: 'github',
-			icon: '🐙',
 			description: 'GitHub token for repository operations',
 			instructions:
 				'Go to GitHub → Settings → Developer settings → Personal access tokens → Generate new token',
@@ -181,7 +169,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'Vercel Access Token',
 			envVarName: 'VERCEL_TOKEN',
 			provider: 'vercel',
-			icon: '▲',
 			description: 'Vercel token for deployments',
 			instructions: 'Go to Vercel Dashboard → Settings → Tokens → Create',
 			placeholder: 'Your Vercel access token',
@@ -196,7 +183,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'Supabase Project URL',
 			envVarName: 'SUPABASE_URL',
 			provider: 'supabase',
-			icon: '🗄️',
 			description: 'Supabase project URL',
 			instructions:
 				'Go to Supabase Dashboard → Settings → API → Project URL',
@@ -210,7 +196,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			displayName: 'Supabase Anonymous Key',
 			envVarName: 'SUPABASE_ANON_KEY',
 			provider: 'supabase',
-			icon: '🗄️',
 			description: 'Supabase anonymous/public key',
 			instructions:
 				'Go to Supabase Dashboard → Settings → API → anon public key',

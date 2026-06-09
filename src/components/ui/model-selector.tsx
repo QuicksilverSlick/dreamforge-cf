@@ -4,7 +4,7 @@
  */
 
 import { useState, useRef, useMemo } from 'react';
-import { Check, ChevronDown, Search } from 'lucide-react';
+import { Check, ChevronDown, Search, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -203,8 +203,8 @@ export function ModelSelector({
       
       {/* System default display */}
       {systemDefault && (
-        <p className="text-xs text-text-tertiary">
-          🔧 System default: {getModelDisplayName(systemDefault)}
+        <p className="text-xs text-text-tertiary flex items-center gap-1">
+          <Wrench className="size-3" /> System default: {getModelDisplayName(systemDefault)}
         </p>
       )}
     </div>
