@@ -686,7 +686,7 @@ export function PhaseTimeline({
 									className={clsx(
 										'flex items-start ml-0.5 transition-colors font-mono',
 										view === 'blueprint'
-											? 'text-brand underline decoration-dotted'
+											? 'text-accent underline decoration-dotted'
 											: 'text-text-secondary/80 hover:bg-bg-2/50 hover:text-text-secondary'
 									)}
 								>
@@ -772,7 +772,7 @@ export function PhaseTimeline({
 																		className={clsx(
 																			'text-xs text-left block transition-colors break-all leading-tight',
 																			isFileActive
-																				? 'text-brand font-medium'
+																				? 'text-accent font-medium'
 																				: globalFile ? 'text-text-primary/80 group-hover:text-text-primary' : 'text-text-primary/50',
 																		)}
 																		title={phaseFile.path}
@@ -855,7 +855,7 @@ export function PhaseTimeline({
 													{file.isGenerating ? <StatusLoader size="sm" color="accent" /> : <StatusCheck size="sm" color="green" />}
 												</span>
 												<div className="flex-1 min-w-0">
-													<span className={clsx('text-xs block break-all leading-tight', isFileActive ? 'text-brand font-medium' : 'text-text-primary/80')}>
+													<span className={clsx('text-xs block break-all leading-tight', isFileActive ? 'text-accent font-medium' : 'text-text-primary/80')}>
 														{truncateFilePath(file.filePath)}
 													</span>
 												</div>
