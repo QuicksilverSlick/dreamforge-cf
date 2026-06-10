@@ -741,6 +741,11 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         `image_generation_completed_${Date.now()}`,
                         `${message.message}\n${list}`,
                     ));
+                    // Images now generate concurrently with coding, so the
+                    // preview may have already deployed while assets were still
+                    // rendering as placeholders. Refresh it so the freshly
+                    // generated images swap in.
+                    setShouldRefreshPreview(true);
                 }
                 break;
             }
