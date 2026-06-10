@@ -235,9 +235,9 @@ export function AppSidebar() {
 														navigate('/');
 													}}
 												>
-													<Plus className="h-4 w-4 text-neutral-50" />
+													<Plus className="h-4 w-4 text-text-inverted" />
 													{!isCollapsed && (
-														<span className="font-medium text-neutral-50">
+														<span className="font-medium text-text-inverted">
 															New build
 														</span>
 													)}

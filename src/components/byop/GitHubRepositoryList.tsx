@@ -63,7 +63,7 @@ export function GitHubRepositoryList({
                 <p className="text-text-tertiary text-center max-w-md">{error}</p>
                 <button
                     onClick={onRefresh}
-                    className="mt-4 px-6 py-2 bg-accent text-black rounded-lg font-medium hover:bg-accent/90 transition-colors"
+                    className="mt-4 px-6 py-2 bg-accent text-text-inverted rounded-lg font-medium hover:bg-accent/90 transition-colors"
                 >
                     Try Again
                 </button>
@@ -162,7 +162,7 @@ export function GitHubRepositoryList({
                                     <button
                                         onClick={handleImport}
                                         disabled={importing}
-                                        className="px-8 py-2 bg-accent text-black rounded-lg font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                        className="px-8 py-2 bg-accent text-text-inverted rounded-lg font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                                     >
                                         {importing ? (
                                             <>

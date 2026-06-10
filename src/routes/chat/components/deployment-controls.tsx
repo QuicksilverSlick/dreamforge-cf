@@ -164,7 +164,7 @@ export function DeploymentControls({
 				return {
 					panelClass: "bg-accent/5 dark:bg-accent/10 border-accent/20 dark:border-accent/20",
 					iconClass: "bg-accent border-accent",
-					icon: <Zap className="w-2.5 h-2.5 text-white" />,
+					icon: <Zap className="w-2.5 h-2.5 text-text-inverted" />,
 					titleColor: "text-text-primary dark:text-text-primary",
 					subtitleColor: "text-text-tertiary dark:text-text-tertiary",
 					title: "Ready to Deploy",

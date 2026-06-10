@@ -254,7 +254,7 @@ export default function Home() {
 								<button
 									type="submit"
 									disabled={!query.trim()}
-									className="bg-accent text-white p-1 rounded-md *:size-5 transition-all duration-200 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+									className="bg-accent text-text-inverted p-1 rounded-md *:size-5 transition-all duration-200 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
 								>
 									<ArrowRight />
 								</button>

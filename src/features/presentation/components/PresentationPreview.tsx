@@ -101,7 +101,7 @@ export function PresentationPreview({
 								className={clsx(
 									'absolute top-2 left-2 z-10 text-xs font-medium px-2 py-0.5 rounded backdrop-blur-sm',
 									slide.index === currentSlideIndex
-										? 'bg-accent text-text-on-brand'
+										? 'bg-accent text-text-inverted'
 										: 'bg-bg-4/95 text-text-50/70 border border-border-primary',
 								)}
 							>
