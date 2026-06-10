@@ -72,6 +72,7 @@
 import type { ImageAttachment, ProcessedImageAttachment } from '../../../types/image-attachment';
 import type { StaticAnalysisResponse } from '../../../services/sandbox/sandboxTypes';
 import { generateNanoId } from '../../../utils/idGenerator';
+import { findDesignTells } from '../../prompts/designSkills';
 import type {
     FileOutputType,
     PhaseConceptType,
@@ -711,20 +712,35 @@ export class PhasicCodingBehavior
 
         await this.executePhaseImplementation(phaseConcept, userContext);
 
-        // Safety net: if the entry/home file still renders the template
-        // placeholder after the final phase, the model never replaced it — the
-        // deploy would show the "Creating your app" / TemplateDemo boilerplate
-        // instead of the real app. Auto-queue one corrective pass (mirrors a
-        // user saying "the placeholder is all that loads") rather than shipping
-        // the boilerplate. `setMVPGenerated()` short-circuits a re-entry into
-        // FINALIZING, so this fires at most once and cannot loop.
+        // Deterministic finalization safety net (the verification layer that
+        // pairs with the design-skill + placeholder guidance). Collect any
+        // unambiguous, must-fix issues and, if present, auto-queue ONE
+        // corrective pass rather than shipping a flawed app. `setMVPGenerated()`
+        // short-circuits a re-entry into FINALIZING, so this fires at most once
+        // and cannot loop.
+        const finalizeIssues: string[] = [];
+
+        // (1) Template placeholder survived → the deploy would show the
+        // "Creating your app" / TemplateDemo boilerplate instead of the app.
         if (this.entryFilePlaceholderPresent()) {
+            finalizeIssues.push(
+                'The deployed app still shows the template placeholder home page (the "Creating your app" / TemplateDemo boilerplate). Completely replace the entire contents of src/pages/HomePage.tsx with the real application UI from the blueprint — it must NOT import or render TemplateDemo / HAS_TEMPLATE_DEMO.',
+            );
+        }
+
+        // (2) Generic "AI tells" that violate the premium design standard.
+        const designTells = findDesignTells(this.fileManager.getAllFiles());
+        if (designTells.length > 0) {
+            finalizeIssues.push(
+                `The UI contains generic AI design "tells" that violate the premium design standard. Fix each one across the affected files: ${designTells.join('; ')}.`,
+            );
+        }
+
+        if (finalizeIssues.length > 0) {
             this.logger.warn(
-                'Template placeholder home page survived generation; queuing one automatic replacement pass',
+                `Finalization issues detected; queuing one automatic corrective pass: ${finalizeIssues.join(' | ')}`,
             );
-            await this.queueUserRequest(
-                'The deployed app still shows the template placeholder home page (the "Creating your app" / TemplateDemo boilerplate). Completely replace the entire contents of src/pages/HomePage.tsx with the real application UI from the blueprint — it must NOT import or render TemplateDemo / HAS_TEMPLATE_DEMO. The app must render the actual UI, not the placeholder.',
-            );
+            await this.queueUserRequest(finalizeIssues.join('\n\n'));
             return CurrentDevState.PHASE_GENERATING;
         }
 
