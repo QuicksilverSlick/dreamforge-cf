@@ -487,7 +487,12 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             schema && schemaName && !format
                 ? { response_format: zodResponseFormat(schema, schemaName) }
                 : {};
-        const extraBody = modelName.includes('claude')? {
+        // Claude/Anthropic models express reasoning effort through extended
+        // thinking (extra_body.thinking), NOT OpenAI's `reasoning_effort`. When
+        // thinking is enabled, Anthropic rejects `reasoning_effort` and requires
+        // temperature=1 — both are handled at the create() call below.
+        const isClaudeThinking = modelName.includes('claude');
+        const extraBody = isClaudeThinking ? {
                     extra_body: {
                         thinking: {
                             type: 'enabled',
@@ -569,8 +574,11 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                 messages: messagesToPass as OpenAI.ChatCompletionMessageParam[],
                 max_completion_tokens: maxTokens || 150000,
                 stream: stream ? true : false,
-                reasoning_effort,
-                temperature,
+                // reasoning_effort is OpenAI/Gemini-only; Claude derives effort from
+                // extra_body.thinking.budget_tokens above and 400s on this param.
+                ...(isClaudeThinking ? {} : { reasoning_effort }),
+                // Anthropic requires temperature=1 whenever extended thinking is on.
+                temperature: isClaudeThinking ? 1 : temperature,
             }, {
                 headers: {
                     "cf-aig-metadata": JSON.stringify({
