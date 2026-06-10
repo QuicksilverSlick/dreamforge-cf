@@ -477,8 +477,18 @@ export class PhasicCodingBehavior
         // ensureTemplateDetails' own callers, and getOperationOptions still
         // surfaces a clear error if details are genuinely unavailable.
         await this.ensureTemplateDetails();
-        await this.generateBlueprintImages();
+        // Image generation runs CONCURRENTLY with the coding state machine
+        // instead of blocking it. The blueprint manifest assigns each asset a
+        // deterministic `/api/generated/...` URL up front, so the coding model
+        // references those URLs immediately rather than waiting for the bytes;
+        // images stream in and populate the preview as each one lands.
+        // mergeGeneratedImages() is a synchronous atomic read-modify-write that
+        // only touches `blueprint.imageAssets`, so it cannot race the phase
+        // loop's state writes. Awaited at the end to keep the Durable Object
+        // alive until generation finishes and to surface any failure.
+        const blueprintImagesPromise = this.generateBlueprintImages();
         await this.launchStateMachine();
+        await blueprintImagesPromise;
     }
 
     private async launchStateMachine(): Promise<void> {
