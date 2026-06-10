@@ -88,3 +88,44 @@ LLMs are biased toward UI clichés. Override them with these engineered rules.
 export const DESIGN_SKILLS_GUIDANCE = `${PREMIUM_VISUAL_DESIGN_SKILL}
 
 ${FRONTEND_CRAFT_SKILL}`;
+
+// ============================================================================
+// Verification — deterministic "AI tells" detection
+// ============================================================================
+//
+// The prompt above *teaches* the standard; this *verifies* it. Following the
+// 2026 reliable-skills pattern (deterministic checks before any LLM judge),
+// these are HIGH-CONFIDENCE, low-false-positive string checks for the most
+// unambiguous generic-AI signatures. Aesthetic judgments (AI-purple, centered
+// hero, 3-equal-cards) are intentionally left out — they need a semantic judge,
+// not a regex, and would mis-fire here.
+
+/**
+ * Common emoji ranges. Deliberately EXCLUDES the dingbats block (U+2700–27BF,
+ * which contains the check mark ✓/✔ that legitimately appears in checklists)
+ * and the arrows block, to avoid false positives.
+ */
+const EMOJI_REGEX = /[\u{1F300}-\u{1FAFF}\u{1F000}-\u{1F0FF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{26FF}]/u;
+
+const DESIGN_TELL_CHECKS: ReadonlyArray<{ test: RegExp; issue: string }> = [
+    { test: /unsplash\.com/i, issue: 'Unsplash image URLs are used — replace each with a picsum.photos seed (https://picsum.photos/seed/<unique>/<w>/<h>) or inline SVG' },
+    { test: /\bJohn Doe\b|\bJane Doe\b/i, issue: 'placeholder names "John/Jane Doe" are present — replace with realistic, creative names' },
+    { test: /\blorem ipsum\b/i, issue: 'lorem ipsum filler text is present — write real, contextual copy' },
+    { test: /\bAcme\s+(Inc|Corp|Co|LLC)\b/i, issue: 'the generic "Acme" brand name is used — invent a premium, contextual brand name' },
+    { test: EMOJI_REGEX, issue: 'emoji characters appear in the UI — replace them with clean icons (lucide-react) or SVG' },
+];
+
+/**
+ * Scan generated source for unambiguous design "AI tells". Returns a list of
+ * human-readable issues (empty if clean) for a corrective pass to act on.
+ */
+export function findDesignTells(
+    files: ReadonlyArray<{ filePath: string; fileContents?: string }>,
+): string[] {
+    const source = files
+        .filter((file) => /\.(tsx?|jsx?|css|html|md)$/i.test(file.filePath))
+        .map((file) => file.fileContents ?? '')
+        .join('\n');
+    if (!source) return [];
+    return DESIGN_TELL_CHECKS.filter((check) => check.test.test(source)).map((check) => check.issue);
+}
