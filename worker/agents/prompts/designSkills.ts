@@ -107,12 +107,25 @@ ${FRONTEND_CRAFT_SKILL}`;
  */
 const EMOJI_REGEX = /[\u{1F300}-\u{1FAFF}\u{1F000}-\u{1F0FF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{26FF}]/u;
 
+// Brand/social icons Lucide removed over trademark concerns. Referencing them
+// renders NOTHING (verified: data-lucide="instagram|facebook|twitter" → blank
+// footer icons). Catch both usage forms — static `data-lucide="<name>"` and
+// `lucide-react` named imports.
+const LUCIDE_REMOVED_BRAND_ICONS = [
+    'instagram', 'facebook', 'twitter', 'linkedin', 'youtube', 'github',
+    'twitch', 'slack', 'figma', 'dribbble', 'gitlab', 'tiktok', 'discord', 'pinterest',
+].join('|');
+const LUCIDE_BRAND_DATA_ATTR = new RegExp(`data-lucide=["'](${LUCIDE_REMOVED_BRAND_ICONS})["']`, 'i');
+const LUCIDE_BRAND_IMPORT = new RegExp(`import\\s*\\{[^}]*\\b(${LUCIDE_REMOVED_BRAND_ICONS})\\b[^}]*\\}\\s*from\\s*["']lucide-react["']`, 'i');
+
 const DESIGN_TELL_CHECKS: ReadonlyArray<{ test: RegExp; issue: string }> = [
     { test: /unsplash\.com/i, issue: 'Unsplash image URLs are used — replace each with a picsum.photos seed (https://picsum.photos/seed/<unique>/<w>/<h>) or inline SVG' },
     { test: /\bJohn Doe\b|\bJane Doe\b/i, issue: 'placeholder names "John/Jane Doe" are present — replace with realistic, creative names' },
     { test: /\blorem ipsum\b/i, issue: 'lorem ipsum filler text is present — write real, contextual copy' },
     { test: /\bAcme\s+(Inc|Corp|Co|LLC)\b/i, issue: 'the generic "Acme" brand name is used — invent a premium, contextual brand name' },
     { test: EMOJI_REGEX, issue: 'emoji characters appear in the UI — replace them with clean icons (lucide-react) or SVG' },
+    { test: LUCIDE_BRAND_DATA_ATTR, issue: 'removed Lucide brand/social icons (Instagram, Facebook, X/Twitter, etc.) are referenced via data-lucide — Lucide deleted these for trademark reasons so they render blank; replace each social link with an inline SVG brand mark' },
+    { test: LUCIDE_BRAND_IMPORT, issue: 'removed Lucide brand/social icons are imported from lucide-react — these no longer exist in the package and render blank; use inline SVG brand marks for social links instead' },
 ];
 
 /**
