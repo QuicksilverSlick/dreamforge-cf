@@ -128,6 +128,8 @@ export default function Chat() {
 		shouldRefreshPreview,
 		// Preview deployment state
 		isPreviewDeploying,
+		// Image generation progress
+		imageGeneration,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
@@ -559,6 +561,7 @@ export default function Chat() {
 								onFileClick={handleFileClick}
 								isThinkingNext={isThinking}
 								isPreviewDeploying={isPreviewDeploying}
+								imageGeneration={imageGeneration}
 								progress={progress}
 								total={total}
 								parentScrollRef={messagesContainerRef}

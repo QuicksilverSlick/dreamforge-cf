@@ -22,6 +22,12 @@ import { sendWebSocketMessage } from './websocket-helpers';
 import type { FileType, PhaseTimelineItem } from '../hooks/use-chat';
 import { toast } from 'sonner';
 
+export interface ImageGenerationState {
+    active: boolean;
+    completed: number;
+    total: number;
+}
+
 export interface HandleMessageDeps {
     // State setters
     setFiles: React.Dispatch<React.SetStateAction<FileType[]>>;
@@ -34,6 +40,7 @@ export interface HandleMessageDeps {
     setTotalFiles: React.Dispatch<React.SetStateAction<number | undefined>>;
     setIsRedeployReady: React.Dispatch<React.SetStateAction<boolean>>;
     setIsPreviewDeploying: React.Dispatch<React.SetStateAction<boolean>>;
+    setImageGeneration: React.Dispatch<React.SetStateAction<ImageGenerationState>>;
     setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
     setIsInitialStateRestored: React.Dispatch<React.SetStateAction<boolean>>;
     setShouldRefreshPreview: React.Dispatch<React.SetStateAction<boolean>>;
@@ -101,6 +108,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setTotalFiles,
             setIsRedeployReady,
             setIsPreviewDeploying,
+            setImageGeneration,
             setIsThinking,
             setIsInitialStateRestored,
             setShouldRefreshPreview,
@@ -700,6 +708,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'image_generation_started': {
+                setImageGeneration({ active: true, completed: 0, total: message.count });
                 sendMessage(createAIMessage(
                     `image_generation_started_${Date.now()}`,
                     `Generating ${message.count} image asset${message.count !== 1 ? 's' : ''}…`,
@@ -708,6 +717,11 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'image_generation_progress': {
+                setImageGeneration({
+                    active: true,
+                    completed: message.index,
+                    total: message.total,
+                });
                 onDebugMessage?.(
                     'info',
                     `Image generated (${message.index}/${message.total})`,
@@ -718,6 +732,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'image_generation_completed': {
+                setImageGeneration({ active: false, completed: 0, total: 0 });
                 if (message.images.length > 0) {
                     const list = message.images
                         .map((image) => `• ${image.purpose}: ${image.url}`)
