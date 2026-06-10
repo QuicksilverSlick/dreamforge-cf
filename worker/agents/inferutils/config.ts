@@ -67,17 +67,26 @@ OR
 */
 
 
-// Current posture (June 2026): coding + review roles run on Gemini 3.5 Flash
-// (Google's GA frontier coding model), trivial roles on Gemini 3.1 Flash-Lite.
+// Current posture (June 2026): all roles run on Google models through the AI
+// Gateway OpenAI-compat endpoint — the path that is credentialed and proven in
+// prod. Quality is tuned per role rather than via one max model:
+//   - blueprint + firstPhaseImplementation: Gemini 3.1 Pro Preview at high
+//     reasoning effort. These are single-pass, design-defining steps where 3.1
+//     Pro's single-file reasoning is strongest; high effort lets it fully apply
+//     the design skill.
+//   - phaseImplementation + codeReview: Gemini 3.5 Flash (Google's newest GA
+//     frontier model, which beats 3.1 Pro on long-horizon agentic benchmarks)
+//     at high reasoning effort for the multi-step phase loop.
+//   - trivial/latency roles: Gemini 3.5 Flash / 3.1 Flash-Lite.
 //
-// NOTE: The max-quality target for the code-bearing roles is Claude Opus 4.8
-// (CLAUDE_OPUS_4_8) with a Claude Sonnet 4.6 fallback — Opus 4.8 is the most
-// capable model for long-horizon agentic coding and ~4x less likely than its
-// predecessor to let flaws in its own code pass. That is blocked until the
-// Anthropic provider credential is added to the AI Gateway secret store
-// (alias `default` -> secret `anthropic_default`); without it every
-// `anthropic/*` call returns gateway error 2041. Flip the roles below back to
-// CLAUDE_OPUS_4_8 / fallback CLAUDE_SONNET_4_6 once that credential exists.
+// NOTE: Claude Opus 4.8 is NOT usable here. The whole inference layer calls
+// models via the OpenAI SDK -> AI Gateway `/compat` endpoint, and Anthropic's
+// OpenAI-compat layer silently drops `response_format` (our structured
+// outputs), so Claude code-gen calls fail schema validation at agent init
+// (verified: two prod outages, builds 74b95461 & 3a641bc9). Upstream
+// cloudflare/vibesdk reaches the same conclusion — it routes Gemini 3 Pro +
+// Grok, never Claude. Using Opus requires a native Anthropic Messages backend
+// (`/ai/v1/messages`), a separate project, not a config flip.
 export const AGENT_CONFIG: AgentConfig = {
     templateSelection: {
         name: AIModels.GEMINI_3_1_FLASH_LITE,
@@ -86,10 +95,10 @@ export const AGENT_CONFIG: AgentConfig = {
         temperature: 0.6,
     },
     blueprint: {
-        name: AIModels.GEMINI_3_5_FLASH,
-        reasoning_effort: 'medium',
+        name: AIModels.GEMINI_3_1_PRO_PREVIEW,
+        reasoning_effort: 'high',
         max_tokens: 64000,
-        fallbackModel: AIModels.GEMINI_2_5_PRO,
+        fallbackModel: AIModels.GEMINI_3_5_FLASH,
         temperature: 0.7,
     },
     projectSetup: {
@@ -107,15 +116,15 @@ export const AGENT_CONFIG: AgentConfig = {
         fallbackModel: AIModels.GEMINI_2_5_PRO,
     },
     firstPhaseImplementation: {
-        name: AIModels.GEMINI_3_5_FLASH,
-        reasoning_effort: 'medium',
+        name: AIModels.GEMINI_3_1_PRO_PREVIEW,
+        reasoning_effort: 'high',
         max_tokens: 64000,
         temperature: 0.2,
-        fallbackModel: AIModels.GEMINI_2_5_PRO,
+        fallbackModel: AIModels.GEMINI_3_5_FLASH,
     },
     phaseImplementation: {
         name: AIModels.GEMINI_3_5_FLASH,
-        reasoning_effort: 'medium',
+        reasoning_effort: 'high',
         max_tokens: 64000,
         temperature: 0.2,
         fallbackModel: AIModels.GEMINI_2_5_PRO,
