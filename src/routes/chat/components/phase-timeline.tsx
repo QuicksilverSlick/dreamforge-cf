@@ -1,9 +1,10 @@
 import clsx from 'clsx';
-import { Loader, Check, AlertCircle, ChevronDown, ChevronRight, ArrowUp, Zap } from 'lucide-react';
+import { LoaderCircle, Check, AlertCircle, ChevronDown, ChevronRight, ArrowUp, Zap, ImageIcon } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { RefObject } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { PhaseTimelineItem, FileType } from '../hooks/use-chat';
+import type { ImageGenerationState } from '../utils/handle-websocket-message';
 import { ThinkingIndicator } from './thinking-indicator';
 
 import type { ProjectStage } from '../utils/project-stage-helpers';
@@ -43,7 +44,7 @@ interface StatusLoaderProps {
 }
 
 const StatusLoader = ({ size = 'md', color = 'accent' }: StatusLoaderProps) => {
-	const sizeClass = size === 'sm' ? 'size-3' : 'w-4 h-4';
+	const sizeClass = size === 'sm' ? 'size-4' : 'size-5';
 	const colorMap = {
 		accent: 'text-accent',
 		blue: 'text-blue-400',
@@ -51,11 +52,11 @@ const StatusLoader = ({ size = 'md', color = 'accent' }: StatusLoaderProps) => {
 		tertiary: 'text-text-tertiary',
 		green: 'text-green-500'
 	};
-	return <Loader className={`${sizeClass} animate-spin ${colorMap[color]}`} />;
+	return <LoaderCircle strokeWidth={2.5} className={`${sizeClass} animate-spin ${colorMap[color]}`} />;
 };
 
 const StatusCheck = ({ size = 'md', color = 'green' }: StatusLoaderProps) => {
-	const sizeClass = size === 'sm' ? 'size-3' : 'w-4 h-4';
+	const sizeClass = size === 'sm' ? 'size-4' : 'size-5';
 	const colorMap = {
 		accent: 'text-accent',
 		blue: 'text-blue-400',
@@ -75,26 +76,26 @@ interface StatusIconProps {
 
 function StatusIcon({ status, size = 'md', className }: StatusIconProps) {
 	const sizeClasses = {
-		sm: 'w-3 h-3',
-		md: 'w-4 h-4',
+		sm: 'size-4',
+		md: 'size-5',
 	};
 
 	const iconClasses = sizeClasses[size];
 
 	switch (status) {
 		case 'generating':
-			return <Loader className={clsx(iconClasses, 'animate-spin text-accent', className)} />;
+			return <LoaderCircle strokeWidth={2.5} className={clsx(iconClasses, 'animate-spin text-accent', className)} />;
 		case 'validating':
-			return <Loader className={clsx(iconClasses, 'animate-spin text-blue-400', className)} />;
+			return <LoaderCircle strokeWidth={2.5} className={clsx(iconClasses, 'animate-spin text-blue-400', className)} />;
 		case 'completed':
 			return <Check className={clsx(iconClasses, 'text-green-500', className)} />;
 		case 'error':
 			return <AlertCircle className={clsx(iconClasses, 'text-red-500', className)} />;
 		case 'active':
-			return <Loader className={clsx(iconClasses, 'animate-spin text-accent', className)} />;
+			return <LoaderCircle strokeWidth={2.5} className={clsx(iconClasses, 'animate-spin text-accent', className)} />;
 		case 'pending':
 		default:
-			return <div className={clsx(iconClasses, 'bg-bg-3-foreground/40 dark:bg-bg-3-foreground/30 rounded-full', className)} />;
+			return <div className={clsx(iconClasses, 'bg-text-tertiary/70 ring-1 ring-text-tertiary/30 rounded-full', className)} />;
 	}
 }
 
@@ -133,7 +134,7 @@ function AnimatedStatusIndicator({ status, size = 5 }: AnimatedStatusIndicatorPr
 						transition={commonTransitions.smoothInOut}
 						className={clsx(sizeClass, 'bg-bg-4 dark:bg-bg-2 flex items-center justify-center')}
 					>
-						<Loader className="size-3 text-accent animate-spin" />
+						<LoaderCircle strokeWidth={2.5} className="size-4 text-accent animate-spin" />
 					</motion.div>
 				)}
 				{status === 'completed' && (
@@ -176,6 +177,7 @@ interface PhaseTimelineProps {
 	onFileClick: (file: FileType) => void;
 	isThinkingNext?: boolean;
 	isPreviewDeploying?: boolean;
+	imageGeneration?: ImageGenerationState;
 	progress: number;
 	total: number;
 	parentScrollRef?: RefObject<HTMLDivElement | null>;
@@ -259,6 +261,7 @@ export function PhaseTimeline({
 	onFileClick,
 	isThinkingNext,
 	isPreviewDeploying,
+	imageGeneration,
 	progress,
 	total,
 	parentScrollRef,
@@ -345,6 +348,17 @@ export function PhaseTimeline({
 			};
 		}
 
+		if (imageGeneration?.active) {
+			return {
+				text: 'Generating images',
+				subtitle: imageGeneration.total > 0
+					? `${imageGeneration.completed}/${imageGeneration.total} ready — this takes a few moments`
+					: 'This takes a few moments...',
+				icon: <StatusLoader color="accent" />,
+				badge: imageGeneration.total > 0 ? `${imageGeneration.completed}/${imageGeneration.total}` : undefined
+			};
+		}
+
 		if (isPreviewDeploying) {
 			return {
 				text: 'Deploying preview',
@@ -380,7 +394,7 @@ export function PhaseTimeline({
 			icon: <div className="w-4 h-4 bg-gradient-to-br from-zinc-300/30 to-zinc-400/20 dark:from-zinc-600/30 dark:to-zinc-700/20 rounded-full" />,
 			badge: undefined
 		};
-	}, [phaseTimeline, isThinkingNext, isPreviewDeploying, progress, total, projectStages]);
+	}, [phaseTimeline, isThinkingNext, isPreviewDeploying, imageGeneration, progress, total, projectStages]);
 
 	const togglePhase = (phaseId: string) => {
 		setExpandedPhases(prev => {
@@ -834,6 +848,23 @@ export function PhaseTimeline({
 										}
 										return null;
 									})()}
+
+									{/* Image generation indicator — runs in parallel; assets populate as they arrive */}
+									{imageGeneration?.active && (
+										<div className="space-y-1 relative bg-accent/5 border border-accent/20 rounded-lg p-3">
+											<div className="flex items-center gap-2">
+												<StatusLoader size="sm" color="accent" />
+												<ImageIcon className="size-4 text-accent" />
+												<span className="text-sm font-medium text-accent">
+													Generating images
+													{imageGeneration.total > 0 ? ` (${imageGeneration.completed}/${imageGeneration.total})` : ''}…
+												</span>
+											</div>
+											<span className="text-xs text-accent/80 ml-5">
+												Running in parallel — this takes a few moments; they'll populate in the preview as each is ready.
+											</span>
+										</div>
+									)}
 
 									{/* Thinking indicator for next phase */}
 									{isThinkingNext && (

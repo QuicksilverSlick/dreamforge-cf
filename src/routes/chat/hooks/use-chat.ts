@@ -38,7 +38,7 @@ import { getFileType } from '@/utils/string';
 import { logger } from '@/utils/logger';
 import { apiClient } from '@/lib/api-client';
 import { appEvents } from '@/lib/app-events';
-import { createWebSocketMessageHandler, type HandleMessageDeps } from '../utils/handle-websocket-message';
+import { createWebSocketMessageHandler, type HandleMessageDeps, type ImageGenerationState } from '../utils/handle-websocket-message';
 import { isConversationalMessage, addOrUpdateMessage, createUserMessage, handleRateLimitError, createAIMessage, type ChatMessage } from '../utils/message-helpers';
 import { sendWebSocketMessage } from '../utils/websocket-helpers';
 import { initialStages as defaultStages, updateStage as updateStageHelper } from '../utils/project-stage-helpers';
@@ -126,7 +126,14 @@ export function useChat({
 	
 	// Preview deployment state
 	const [isPreviewDeploying, setIsPreviewDeploying] = useState(false);
-	
+
+	// Image generation state — drives the timeline "Generating images" indicator
+	const [imageGeneration, setImageGeneration] = useState<ImageGenerationState>({
+		active: false,
+		completed: 0,
+		total: 0,
+	});
+
 	// Redeployment state - tracks when redeploy button should be enabled
 	const [isRedeployReady, setIsRedeployReady] = useState(false);
 	// const [lastDeploymentPhaseCount, setLastDeploymentPhaseCount] = useState(0);
@@ -195,6 +202,7 @@ export function useChat({
 			setTotalFiles,
 			setIsRedeployReady,
 			setIsPreviewDeploying,
+			setImageGeneration,
 			setIsThinking,
 			setIsInitialStateRestored,
 			setShouldRefreshPreview,
@@ -650,6 +658,8 @@ export function useChat({
 		shouldRefreshPreview,
 		// Preview deployment state
 		isPreviewDeploying,
+		// Image generation progress
+		imageGeneration,
 		// Phase progress visual indicator
 		isPhaseProgressActive,
 	};

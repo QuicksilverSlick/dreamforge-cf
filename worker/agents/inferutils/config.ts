@@ -115,7 +115,7 @@ export const AGENT_CONFIG: AgentConfig = {
     },
     phaseImplementation: {
         name: AIModels.GEMINI_3_5_FLASH,
-        reasoning_effort: 'low',
+        reasoning_effort: 'medium',
         max_tokens: 64000,
         temperature: 0.2,
         fallbackModel: AIModels.GEMINI_2_5_PRO,
