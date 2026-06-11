@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ArrowRight, Check, Pencil, Sparkles, X } from 'lucide-react';
 import clsx from 'clsx';
 import { apiClient } from '@/lib/api-client';
@@ -51,6 +51,9 @@ export default function InterviewPage() {
     const [editing, setEditing] = useState<InterviewQuestion | null>(null);
     const [editMode, setEditMode] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    // Ref-based guard: state updates are async, so a key-repeat Enter could
+    // double-submit before `submitting` re-renders.
+    const inFlightRef = useRef(false);
     const [starting, setStarting] = useState(true);
     const [finishing, setFinishing] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -114,7 +117,8 @@ export default function InterviewPage() {
     }, [transcript, state?.question?.id]);
 
     const submit = async (question: InterviewQuestion, answer: InterviewAnswer) => {
-        if (!state || submitting) return;
+        if (!state || inFlightRef.current) return;
+        inFlightRef.current = true;
         setSubmitting(true);
         setError(null);
         try {
@@ -136,6 +140,7 @@ export default function InterviewPage() {
         } catch {
             setError('That answer didn\'t save — try again.');
         } finally {
+            inFlightRef.current = false;
             setSubmitting(false);
         }
     };
@@ -245,13 +250,14 @@ export default function InterviewPage() {
                         </div>
                     )}
 
-                    <AnimatePresence mode="wait">
-                        {activeQuestion && !editMode && (
+                    {/* Mount-only animation: an exit choreography here (AnimatePresence
+                        mode="wait") proved able to strand the outgoing question and
+                        never mount the next one. Robust beats pretty. */}
+                    {activeQuestion && !editMode && (
                             <motion.div
                                 key={activeQuestion.id}
                                 initial={{ opacity: 0, y: 8 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0 }}
                                 className="flex flex-col gap-3 mt-1"
                             >
                                 <div className="self-start max-w-[85%] bg-bg-4 dark:bg-bg-2 border border-accent/30 rounded-2xl rounded-bl-sm px-4 py-3 text-text-primary shadow-sm">
@@ -384,8 +390,7 @@ export default function InterviewPage() {
                                     </button>
                                 )}
                             </motion.div>
-                        )}
-                    </AnimatePresence>
+                    )}
 
                     {finishing && (
                         <div className="flex items-center gap-2 text-sm text-text-secondary mt-2">
