@@ -15,6 +15,7 @@ import { setupCloudflareAccountRoutes } from './cloudflareAccountRoutes';
 import { setupCloudflareConnectRoutes } from './cloudflareConnectRoutes';
 import { setupLimitsRoutes } from './limitsRoutes';
 import { setupCapabilitiesRoutes } from './capabilitiesRoutes';
+import { setupInterviewRoutes } from './interviewRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
 import { setupStatusRoutes } from './statusRoutes';
@@ -78,4 +79,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Platform capabilities / feature registry (PR 10a)
     setupCapabilitiesRoutes(app);
+
+    // Intake interview ("21 Questions") routes
+    setupInterviewRoutes(app);
 }
