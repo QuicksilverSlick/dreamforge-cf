@@ -224,14 +224,20 @@ function isValidApiKey(apiKey: string): boolean {
     return true;
 }
 
-async function getApiKey(provider: string, env: Env, userId: string, userApiKeys?: Record<string, string>): Promise<string> {
+type ResolvedApiKey = {
+    apiKey: string;
+    /** True when the key is user-funded (runtime-supplied or stored BYOK) rather than a platform key. */
+    isUserKey: boolean;
+};
+
+async function getApiKey(provider: string, env: Env, userId: string, userApiKeys?: Record<string, string>): Promise<ResolvedApiKey> {
     console.log("Getting API key for provider: ", provider);
     // Runtime-supplied keys (e.g. model-config tests) take precedence over
     // any stored key. The key value itself is never logged.
     const runtimeKey = userApiKeys?.[provider];
     if (runtimeKey && isValidApiKey(runtimeKey)) {
         console.log("Using runtime-supplied API key for provider: ", provider);
-        return runtimeKey;
+        return { apiKey: runtimeKey, isUserKey: true };
     }
     // BYOK: prefer the user's own provider key when one is stored and active.
     // Lookup failures fall through to platform keys so a secrets outage can
@@ -241,7 +247,7 @@ async function getApiKey(provider: string, env: Env, userId: string, userApiKeys
         const userKey = await secretsService.getUserBYOKKeyForProvider(userId, provider);
         if (userKey && isValidApiKey(userKey)) {
             console.log("Using user BYOK key for provider: ", provider);
-            return userKey;
+            return { apiKey: userKey, isUserKey: true };
         }
     } catch (error) {
         console.error("Error getting user BYOK key for provider: ", provider, error);
@@ -250,12 +256,12 @@ async function getApiKey(provider: string, env: Env, userId: string, userApiKeys
     const providerKeyString = provider.toUpperCase().replaceAll('-', '_');
     const envKey = `${providerKeyString}_API_KEY` as keyof Env;
     let apiKey: string = env[envKey] as string;
-    
+
     // Check if apiKey is empty or undefined and is valid
     if (!isValidApiKey(apiKey)) {
         apiKey = env.CLOUDFLARE_AI_GATEWAY_TOKEN;
     }
-    return apiKey;
+    return { apiKey, isUserKey: false };
 }
 
 export async function getConfigurationForModel(
@@ -267,6 +273,7 @@ export async function getConfigurationForModel(
     baseURL: string,
     apiKey: string,
     defaultHeaders?: Record<string, string>,
+    isUserKey: boolean,
 }> {
     let providerForcedOverride: AIGatewayProviders | undefined;
     // Check if provider forceful-override is set
@@ -277,16 +284,19 @@ export async function getConfigurationForModel(
             return {
                 baseURL: 'https://openrouter.ai/api/v1',
                 apiKey: env.OPENROUTER_API_KEY,
+                isUserKey: false,
             };
         } else if (provider === 'gemini') {
             return {
                 baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
                 apiKey: env.GOOGLE_AI_STUDIO_API_KEY,
+                isUserKey: false,
             };
         } else if (provider === 'claude') {
             return {
                 baseURL: 'https://api.anthropic.com/v1/',
                 apiKey: env.ANTHROPIC_API_KEY,
+                isUserKey: false,
             };
         }
         providerForcedOverride = provider as AIGatewayProviders;
@@ -298,7 +308,7 @@ export async function getConfigurationForModel(
     const provider = providerForcedOverride || model.split('/')[0];
     // Try to find API key of type <PROVIDER>_API_KEY else default to CLOUDFLARE_AI_GATEWAY_TOKEN
     // `env` is an interface of type `Env`
-    const apiKey = await getApiKey(provider, env, userId, userApiKeys);
+    const { apiKey, isUserKey } = await getApiKey(provider, env, userId, userApiKeys);
     // AI Gateway Wholesaling checks
     const defaultHeaders = env.CLOUDFLARE_AI_GATEWAY_TOKEN && apiKey !== env.CLOUDFLARE_AI_GATEWAY_TOKEN ? {
         'cf-aig-authorization': `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`,
@@ -306,7 +316,8 @@ export async function getConfigurationForModel(
     return {
         baseURL,
         apiKey,
-        defaultHeaders
+        defaultHeaders,
+        isUserKey
     };
 }
 
@@ -481,10 +492,15 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
     
     try {
         const userConfig = await getUserConfigurableSettings(env, metadata.userId)
-        // Maybe in the future can expand using config object for other stuff like global model configs?
-        await RateLimitService.enforceLLMCallsRateLimit(env, userConfig.security.rateLimit, metadata.userId, modelName)
 
-        const { apiKey, baseURL, defaultHeaders } = await getConfigurationForModel(modelName, env, metadata.userId, userApiKeys);
+        const { apiKey, baseURL, defaultHeaders, isUserKey } = await getConfigurationForModel(modelName, env, metadata.userId, userApiKeys);
+
+        // BYOK users pay their own provider bill, so platform LLM rate
+        // limits only apply to platform-keyed calls.
+        if (!isUserKey) {
+            // Maybe in the future can expand using config object for other stuff like global model configs?
+            await RateLimitService.enforceLLMCallsRateLimit(env, userConfig.security.rateLimit, metadata.userId, modelName)
+        }
         console.log(`baseUrl: ${baseURL}, modelName: ${modelName}`);
 
         // Remove [*.] from model name
