@@ -117,6 +117,37 @@ jobs:
           # via this workflow's run logs + the post-deploy job summary.
           ./node_modules/.bin/wrangler deploy -c "$BUILT_WRANGLER_CONFIG"
 
+      - name: Purge edge cache
+        # The zone has a cache-everything rule (marketing pages) that pins SPA
+        # HTML at the edge across deploys, serving stale bundle references.
+        # The worker now sends no-store on app HTML, but any entries cached
+        # before that (or marketing HTML itself) must be purged per deploy.
+        # Non-fatal: requires Zone.Cache Purge permission on the API token —
+        # if absent, this warns instead of failing the deploy.
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          zone_id=$(curl --silent --max-time 15 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones?name=getdreamforge.com" \
+            | grep -o '"id":"[0-9a-f]\{32\}"' | head -1 | cut -d'"' -f4)
+          if [ -z "$zone_id" ]; then
+            echo "::warning::Could not resolve zone id for getdreamforge.com — cache not purged. Grant the token Zone:Read + Cache Purge."
+            exit 0
+          fi
+          result=$(curl --silent --max-time 15 -X POST \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' \
+            "https://api.cloudflare.com/client/v4/zones/$zone_id/purge_cache")
+          if echo "$result" | grep -q '"success":true'; then
+            echo "Edge cache purged for getdreamforge.com"
+          else
+            echo "::warning::Cache purge failed — grant the API token Zone.Cache Purge permission. Response: $result"
+          fi
+
       - name: Health check
         id: health
         run: |
