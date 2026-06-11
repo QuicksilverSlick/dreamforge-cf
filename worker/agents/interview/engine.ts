@@ -238,6 +238,7 @@ export function toPayload(question: QuestionDef, derived: DerivedState): Questio
         kind: question.kind,
         chips: question.chips ?? [],
         skippable: question.skippable,
+        delegatable: question.delegate !== undefined,
         prefill: question.prefill?.(derived),
     };
 }

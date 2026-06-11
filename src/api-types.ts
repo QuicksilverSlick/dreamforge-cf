@@ -302,3 +302,16 @@ export {
 
 // Sandbox template details (used by features/core/types)
 export type { TemplateDetails } from 'worker/services/sandbox/sandboxTypes';
+
+// Intake interview ("21 Questions")
+export type {
+  InterviewStateData,
+  StartInterviewRequest,
+  SubmitAnswerRequest
+} from 'worker/api/controllers/interview/types';
+export type {
+  InterviewAnswer,
+  InterviewSpec,
+  InterviewSummary,
+  QuestionPayload as InterviewQuestion
+} from 'worker/agents/interview/types';

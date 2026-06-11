@@ -139,6 +139,8 @@ export interface QuestionPayload {
     kind: QuestionKind;
     chips: ChipOption[];
     skippable: boolean;
+    /** True when the question has a "You decide" default to delegate to. */
+    delegatable: boolean;
     /** Pre-filled suggestion for free-text questions (e.g. app name). */
     prefill?: string;
 }
