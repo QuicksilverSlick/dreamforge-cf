@@ -627,6 +627,12 @@ export const userSecrets = sqliteTable('user_secrets', {
     providerIdx: index('user_secrets_provider_idx').on(table.provider),
     userProviderIdx: index('user_secrets_user_provider_idx').on(table.userId, table.provider, table.secretType),
     activeIdx: index('user_secrets_active_idx').on(table.isActive),
+    // BYOK provider-key slots hold exactly one row per user; the inference
+    // lookup resolves by (userId, secretType) and relies on uniqueness.
+    // Partial so non-BYOK secret types may still hold multiple rows.
+    byokSlotUnique: uniqueIndex('user_secrets_byok_slot_unique')
+        .on(table.userId, table.secretType)
+        .where(sql`secret_type LIKE '%\\_BYOK' ESCAPE '\\'`),
 }));
 
 // ========================================

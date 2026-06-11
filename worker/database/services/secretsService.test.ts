@@ -69,6 +69,8 @@ describe('SecretsService BYOK', () => {
             .first<{ encrypted_value: string }>();
         expect(row).not.toBeNull();
         expect(row!.encrypted_value).not.toContain(USER_A_OPENAI_KEY);
+        // Versioned blob format so master-key rotation / KDF migration stays possible.
+        expect(row!.encrypted_value.startsWith('v1:')).toBe(true);
     });
 
     it('round-trips the key through the BYOK lookup paths for the owner', async () => {
@@ -127,10 +129,19 @@ describe('SecretsService BYOK', () => {
     it('upserts BYOK keys: storing twice keeps one row with the new value', async () => {
         const service = new SecretsService(env);
         const first = await storeOpenAIByokKey(service, USER_A, USER_A_OPENAI_KEY);
+
+        // Simulate prior usage so replacement can prove it resets the stats.
+        await env.DB.prepare('UPDATE user_secrets SET usage_count = 5 WHERE id = ?')
+            .bind(first.id)
+            .run();
+
         const replacementKey = 'sk-proj-test-user-a-openai-key-000000000002';
         const second = await storeOpenAIByokKey(service, USER_A, replacementKey);
 
         expect(second.id).toBe(first.id);
+        // The stats describe the credential, so a new credential starts over.
+        expect(second.usageCount).toBe(0);
+        expect(second.lastUsed).toBeNull();
         const count = await env.DB.prepare(
             'SELECT COUNT(*) AS n FROM user_secrets WHERE user_id = ? AND secret_type = ?'
         )
@@ -139,6 +150,63 @@ describe('SecretsService BYOK', () => {
         expect(count!.n).toBe(1);
 
         expect(await service.getUserBYOKKeyForProvider(USER_A, 'openai')).toBe(replacementKey);
+    });
+
+    it('enforces one row per BYOK slot at the database level', async () => {
+        const service = new SecretsService(env);
+        const stored = await storeOpenAIByokKey(service, USER_A, USER_A_OPENAI_KEY);
+
+        // A raw duplicate insert (the concurrent-store race) must hit the
+        // partial unique index rather than silently creating a second row.
+        await expect(
+            env.DB.prepare(
+                `INSERT INTO user_secrets (id, user_id, name, provider, secret_type, encrypted_value, key_preview, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 1)`
+            )
+                .bind('duplicate-row', USER_A, 'dup', 'openai', OPENAI_BYOK_TEMPLATE_TYPE, 'v1:bogus', 'sk-**', )
+                .run()
+        ).rejects.toThrow(/UNIQUE/i);
+
+        expect(stored.id).toBeTruthy();
+    });
+
+    it('rejects non-template writes into a BYOK slot', async () => {
+        const service = new SecretsService(env);
+
+        await expect(
+            service.storeSecret(USER_A, {
+                name: 'sneaky custom secret',
+                provider: 'custom',
+                secretType: OPENAI_BYOK_TEMPLATE_TYPE,
+                value: 'not-an-openai-key',
+                description: null,
+                expiresAt: null,
+            })
+        ).rejects.toThrow(/reserved/);
+    });
+
+    it('never decrypts a ciphertext swapped onto a different slot of the same user', async () => {
+        const service = new SecretsService(env);
+        const stored = await storeOpenAIByokKey(service, USER_A, USER_A_OPENAI_KEY);
+
+        const row = await env.DB.prepare(
+            'SELECT encrypted_value FROM user_secrets WHERE id = ?'
+        )
+            .bind(stored.id)
+            .first<{ encrypted_value: string }>();
+
+        // Same user, different slot: the OpenAI ciphertext lands on the
+        // Anthropic row. The AAD binds (user, slot), so the key can never be
+        // sent to the wrong provider.
+        await env.DB.prepare(
+            `INSERT INTO user_secrets (id, user_id, name, provider, secret_type, encrypted_value, key_preview, is_active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1)`
+        )
+            .bind('swapped-slot-row', USER_A, 'Anthropic (BYOK)', 'anthropic', 'ANTHROPIC_API_KEY_BYOK', row!.encrypted_value, 'sk-**')
+            .run();
+
+        expect(await service.getUserBYOKKeyForProvider(USER_A, 'anthropic')).toBeNull();
+        await expect(service.getSecretValue(USER_A, 'swapped-slot-row')).rejects.toThrow();
     });
 
     it('excludes deactivated and expired keys from the inference lookup', async () => {

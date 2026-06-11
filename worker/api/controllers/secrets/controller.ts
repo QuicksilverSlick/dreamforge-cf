@@ -13,7 +13,7 @@ import {
     SecretDeleteData,
     SecretTemplatesData,
 } from './types';
-import { getTemplatesData } from '../../../types/secretsTemplates';
+import { getTemplatesData, getBYOKTemplates } from '../../../types/secretsTemplates';
 
 export class SecretsController extends BaseController {
 
@@ -96,6 +96,13 @@ export class SecretsController extends BaseController {
                 // Validate environment variable name format
                 if (!/^[A-Z][A-Z0-9_]*$/.test(envVarName)) {
                     return SecretsController.createErrorResponse<SecretStoreData>('Environment variable name must be uppercase and contain only letters, numbers, and underscores', 400);
+                }
+
+                // BYOK slots carry provider-specific value validation; a
+                // custom secret must not be able to claim one and bypass it.
+                const normalizedEnvVarName = envVarName.trim().toUpperCase();
+                if (getBYOKTemplates().some(t => t.envVarName === normalizedEnvVarName)) {
+                    return SecretsController.createErrorResponse<SecretStoreData>(`${normalizedEnvVarName} is reserved for a provider key template. Store this key through its template instead.`, 400);
                 }
 
                 secretData = {
