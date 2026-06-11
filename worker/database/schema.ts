@@ -636,6 +636,30 @@ export const userSecrets = sqliteTable('user_secrets', {
 }));
 
 // ========================================
+// INTAKE INTERVIEW SESSIONS
+// ========================================
+
+/**
+ * Intake interview sessions ("21 Questions"). Short-lived, one row per
+ * session, the engine state stored as a JSON blob. Lives in D1 (not KV)
+ * because every chip click writes the session and the very next request
+ * reads it back — eventual consistency serves stale questions.
+ */
+export const interviewSessions = sqliteTable('interview_sessions', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    data: text('data').notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    userIdx: index('interview_sessions_user_idx').on(table.userId),
+    expiresIdx: index('interview_sessions_expires_idx').on(table.expiresAt),
+}));
+
+export type InterviewSessionRow = typeof interviewSessions.$inferSelect;
+
+// ========================================
 // USER MODEL CONFIGURATIONS
 // ========================================
 

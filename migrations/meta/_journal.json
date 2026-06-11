@@ -50,6 +50,13 @@
       "when": 1781196212006,
       "tag": "0006_boring_the_executioner",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1781220440025,
+      "tag": "0007_past_mephisto",
+      "breakpoints": true
     }
   ]
 }
