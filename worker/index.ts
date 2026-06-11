@@ -199,7 +199,22 @@ const worker = {
 		if (isMainDomainRequest) {
 			// Serve static assets for all non-API routes from the ASSETS binding.
 			if (!pathname.startsWith('/api/')) {
-				return env.ASSETS.fetch(request);
+				const assetResponse = await env.ASSETS.fetch(request);
+				// The zone's cache-everything rule (added for the marketing
+				// pages) pins SPA HTML at the edge across deploys, serving
+				// stale fingerprinted bundle references. no-store keeps the
+				// edge from caching app HTML; hashed assets stay cacheable.
+				const contentType = assetResponse.headers.get('Content-Type') ?? '';
+				if (contentType.includes('text/html')) {
+					const headers = new Headers(assetResponse.headers);
+					headers.set('Cache-Control', 'no-store');
+					return new Response(assetResponse.body, {
+						status: assetResponse.status,
+						statusText: assetResponse.statusText,
+						headers,
+					});
+				}
+				return assetResponse;
 			}
 			// AI Gateway proxy for generated apps.
 			//
