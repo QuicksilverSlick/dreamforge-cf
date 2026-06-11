@@ -462,8 +462,11 @@ export function useChat({
 							try {
 								const partial = parser.finalize();
 								setBlueprint(partial);
-							} catch (e) {
-								logger.error('Error parsing JSON:', e, obj.chunk);
+							} catch {
+								// A partial streamed chunk is often unrepairable until
+								// more data arrives — the next chunk retries, and the
+								// post-stream finalize below is the authoritative parse.
+								logger.debug('Blueprint chunk not yet parseable, awaiting more data');
 							}
 						} 
 						if (obj.agentId) {
@@ -479,6 +482,14 @@ export function useChat({
 							if (obj.template.files) {
 								loadBootstrapFiles(obj.template.files);
 							}
+						}
+					}
+
+					if (startedBlueprintStream) {
+						try {
+							setBlueprint(parser.finalize());
+						} catch (e) {
+							logger.error('Error parsing blueprint after stream completion:', e);
 						}
 					}
 
