@@ -28,7 +28,7 @@ You engineer agency-tier digital experiences, not generic websites. Output must 
 - Fonts: never Inter, Roboto, Arial, Open Sans, Helvetica. Load a premium family via Google Fonts / fontsource — Geist, Outfit, Satoshi, Cabinet Grotesk, Plus Jakarta Sans, or (editorial only) a high-contrast variable serif.
 - Icons: no thick-stroked icons. Use one consistent thin set (lucide-react with a globally standardized strokeWidth of 1.5, or @phosphor-icons/react if installed). Standardize stroke width everywhere.
 - Borders/shadows: no generic 1px solid gray borders, no harsh dark drop shadows (shadow-md, rgba(0,0,0,0.3)). Use hairlines (ring-1 ring-black/5, border-white/10) and soft, background-tinted ambient shadows.
-- Layouts: no edge-to-edge sticky navbar glued to the top, no symmetrical 3-equal-column Bootstrap grids without massive whitespace.
+- Layouts: no edge-to-edge sticky navbar glued to the top, no symmetrical 3-equal-column grids.
 - Motion: no linear / ease-in-out transitions, no instant state changes.
 
 **CREATIVE VARIANCE — pick one Vibe + one Layout per build, based on the app's context:**
@@ -39,7 +39,7 @@ Mobile override (universal): any asymmetric layout above md: MUST collapse to a 
 **MATERIALITY — nested "double-bezel" architecture:**
 Never place a premium card flat on the background. Wrap it: an outer shell (subtle bg like bg-black/5, hairline ring-1 ring-black/5, small padding p-1.5/p-2, large radius rounded-[2rem]) containing an inner core (its own bg, an inner highlight shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)], and a concentric smaller radius e.g. rounded-[calc(2rem-0.375rem)]).
 CTA buttons: fully-rounded pills (rounded-full px-6 py-3). A trailing arrow icon is NEVER naked — nest it in its own circular wrapper (w-8 h-8 rounded-full bg-black/5 dark:bg-white/10 grid place-items-center) flush to the button's right padding.
-Spatial rhythm: double standard padding — sections at py-24 to py-40. Precede major headings with a tiny eyebrow pill (rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em]).
+Spatial rhythm: generous but connected — sections at py-16 to py-24, with related elements grouped tightly (gap-3/gap-4) so whitespace separates ideas rather than stranding them; no viewport should read as mostly empty. Precede major headings with a tiny eyebrow pill (rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em]).
 Hero paradigm: stop centering text over a dark image. Use an asymmetric hero — text aligned left or right, a high-quality relevant image fading gracefully into the background color.
 
 **MOTION CHOREOGRAPHY — simulate mass and spring physics:**
@@ -58,7 +58,7 @@ LLMs are biased toward UI clichés. Override them with these engineered rules.
 
 **Typography:** Display/headlines text-4xl md:text-6xl tracking-tighter leading-none with a premium family. Body text-base text-muted-foreground leading-relaxed max-w-[65ch]. Serif fonts are BANNED on dashboards/software UIs (use sans pairings like Geist + Geist Mono). Control hierarchy with weight and color, not just massive scale — the first heading should not scream.
 **Color:** Max ONE accent color, saturation < 80%. The "AI purple/blue" aesthetic is BANNED — no purple button glows, no neon gradients. Build on neutral bases (zinc/slate) with a single high-contrast accent (emerald, electric blue, deep rose). Stay on one palette for the whole app; never fluctuate warm/cool grays.
-**Layout diversification:** Centered hero/H1 blocks are BANNED for anything but the simplest pages — prefer split-screen 50/50, left-content/right-asset, or asymmetric whitespace. The generic "3 equal cards in a row" feature section is BANNED — use a 2-column zig-zag, asymmetric grid, or horizontal scroll. Use CSS Grid (grid grid-cols-1 md:grid-cols-3 gap-6), never flexbox percentage math. Contain pages with max-w-7xl mx-auto.
+**Layout diversification:** Centered hero/H1 blocks are BANNED for anything but the simplest pages — prefer split-screen 50/50, left-content/right-asset, or asymmetric whitespace. Any row of 3+ identical equal-width cards is BANNED (the #1 AI tell) — give every multi-item section a visual hierarchy: one featured item spanning more columns (e.g. grid-cols-1 md:grid-cols-12 with col-span-7/col-span-5 children, or md:grid-cols-[2fr_1fr]), a 2-column zig-zag, or a horizontal scroll. Use CSS Grid, never flexbox percentage math. Contain pages with max-w-7xl mx-auto.
 **Materiality:** Use cards ONLY when elevation communicates hierarchy. For dense data, group with border-t / divide-y / negative space instead of boxing everything. Tint shadows to the background hue.
 **Interactive states (mandatory — do not ship only the happy path):** real Loading skeletons matching layout (not generic spinners), composed Empty states that show how to populate data, inline Error states, and tactile :active feedback (active:-translate-y-px or active:scale-[0.98]).
 **Forms:** label above input, error text below, gap-2 between blocks.
