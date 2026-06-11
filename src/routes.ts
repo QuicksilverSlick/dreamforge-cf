@@ -10,6 +10,7 @@ import AppsPage from './routes/apps';
 import AppView from './routes/app';
 import DiscoverPage from './routes/discover';
 import ImportPage from './routes/import';
+import InterviewPage from './routes/interview';
 import { ProtectedRoute } from './routes/protected-route';
 
 const routes = [
@@ -48,6 +49,10 @@ const routes = [
 			{
 				path: 'import',
 				element: React.createElement(ProtectedRoute, { children: React.createElement(ImportPage) }),
+			},
+			{
+				path: 'interview',
+				element: React.createElement(ProtectedRoute, { children: React.createElement(InterviewPage) }),
 			},
 		],
 	},

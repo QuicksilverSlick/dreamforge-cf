@@ -16,6 +16,10 @@ import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ImageUploadButton } from '@/components/image-upload-button';
 import { ImageAttachmentPreview } from '@/components/image-attachment-preview';
 import { SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
+import { Switch } from '@/components/ui/switch';
+import { Sparkles } from 'lucide-react';
+
+const INTERVIEW_PREF_KEY = 'dreamforge:interview-enabled';
 
 export default function Home() {
 	const navigate = useNavigate();
@@ -24,6 +28,14 @@ export default function Home() {
 	const [agentMode, setAgentMode] = useState<AgentMode>('deterministic');
 	const [query, setQuery] = useState('');
 	const { user } = useAuth();
+	// The intake interview is on by default; the preference sticks per browser.
+	const [interviewEnabled, setInterviewEnabled] = useState(
+		() => localStorage.getItem(INTERVIEW_PREF_KEY) !== 'off',
+	);
+	const toggleInterview = (enabled: boolean) => {
+		setInterviewEnabled(enabled);
+		localStorage.setItem(INTERVIEW_PREF_KEY, enabled ? 'on' : 'off');
+	};
 
 	const { images, addImages, removeImage, clearImages, isProcessing } = useImageUpload({
 		onError: (error) => {
@@ -63,10 +75,14 @@ export default function Home() {
 	const handleCreateApp = (query: string, mode: AgentMode) => {
 		const encodedQuery = encodeURIComponent(query);
 		const encodedMode = encodeURIComponent(mode);
-		
+
 		// Encode images as JSON if present
 		const imageParam = images.length > 0 ? `&images=${encodeURIComponent(JSON.stringify(images))}` : '';
-		const intendedUrl = `/chat/new?query=${encodedQuery}&agentMode=${encodedMode}${imageParam}`;
+		// Interview-first by default: the idea seeds the interview, which hands
+		// an enriched build brief to /chat/new when it finishes.
+		const intendedUrl = interviewEnabled
+			? `/interview?query=${encodedQuery}&agentMode=${encodedMode}${imageParam}`
+			: `/chat/new?query=${encodedQuery}&agentMode=${encodedMode}${imageParam}`;
 
 		if (
 			!requireAuth({
@@ -261,6 +277,24 @@ export default function Home() {
 							</div>
 							</div>
 						</form>
+
+						{/* Interview toggle — obvious, default on, sticks per browser */}
+						<div className="flex items-center justify-between w-full mt-3 px-2">
+							<div className="flex items-center gap-2">
+								<Sparkles className="size-3.5 text-accent" />
+								<span className="text-xs text-text-secondary">
+									<span className="font-medium">Quick interview:</span>{' '}
+									{interviewEnabled
+										? 'on — a few quick questions for a much better first build'
+										: 'off — build straight from your prompt'}
+								</span>
+							</div>
+							<Switch
+								checked={interviewEnabled}
+								onCheckedChange={toggleInterview}
+								aria-label="Toggle the quick interview before building"
+							/>
+						</div>
 					</motion.div>
 
 				</div>

@@ -56,7 +56,9 @@ import type{
     AgentPreviewResponse,
     PlatformStatusData,
     RateLimitError,
-    CapabilitiesData
+    CapabilitiesData,
+    InterviewStateData,
+    InterviewAnswer
 } from '@/api-types';
 import {
 
@@ -863,6 +865,50 @@ class ApiClient {
 		return this.request<ModelProviderTestData>('/api/user/providers/test', {
 			method: 'POST',
 			body: data,
+		});
+	}
+
+	// ===============================
+	// Intake Interview API Methods
+	// ===============================
+
+	/**
+	 * Start an intake interview; the user's prompt seeds the triage pass.
+	 */
+	async startInterview(query: string): Promise<ApiResponse<InterviewStateData>> {
+		return this.request<InterviewStateData>('/api/interview', {
+			method: 'POST',
+			body: { query },
+		});
+	}
+
+	/**
+	 * Resume an interview session (e.g. after a page refresh).
+	 */
+	async getInterviewSession(sessionId: string): Promise<ApiResponse<InterviewStateData>> {
+		return this.request<InterviewStateData>(`/api/interview/${sessionId}`);
+	}
+
+	/**
+	 * Answer the open interview question, or revise an earlier answer.
+	 */
+	async submitInterviewAnswer(
+		sessionId: string,
+		questionId: string,
+		answer: InterviewAnswer,
+	): Promise<ApiResponse<InterviewStateData>> {
+		return this.request<InterviewStateData>(`/api/interview/${sessionId}/answer`, {
+			method: 'POST',
+			body: { questionId, answer },
+		});
+	}
+
+	/**
+	 * "Just build it" — synthesize the spec from whatever has been answered.
+	 */
+	async finishInterview(sessionId: string): Promise<ApiResponse<InterviewStateData>> {
+		return this.request<InterviewStateData>(`/api/interview/${sessionId}/finish`, {
+			method: 'POST',
 		});
 	}
 
