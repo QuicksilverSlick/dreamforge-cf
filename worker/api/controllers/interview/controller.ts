@@ -20,30 +20,19 @@ import {
 } from '../../../agents/interview/engine';
 import { runTriage } from '../../../agents/interview/triage';
 import { runSynthesis } from '../../../agents/interview/synthesis';
+import { InterviewSessionService } from '../../../database/services/InterviewSessionService';
 import type { InterviewSession } from '../../../agents/interview/types';
 import type { InferenceContext } from '../../../agents/inferutils/config.types';
 import type { ApiResponse, ControllerResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import type { InterviewStateData, StartInterviewRequest, SubmitAnswerRequest } from './types';
 
-const SESSION_TTL_SECONDS = 60 * 60;
-
-function sessionKey(sessionId: string): string {
-    return `interview:${sessionId}`;
-}
-
 async function loadSession(env: Env, sessionId: string, userId: string): Promise<InterviewSession | null> {
-    const raw = await env.VibecoderStore.get(sessionKey(sessionId));
-    if (!raw) return null;
-    const session = JSON.parse(raw) as InterviewSession;
-    if (session.userId !== userId) return null;
-    return session;
+    return new InterviewSessionService(env).getSession(sessionId, userId);
 }
 
 async function saveSession(env: Env, session: InterviewSession): Promise<void> {
-    await env.VibecoderStore.put(sessionKey(session.id), JSON.stringify(session), {
-        expirationTtl: SESSION_TTL_SECONDS,
-    });
+    await new InterviewSessionService(env).putSession(session);
 }
 
 function buildInferenceContext(sessionId: string, userId: string): InferenceContext {
@@ -97,9 +86,10 @@ export class InterviewController extends BaseController {
      * POST /api/interview — start a session. The landing-box prompt seeds the
      * triage pass so already-answered questions are never asked.
      */
-    static async startInterview(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<InterviewStateData>>> {
+    static async startInterview(request: Request, env: Env, ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<InterviewStateData>>> {
         try {
             const user = context.user!;
+            ctx.waitUntil(new InterviewSessionService(env).deleteExpired());
             const bodyResult = await InterviewController.parseJsonBody<StartInterviewRequest>(request);
             if (!bodyResult.success) {
                 return bodyResult.response! as ControllerResponse<ApiResponse<InterviewStateData>>;
