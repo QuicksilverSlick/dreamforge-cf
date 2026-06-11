@@ -16,7 +16,7 @@ import {
 import { Message, MessageContent, MessageRole } from './common';
 import { ToolCallResult, ToolDefinition } from '../tools/types';
 import { AgentActionKey, AIModels, InferenceMetadata } from './config.types';
-// import { SecretsService } from '../../database';
+import { SecretsService } from '../../database';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { getUserConfigurableSettings } from '../../config';
 import { SecurityError, RateLimitExceededError } from 'shared/types/errors';
@@ -224,42 +224,60 @@ function isValidApiKey(apiKey: string): boolean {
     return true;
 }
 
-async function getApiKey(provider: string, env: Env, _userId: string): Promise<string> {
+type ResolvedApiKey = {
+    apiKey: string;
+    /**
+     * Where the key came from. Only 'byok' (a stored, template-validated,
+     * owner-bound key) is treated as user-funded for rate-limit purposes;
+     * runtime-supplied keys are weakly validated and stay rate-limited.
+     */
+    keySource: 'runtime' | 'byok' | 'platform';
+};
+
+async function getApiKey(provider: string, env: Env, userId: string, userApiKeys?: Record<string, string>): Promise<ResolvedApiKey> {
     console.log("Getting API key for provider: ", provider);
-    // try {
-    //     const secretsService = new SecretsService(env);
-    //     const userProviderKeys = await secretsService.getUserBYOKKeysMap(userId);
-    //     // First check if user has a custom API key for this provider
-    //     if (userProviderKeys && provider in userProviderKeys) {
-    //         const userKey = userProviderKeys.get(provider);
-    //         if (userKey && isValidApiKey(userKey)) {
-    //             console.log("Found user API key for provider: ", provider, userKey);
-    //             return userKey;
-    //         }
-    //     }
-    // } catch (error) {
-    //     console.error("Error getting API key for provider: ", provider, error);
-    // }
+    // Runtime-supplied keys (e.g. model-config tests) take precedence over
+    // any stored key. The key value itself is never logged.
+    const runtimeKey = userApiKeys?.[provider];
+    if (runtimeKey && isValidApiKey(runtimeKey)) {
+        console.log("Using runtime-supplied API key for provider: ", provider);
+        return { apiKey: runtimeKey, keySource: 'runtime' };
+    }
+    // BYOK: prefer the user's own provider key when one is stored and active.
+    // Lookup failures fall through to platform keys so a secrets outage can
+    // never take down inference.
+    try {
+        const secretsService = new SecretsService(env);
+        const userKey = await secretsService.getUserBYOKKeyForProvider(userId, provider);
+        if (userKey && isValidApiKey(userKey)) {
+            console.log("Using user BYOK key for provider: ", provider);
+            return { apiKey: userKey, keySource: 'byok' };
+        }
+    } catch (error) {
+        console.error("Error getting user BYOK key for provider: ", provider, error);
+    }
     // Fallback to environment variables
     const providerKeyString = provider.toUpperCase().replaceAll('-', '_');
     const envKey = `${providerKeyString}_API_KEY` as keyof Env;
     let apiKey: string = env[envKey] as string;
-    
+
     // Check if apiKey is empty or undefined and is valid
     if (!isValidApiKey(apiKey)) {
         apiKey = env.CLOUDFLARE_AI_GATEWAY_TOKEN;
     }
-    return apiKey;
+    return { apiKey, keySource: 'platform' };
 }
 
 export async function getConfigurationForModel(
-    model: AIModels | string, 
-    env: Env, 
+    model: AIModels | string,
+    env: Env,
     userId: string,
+    userApiKeys?: Record<string, string>,
 ): Promise<{
     baseURL: string,
     apiKey: string,
     defaultHeaders?: Record<string, string>,
+    keySource: ResolvedApiKey['keySource'],
 }> {
     let providerForcedOverride: AIGatewayProviders | undefined;
     // Check if provider forceful-override is set
@@ -270,16 +288,19 @@ export async function getConfigurationForModel(
             return {
                 baseURL: 'https://openrouter.ai/api/v1',
                 apiKey: env.OPENROUTER_API_KEY,
+                keySource: 'platform',
             };
         } else if (provider === 'gemini') {
             return {
                 baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
                 apiKey: env.GOOGLE_AI_STUDIO_API_KEY,
+                keySource: 'platform',
             };
         } else if (provider === 'claude') {
             return {
                 baseURL: 'https://api.anthropic.com/v1/',
                 apiKey: env.ANTHROPIC_API_KEY,
+                keySource: 'platform',
             };
         }
         providerForcedOverride = provider as AIGatewayProviders;
@@ -291,7 +312,7 @@ export async function getConfigurationForModel(
     const provider = providerForcedOverride || model.split('/')[0];
     // Try to find API key of type <PROVIDER>_API_KEY else default to CLOUDFLARE_AI_GATEWAY_TOKEN
     // `env` is an interface of type `Env`
-    const apiKey = await getApiKey(provider, env, userId);
+    const { apiKey, keySource } = await getApiKey(provider, env, userId, userApiKeys);
     // AI Gateway Wholesaling checks
     const defaultHeaders = env.CLOUDFLARE_AI_GATEWAY_TOKEN && apiKey !== env.CLOUDFLARE_AI_GATEWAY_TOKEN ? {
         'cf-aig-authorization': `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`,
@@ -299,7 +320,8 @@ export async function getConfigurationForModel(
     return {
         baseURL,
         apiKey,
-        defaultHeaders
+        defaultHeaders,
+        keySource
     };
 }
 
@@ -447,6 +469,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
     tools,
     reasoning_effort,
     temperature,
+    userApiKeys,
 }: InferArgsBase & {
     schema?: OutputSchema;
     schemaName?: string;
@@ -473,10 +496,16 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
     
     try {
         const userConfig = await getUserConfigurableSettings(env, metadata.userId)
-        // Maybe in the future can expand using config object for other stuff like global model configs?
-        await RateLimitService.enforceLLMCallsRateLimit(env, userConfig.security.rateLimit, metadata.userId, modelName)
 
-        const { apiKey, baseURL, defaultHeaders } = await getConfigurationForModel(modelName, env, metadata.userId);
+        const { apiKey, baseURL, defaultHeaders, keySource } = await getConfigurationForModel(modelName, env, metadata.userId, userApiKeys);
+
+        // Stored BYOK keys are user-funded, so the platform LLM rate limit
+        // doesn't apply. Runtime-supplied keys are only weakly validated and
+        // remain rate-limited.
+        if (keySource !== 'byok') {
+            // Maybe in the future can expand using config object for other stuff like global model configs?
+            await RateLimitService.enforceLLMCallsRateLimit(env, userConfig.security.rateLimit, metadata.userId, modelName)
+        }
         console.log(`baseUrl: ${baseURL}, modelName: ${modelName}`);
 
         // Remove [*.] from model name
@@ -747,6 +776,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                         tools,
                         reasoning_effort,
                         temperature,
+                        userApiKeys,
                     }, newToolCallContext);
                     return output;
                 } else {
@@ -761,6 +791,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                         tools,
                         reasoning_effort,
                         temperature,
+                        userApiKeys,
                     }, newToolCallContext);
                     return output;
                 }
