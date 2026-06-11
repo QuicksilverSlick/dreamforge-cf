@@ -150,6 +150,23 @@ export const AGENT_CONFIG: AgentConfig = {
         temperature: 0,
         fallbackModel: AIModels.GEMINI_3_1_FLASH_LITE,
     },
+    // Intake interview (21 Questions): triage extracts what the first prompt
+    // already answered; synthesis folds answers into the build spec. Both are
+    // single structured-output calls outside the generation loop.
+    interviewTriage: {
+        name: AIModels.GEMINI_3_1_FLASH_LITE,
+        reasoning_effort: 'low',
+        max_tokens: 4000,
+        temperature: 0,
+        fallbackModel: AIModels.GEMINI_3_5_FLASH,
+    },
+    interviewSynthesis: {
+        name: AIModels.GEMINI_3_5_FLASH,
+        reasoning_effort: 'low',
+        max_tokens: 8000,
+        temperature: 0.2,
+        fallbackModel: AIModels.GEMINI_3_1_FLASH_LITE,
+    },
     codeReview: {
         name: AIModels.GEMINI_3_5_FLASH,
         reasoning_effort: 'medium',
