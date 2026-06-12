@@ -66,6 +66,15 @@ async function finishSession(env: Env, session: InterviewSession): Promise<void>
     session.state.currentQuestionId = null;
     if (!session.spec) {
         session.spec = await runSynthesis(env, buildInferenceContext(session.id, session.userId), session);
+        // Synthesis is slow enough for the background reference-site
+        // ingestion to land mid-flight; re-graft its result so the save
+        // that follows cannot clobber the freshly written profile.
+        if (!session.referenceSite) {
+            const fresh = await loadSession(env, session.id, session.userId);
+            if (fresh?.referenceSite) {
+                session.referenceSite = fresh.referenceSite;
+            }
+        }
     }
 }
 

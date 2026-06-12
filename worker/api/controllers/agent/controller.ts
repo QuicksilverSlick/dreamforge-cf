@@ -10,6 +10,7 @@ import { ModelConfigService } from '../../../database';
 import { ModelConfig } from '../../../agents/inferutils/config.types';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { InterviewSessionService } from '../../../database/services/InterviewSessionService';
+import { extractUrlFromText } from '../../../services/referenceSite/urlSafety';
 import { validateWebSocketOrigin } from '../../../middleware/security/websocket';
 import { createLogger } from '../../../logger';
 import { getPreviewDomain } from 'worker/utils/urls';
@@ -129,6 +130,29 @@ export class CodingAgentController extends BaseController {
             }
 
             const { sandboxSessionId, templateDetails, selection } = await getTemplateForQuery(env, inferenceContext, query, body.images, this.logger);
+
+            // The reference-site profile is written by a background ingestion
+            // that can land seconds after the user finishes the interview —
+            // template selection above bought it time. When the spec points
+            // at a reference site the first read did not carry, re-read the
+            // session (one immediate attempt, one short retry) before
+            // proceeding without it.
+            if (body.interviewSessionId && interviewSpec && !referenceSite &&
+                interviewSpec.lookAndFeel && extractUrlFromText(interviewSpec.lookAndFeel)) {
+                for (let attempt = 0; attempt < 2 && !referenceSite; attempt++) {
+                    if (attempt > 0) {
+                        await new Promise((resolve) => setTimeout(resolve, 5000));
+                    }
+                    const fresh = await new InterviewSessionService(env).getSession(body.interviewSessionId, user.id);
+                    referenceSite = fresh?.referenceSite ?? null;
+                    interviewSpec = fresh?.spec ?? interviewSpec;
+                }
+                if (!referenceSite) {
+                    this.logger.warn('Reference-site profile still absent after retries; building without it', {
+                        interviewSessionId: body.interviewSessionId,
+                    });
+                }
+            }
 
             const websocketUrl = `${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}/api/agent/${agentId}/ws`;
             const httpStatusUrl = `${url.origin}/api/agent/${agentId}`;
