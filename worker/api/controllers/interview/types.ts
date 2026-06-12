@@ -8,6 +8,7 @@ import type {
     InterviewSpec,
     InterviewSummary,
     QuestionPayload,
+    TranscriptEntry,
 } from '../../../agents/interview/types';
 
 export interface StartInterviewRequest {
@@ -23,6 +24,8 @@ export interface InterviewStateData {
     sessionId: string;
     done: boolean;
     question: QuestionPayload | null;
+    /** Answered questions in ask order — survives page reloads. */
+    transcript: TranscriptEntry[];
     progress: InterviewProgress;
     summary: InterviewSummary;
     /** Question ids answered by triage from the initial prompt. */
