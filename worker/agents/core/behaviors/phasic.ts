@@ -793,6 +793,13 @@ export class PhasicCodingBehavior
             userSuggestions: userContext?.suggestions,
         });
 
+        // Visual-review findings are one-shot: consumed by this generation,
+        // repopulated by the next post-deploy screenshot analysis.
+        const screenshotFeedback = this.state.screenshotFeedback?.issues;
+        if (this.state.screenshotFeedback) {
+            this.setState({ ...this.state, screenshotFeedback: null });
+        }
+
         const result = await this.operations.generateNextPhase.execute(
             {
                 issues,
@@ -802,6 +809,7 @@ export class PhasicCodingBehavior
                     userContext.suggestions.length > 0 &&
                     this.state.mvpGenerated,
                 repeatedPhaseWarning: this.detectRepeatedPhases(),
+                screenshotFeedback,
             },
             this.getOperationOptions(),
         );

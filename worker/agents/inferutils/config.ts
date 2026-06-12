@@ -181,7 +181,8 @@ export const AGENT_CONFIG: AgentConfig = {
         temperature: 0,
         fallbackModel: AIModels.GEMINI_2_5_PRO,
     },
-    // Not used right now
+    // Visual review of post-deploy preview screenshots; findings feed the
+    // next phase generation (behaviors/base.ts queueScreenshotAnalysis).
     screenshotAnalysis: {
         name: AIModels.GEMINI_3_5_FLASH,
         reasoning_effort: 'medium',

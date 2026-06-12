@@ -97,6 +97,16 @@ export interface BaseProjectState {
     /** Template the project was bootstrapped from (`'custom'` for BYOP). */
     templateName: string | 'custom';
 
+    /**
+     * Findings from the latest preview-screenshot analysis, queued for the
+     * next phase generation and cleared once consumed. Optional: absent on
+     * pre-feature states and when the last screenshot reviewed clean.
+     */
+    screenshotFeedback?: {
+        issues: string[];
+        capturedAt: number;
+    } | null;
+
     /** Inference / observability metadata stamped at agent boot. */
     readonly metadata: InferenceMetadata;
 
