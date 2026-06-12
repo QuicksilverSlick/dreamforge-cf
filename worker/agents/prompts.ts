@@ -6,6 +6,7 @@ import { IssueReport } from "./domain/values/IssueReport";
 import { FileState, MAX_PHASES } from "./core/state";
 import { CODE_SERIALIZERS, CodeSerializerType } from "./utils/codeSerializers";
 import { DESIGN_SKILLS_GUIDANCE } from "./prompts/designSkills";
+import { BRAND_ASSETS_MODULE_PATH, brandAssetEntries } from "./assets/brandAssetsFile";
 
 export const PROMPT_UTILS = {
     /**
@@ -1265,10 +1266,15 @@ export function generalSystemPromptBuilder(
 
     // Optional blueprint variables
     if (params.blueprint) {
-        // Redact the initial phase information from blueprint
+        // Redact the initial phase information from the blueprint, and strip
+        // hosted-asset URLs from the serialized manifest — the model must
+        // reach them via the brand-assets module import, never by copying.
         const blueprint = {
             ...params.blueprint,
             initialPhase: undefined,
+            imageAssets: params.blueprint.imageAssets
+                ? params.blueprint.imageAssets.map((asset) => ({ ...asset, url: null }))
+                : params.blueprint.imageAssets,
         }
         // Serialized with the spec-carrying schema so interview requirements
         // (user stories, EARS criteria, capability flags) reach every
@@ -1276,18 +1282,18 @@ export function generalSystemPromptBuilder(
         variables.blueprint = TemplateRegistry.markdown.serialize(blueprint, BlueprintWithSpecSchemaLite);
         variables.blueprintDependencies = params.blueprint.frameworks?.join(', ') ?? '';
 
-        // Generated image assets are hosted at their own URLs (stored in R2,
-        // served via /api/generated/...). The coder otherwise defaults to the
-        // manifest `path` (e.g. treats "public/logo.png" as "/logo.png"), which
-        // does not exist and 404s. Surface the path -> URL mapping explicitly
-        // and imperatively so the exact URL is used as the src.
-        const hostedImages = (params.blueprint.imageAssets ?? []).filter(
-            (asset): asset is typeof asset & { url: string } => Boolean(asset.url),
-        );
-        if (hostedImages.length > 0) {
-            variables.blueprint += `\n\n## GENERATED IMAGE ASSETS — ALREADY HOSTED (use these exact URLs)\n`
-                + `These images are already generated and hosted at the URLs below. Reference each one by its **exact URL** as the \`src\` (e.g. \`<img src="<url>" />\`) or as a CSS \`background-image: url(<url>)\`. The \`path\` is only a logical identifier — that file does NOT exist in the project, so never reference these assets by their path, by \`/<filename>\`, by \`public/...\`, by a local import, or any other local path.\n`
-                + hostedImages.map((asset) => `- \`${asset.path}\` (${asset.purpose}) → ${asset.url}`).join('\n');
+        // Hosted image assets (generated or harvested) live at URLs with
+        // long unguessable ids that models mistranscribe when typing them
+        // into code (corrupted hex → 404s). The pipeline writes the exact
+        // URLs into the brand-assets module; the coder imports by key and
+        // never sees a raw URL it could garble.
+        const hostedEntries = brandAssetEntries(params.blueprint.imageAssets ?? []);
+        if (hostedEntries.length > 0) {
+            variables.blueprint += `\n\n## HOSTED IMAGE ASSETS — import from \`${BRAND_ASSETS_MODULE_PATH}\`, NEVER type URLs\n`
+                + `Real, already-hosted images for this project are exported from \`${BRAND_ASSETS_MODULE_PATH}\` (pipeline-managed — never edit or recreate that file). Use them via \`import { BRAND_ASSETS } from '@/lib/brand-assets'\` and reference by key, e.g. \`<img src={BRAND_ASSETS.logo} />\` or \`style={{ backgroundImage: \`url(\${BRAND_ASSETS.hero})\` }}\`.\n`
+                + `NEVER hand-copy an asset URL into code or markup (their long ids are easy to corrupt and any typo 404s), and never reference these assets by manifest path, \`/<filename>\`, \`public/...\`, or a local file import.\n`
+                + `Available keys:\n`
+                + hostedEntries.map((entry) => `- \`BRAND_ASSETS.${entry.key}\` (${entry.purpose})${entry.description ? ` — ${entry.description.slice(0, 120)}` : ''}`).join('\n');
         }
     }
 

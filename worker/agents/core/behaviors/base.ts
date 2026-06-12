@@ -97,6 +97,7 @@ import type {
     ProjectType,
 } from '../types';
 import { WebSocketMessageResponses } from '../../constants';
+import { BRAND_ASSETS_MODULE_PATH, renderBrandAssetsModule } from '../../assets/brandAssetsFile';
 import { ProjectSetupAssistant } from '../../assistants/projectsetup';
 import { UserConversationProcessor, type RenderToolCall } from '../../operations/UserConversationProcessor';
 import { DeepDebuggerOperation, type DeepDebuggerInputs } from '../../operations/DeepDebugger';
@@ -2179,6 +2180,17 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 imageAssets: updated,
             },
         });
+
+        // Keep the project's brand-assets module in step with the manifest
+        // so newly hosted URLs are importable instead of hand-transcribed.
+        const brandAssetsSource = renderBrandAssetsModule(updated);
+        if (brandAssetsSource) {
+            this.fileManager.saveGeneratedFiles([{
+                filePath: BRAND_ASSETS_MODULE_PATH,
+                fileContents: brandAssetsSource,
+                filePurpose: 'Hosted brand-asset URLs (pipeline-managed, not model-written)',
+            }]);
+        }
     }
 
     protected fetchPendingUserRequests(): string[] {
