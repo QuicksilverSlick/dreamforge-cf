@@ -135,6 +135,7 @@ export default function Chat() {
 		query: userQuery,
 		images: userImages,
 		agentMode: agentMode as 'deterministic' | 'smart',
+		interviewSessionId: searchParams.get('interviewSession'),
 		onDebugMessage: addDebugMessage,
 	});
 

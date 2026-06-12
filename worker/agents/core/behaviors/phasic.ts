@@ -188,6 +188,7 @@ export class PhasicCodingBehavior
             templateDetails: templateInfo.templateDetails,
             templateMetaInfo: templateInfo.selection,
             images: initArgs.images,
+            interviewSpec: initArgs.interviewSpec,
             stream: {
                 chunk_size: 256,
                 onChunk: (chunk) => {
@@ -800,6 +801,7 @@ export class PhasicCodingBehavior
                     userContext?.suggestions &&
                     userContext.suggestions.length > 0 &&
                     this.state.mvpGenerated,
+                repeatedPhaseWarning: this.detectRepeatedPhases(),
             },
             this.getOperationOptions(),
         );
@@ -834,6 +836,28 @@ export class PhasicCodingBehavior
         });
 
         return result;
+    }
+
+    /**
+     * Loop-breaker: when the last three phases regenerated the exact same
+     * file set, the fix strategy is not converging (classic symptom: the
+     * model "fixes" files that exist while the real fault is elsewhere).
+     * Returns a warning for the phase-generation prompt, else undefined.
+     */
+    private detectRepeatedPhases(): string | undefined {
+        const recent = this.state.generatedPhases.slice(-3);
+        if (recent.length < 3) {
+            return undefined;
+        }
+        const fileSets = recent.map((phase) =>
+            phase.files.map((file) => file.path).sort().join('|'),
+        );
+        if (fileSets[0] !== '' && new Set(fileSets).size === 1) {
+            const files = recent[2].files.map((file) => file.path).join(', ');
+            this.logger.warn('Repeated-phase loop detected', { files, phases: recent.map((p) => p.name) });
+            return `The last ${recent.length} phases (${recent.map((p) => `"${p.name}"`).join(', ')}) all regenerated exactly the same files (${files}) and the reported errors are still present.`;
+        }
+        return undefined;
     }
 
     /**

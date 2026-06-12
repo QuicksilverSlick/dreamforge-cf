@@ -3,6 +3,8 @@
  * Spec: docs/specs/21-QUESTIONS-INTAKE-INTERVIEW.md
  */
 
+import { z } from 'zod';
+
 export type AudienceId = 'just-me' | 'team' | 'customers' | 'anyone';
 
 export type ArchetypeId =
@@ -167,18 +169,29 @@ export interface AcceptanceCriterion {
     criterion: string;
 }
 
-/** The final artifact: feeds the blueprint as enriched query + metadata. */
-export interface InterviewSpec {
-    problem: string;
-    outcome: string;
-    usersAndRoles: string;
-    userStories: UserStory[];
-    acceptanceCriteria: AcceptanceCriterion[];
-    capabilityFlags: CapabilityFlags;
-    assumptions: string[];
-    credentialsNeeded: string[];
-    lookAndFeel: string | null;
-    appName: string | null;
-    /** The enriched build query handed to POST /api/agent. */
-    enhancedQuery: string;
-}
+/**
+ * The final artifact: feeds the blueprint as structured requirements.
+ * Defined as a zod schema so it can ride the blueprint's schema-driven
+ * prompt serialization (every generation operation sees the requirements).
+ */
+export const InterviewSpecSchema = z.object({
+    problem: z.string().describe('The problem the app solves, in the user\'s vocabulary'),
+    outcome: z.string().describe('What success looks like for the owner'),
+    usersAndRoles: z.string().describe('Who uses the app and what each kind of person can do'),
+    userStories: z.array(z.object({
+        id: z.string(),
+        story: z.string(),
+    })).describe('User stories covering the main flow and every selected capability'),
+    acceptanceCriteria: z.array(z.object({
+        id: z.string(),
+        criterion: z.string(),
+    })).describe('EARS-style acceptance criteria the finished app must meet'),
+    capabilityFlags: z.record(z.string(), z.boolean()).describe('Machine-readable capability flags'),
+    assumptions: z.array(z.string()).describe('Defaults chosen on the user\'s behalf'),
+    credentialsNeeded: z.array(z.string()).describe('Third-party credentials the user must supply later; scaffold with mocks'),
+    lookAndFeel: z.string().nullable(),
+    appName: z.string().nullable(),
+    enhancedQuery: z.string().describe('The enriched build brief'),
+});
+
+export type InterviewSpec = z.infer<typeof InterviewSpecSchema>;

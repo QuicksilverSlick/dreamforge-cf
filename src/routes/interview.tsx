@@ -59,10 +59,13 @@ export default function InterviewPage() {
     const [error, setError] = useState<string | null>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
 
-    const startBuild = useCallback((enhancedQuery: string) => {
+    const startBuild = useCallback((enhancedQuery: string, interviewSessionId?: string) => {
         sessionStorage.removeItem(SESSION_STORAGE_KEY);
         const imageParam = imagesParam ? `&images=${encodeURIComponent(imagesParam)}` : '';
-        navigate(`/chat/new?query=${encodeURIComponent(enhancedQuery)}&agentMode=${encodeURIComponent(agentMode)}${imageParam}`);
+        // The session id lets the builder load the full structured spec
+        // (stories, acceptance criteria, capability flags), not just the brief.
+        const sessionParam = interviewSessionId ? `&interviewSession=${encodeURIComponent(interviewSessionId)}` : '';
+        navigate(`/chat/new?query=${encodeURIComponent(enhancedQuery)}&agentMode=${encodeURIComponent(agentMode)}${sessionParam}${imageParam}`);
     }, [navigate, agentMode, imagesParam]);
 
     const applyState = useCallback((data: InterviewStateData) => {
@@ -71,7 +74,7 @@ export default function InterviewPage() {
         setFreeText(data.question?.prefill ?? '');
         setEditing(null);
         if (data.done && data.spec) {
-            startBuild(data.spec.enhancedQuery);
+            startBuild(data.spec.enhancedQuery, data.sessionId);
         }
     }, [startBuild]);
 
@@ -161,7 +164,7 @@ export default function InterviewPage() {
         try {
             const response = await apiClient.finishInterview(state.sessionId);
             if (response.data?.spec) {
-                startBuild(response.data.spec.enhancedQuery);
+                startBuild(response.data.spec.enhancedQuery, response.data.sessionId);
             } else if (query) {
                 startBuild(query);
             }

@@ -83,6 +83,53 @@ export function Blueprint({
 					</div>
 				</div>
 
+				{/* Product specification (from the intake interview) */}
+				{blueprint.spec && (
+					<div>
+						<h3 className="text-sm font-medium mb-3 text-text-50/70 uppercase tracking-wider">
+							What we're building
+						</h3>
+						<div className="space-y-4">
+							<div className="grid grid-cols-[120px_1fr] gap-4 text-sm">
+								<div className="text-text-50/70 font-mono">Problem</div>
+								<Markdown className="text-text-50">{blueprint.spec.problem}</Markdown>
+								<div className="text-text-50/70 font-mono">Success</div>
+								<Markdown className="text-text-50">{blueprint.spec.outcome}</Markdown>
+								<div className="text-text-50/70 font-mono">Who uses it</div>
+								<Markdown className="text-text-50">{blueprint.spec.usersAndRoles}</Markdown>
+							</div>
+							{blueprint.spec.userStories.length > 0 && (
+								<div>
+									<h4 className="text-xs font-medium mb-2 text-text-50/70">Requirements</h4>
+									<ul className="space-y-1">
+										{blueprint.spec.userStories.map((story) => (
+											<li key={story.id} className="text-sm text-text-50 flex gap-2">
+												<span className="font-mono text-xs text-text-50/50 shrink-0 mt-0.5">{story.id}</span>
+												<span>{story.story}</span>
+											</li>
+										))}
+									</ul>
+								</div>
+							)}
+							{blueprint.spec.assumptions.length > 0 && (
+								<div>
+									<h4 className="text-xs font-medium mb-2 text-text-50/70">Choices we made for you</h4>
+									<ul className="space-y-1">
+										{blueprint.spec.assumptions.map((assumption) => (
+											<li key={assumption} className="text-xs text-text-50/70">{assumption}</li>
+										))}
+									</ul>
+								</div>
+							)}
+							{blueprint.spec.credentialsNeeded.length > 0 && (
+								<div className="text-xs text-text-50/70 border border-border-primary rounded-lg px-3 py-2">
+									To go fully live you'll later add: {blueprint.spec.credentialsNeeded.join(', ')} — the app is built ready for them.
+								</div>
+							)}
+						</div>
+					</div>
+				)}
+
 				{/* Views */}
 				{Array.isArray(blueprint.views) && blueprint.views.length > 0 && (
 					<div>
