@@ -19,6 +19,8 @@ export interface PhaseGenerationInputs {
      * repeating itself.
      */
     repeatedPhaseWarning?: string;
+    /** Findings from the automated review of the latest preview screenshot. */
+    screenshotFeedback?: string[];
 }
 
 const SYSTEM_PROMPT = `<ROLE>
@@ -142,6 +144,8 @@ Adhere to the following guidelines:
 
 {{repeatedPhaseWarning}}
 
+{{screenshotFeedback}}
+
 {{userSuggestions}}`;
 
 const formatUserSuggestions = (suggestions?: string[] | null): string => {
@@ -190,10 +194,20 @@ Repeating the same regeneration will not converge. Step back and re-diagnose the
 </LOOP DETECTED — RE-DIAGNOSE>`;
 };
 
-const userPromptFormatter = (issues: IssueReport, userSuggestions?: string[], isUserSuggestedPhase?: boolean, repeatedPhaseWarning?: string) => {
+const formatScreenshotFeedback = (findings?: string[]): string => {
+    if (!findings || findings.length === 0) return '';
+    return `
+<VISUAL REVIEW (automated review of the latest preview screenshot)>
+${findings.map((finding, index) => `${index + 1}. ${finding}`).join('\n')}
+Address legitimate visual defects from this review in the next phase (secondary to runtime errors). Disregard findings that contradict the blueprint's intended design.
+</VISUAL REVIEW>`;
+};
+
+const userPromptFormatter = (issues: IssueReport, userSuggestions?: string[], isUserSuggestedPhase?: boolean, repeatedPhaseWarning?: string, screenshotFeedback?: string[]) => {
     let prompt = NEXT_PHASE_USER_PROMPT
         .replaceAll('{{issues}}', issuesPromptFormatterWithGuidelines(issues))
         .replaceAll('{{repeatedPhaseWarning}}', formatRepeatedPhaseWarning(repeatedPhaseWarning))
+        .replaceAll('{{screenshotFeedback}}', formatScreenshotFeedback(screenshotFeedback))
         .replaceAll('{{userSuggestions}}', formatUserSuggestions(userSuggestions));
     
     if (isUserSuggestedPhase) {
@@ -209,7 +223,7 @@ export class PhaseGenerationOperation extends AgentOperation<PhaseGenerationInpu
         inputs: PhaseGenerationInputs,
         options: OperationOptions
     ): Promise<PhaseConceptGenerationSchemaType> {
-        const { issues, userContext, isUserSuggestedPhase, repeatedPhaseWarning } = inputs;
+        const { issues, userContext, isUserSuggestedPhase, repeatedPhaseWarning, screenshotFeedback } = inputs;
         const { env, logger, context } = options;
         try {
             const suggestionsInfo = userContext?.suggestions && userContext.suggestions.length > 0
@@ -222,7 +236,7 @@ export class PhaseGenerationOperation extends AgentOperation<PhaseGenerationInpu
             logger.info(`Generating next phase ${suggestionsInfo}${imagesInfo}`);
     
             // Create user message with optional images
-            const userPrompt = userPromptFormatter(issues, userContext?.suggestions, isUserSuggestedPhase, repeatedPhaseWarning);
+            const userPrompt = userPromptFormatter(issues, userContext?.suggestions, isUserSuggestedPhase, repeatedPhaseWarning, screenshotFeedback);
             const userMessage = userContext?.images && userContext.images.length > 0
                 ? createMultiModalUserMessage(
                     userPrompt,

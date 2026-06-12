@@ -101,6 +101,7 @@ import { ProjectSetupAssistant } from '../../assistants/projectsetup';
 import { UserConversationProcessor, type RenderToolCall } from '../../operations/UserConversationProcessor';
 import { DeepDebuggerOperation, type DeepDebuggerInputs } from '../../operations/DeepDebugger';
 import { FileRegenerationOperation } from '../../operations/FileRegeneration';
+import { ScreenshotAnalysisOperation } from '../../operations/ScreenshotAnalysis';
 import { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import { getSandboxService } from '../../../services/sandbox/factory';
 import { getTemplateImportantFiles } from '../../../services/sandbox/utils';
@@ -1674,7 +1675,11 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                     this.logger.warn('All retry attempts resulted in blank screenshot, using last capture');
                 }
 
-                return await this.processAndStoreScreenshot(base64Screenshot, url, viewport);
+                const storedUrl = await this.processAndStoreScreenshot(base64Screenshot, url, viewport);
+                if (!blankDetection.isBlank) {
+                    this.queueScreenshotAnalysis(base64Screenshot, url, viewport);
+                }
+                return storedUrl;
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
                 this.logger.error(`Screenshot capture attempt ${attempt + 1} failed:`, error);
@@ -1693,6 +1698,64 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             viewport,
         });
         throw new Error(`Screenshot capture failed: ${errorMessage}`);
+    }
+
+    /** Throttle marker for screenshot analysis (one review per minute). */
+    private lastScreenshotAnalysisAt = 0;
+
+    /**
+     * Fire-and-forget visual review of a freshly captured screenshot.
+     * Findings are queued in state for the next phase generation, closing
+     * the loop that previously ended at "screenshot stored as thumbnail".
+     * Runs only during active generation and at most once per minute so
+     * idle thumbnail refreshes never burn model calls.
+     */
+    private queueScreenshotAnalysis(
+        base64Screenshot: string,
+        url: string,
+        viewport: { width: number; height: number },
+    ): void {
+        if (!this.state.shouldBeGenerating) {
+            return;
+        }
+        const now = Date.now();
+        if (now - this.lastScreenshotAnalysisAt < 60_000) {
+            return;
+        }
+        this.lastScreenshotAnalysisAt = now;
+
+        const screenshot = base64Screenshot.startsWith('data:')
+            ? base64Screenshot
+            : `data:image/png;base64,${base64Screenshot}`;
+
+        void new ScreenshotAnalysisOperation()
+            .execute(
+                {
+                    screenshotData: { url, timestamp: now, viewport, screenshot },
+                },
+                this.getOperationOptions(),
+            )
+            .then((analysis) => {
+                const findings = [
+                    ...analysis.issues,
+                    ...(analysis.uiCompliance?.matchesBlueprint ? [] : analysis.uiCompliance?.deviations ?? []),
+                ]
+                    .filter((finding) => finding.trim() !== '')
+                    .slice(0, 6);
+
+                if (!analysis.hasIssues || findings.length === 0) {
+                    this.logger.info('Screenshot analysis: no visual issues found', { url });
+                    return;
+                }
+                this.logger.info('Screenshot analysis found visual issues', { url, findings });
+                this.setState({
+                    ...this.state,
+                    screenshotFeedback: { issues: findings, capturedAt: now },
+                });
+            })
+            .catch((error: unknown) => {
+                this.logger.warn('Screenshot analysis failed (non-fatal)', { error: error instanceof Error ? error.message : String(error) });
+            });
     }
 
     /**
