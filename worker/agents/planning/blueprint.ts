@@ -3,6 +3,7 @@ import { STRATEGIES, PROMPT_UTILS, generalSystemPromptBuilder } from '../prompts
 import { executeInference } from '../inferutils/infer';
 import { Blueprint, BlueprintSchema, TemplateSelection } from '../schemas';
 import { validateRoadmap } from './roadmapValidator';
+import { applyReferenceAssets } from './referenceAssets';
 import type { InterviewSpec } from '../interview/types';
 import type { ReferenceSiteProfile } from '../../services/referenceSite/types';
 import { createLogger } from '../../logger';
@@ -217,6 +218,7 @@ function formatReferenceSite(profile: ReferenceSiteProfile): string {
     }
     if (profile.ownership === 'own-reuse') {
         lines.push('', 'This is the CLIENT\'S OWN site and they want its content and assets reused:');
+        lines.push('- Declare their logo and key imagery in `imageAssets` as usual — the system binds those entries to the client\'s real hosted assets below instead of generating new ones. Do NOT invent replacement branding or placeholder imagery that conflicts with their real assets.');
         if (profile.logo) lines.push(`- Their logo (use this exact URL): ${profile.logo.publicUrl}`);
         if (profile.images && profile.images.length > 0) {
             lines.push('- Their images (use these exact URLs where imagery is needed):');
@@ -364,6 +366,13 @@ export async function generateBlueprint({ env, inferenceContext, query, language
                 logger.warn('Roadmap validation repaired issues', { issues });
             }
             results.implementationRoadmap = roadmap;
+
+            // Bind harvested own-site assets (logo, photos) onto the image
+            // manifest so generation is skipped and phases reference the
+            // client's real assets.
+            if (referenceSite) {
+                results.imageAssets = applyReferenceAssets(results.imageAssets, referenceSite);
+            }
         }
 
         return { ...results, spec: interviewSpec ?? null };
