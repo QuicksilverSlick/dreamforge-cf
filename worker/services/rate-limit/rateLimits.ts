@@ -194,6 +194,20 @@ export class RateLimitService {
         }
     }
 
+	/**
+	 * Platform operators (comma-separated user ids in the
+	 * RATE_LIMIT_EXEMPT_USER_IDS secret) bypass usage rate limits — they
+	 * test builds all day and their inference is platform-funded anyway.
+	 * Abuse-facing limits (auth) are NOT exempted.
+	 */
+	static isExemptUser(env: Env, userId: string): boolean {
+		// Widened: typegen types the var as its empty wrangler.jsonc default
+		// (literal "") but the runtime value comes from the secret.
+		const raw: string = env.RATE_LIMIT_EXEMPT_USER_IDS;
+		if (!raw) return false;
+		return raw.split(',').map((id) => id.trim()).filter(Boolean).includes(userId);
+	}
+
 	static async enforceAppCreationRateLimit(
 		env: Env,
 		config: RateLimitSettings,
@@ -201,6 +215,9 @@ export class RateLimitService {
 		request: Request
 	): Promise<void> {
 		if (!config[RateLimitType.APP_CREATION].enabled) {
+			return;
+		}
+		if (this.isExemptUser(env, user.id)) {
 			return;
 		}
 		const identifier = await this.getUserIdentifier(user);
@@ -291,6 +308,9 @@ export class RateLimitService {
 	): Promise<void> {
 		
 		if (!config[RateLimitType.LLM_CALLS].enabled) {
+			return;
+		}
+		if (this.isExemptUser(env, userId)) {
 			return;
 		}
 
