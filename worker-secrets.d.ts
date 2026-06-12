@@ -95,6 +95,9 @@ declare namespace Cloudflare {
         ENVIRONMENT: string;
         ALLOCATION_STRATEGY: string;
         USE_TUNNEL_FOR_PREVIEW: boolean;
+        // Comma-separated user ids exempt from usage rate limits. Optional:
+        // the worker boots without it (no exemptions).
+        RATE_LIMIT_EXEMPT_USER_IDS?: string;
 
         // Observability
         SENTRY_DSN: string;
@@ -153,6 +156,7 @@ interface Env {
     ENVIRONMENT: string;
     ALLOCATION_STRATEGY: string;
     USE_TUNNEL_FOR_PREVIEW: boolean;
+    RATE_LIMIT_EXEMPT_USER_IDS?: string;
 
     SENTRY_DSN: string;
 }
