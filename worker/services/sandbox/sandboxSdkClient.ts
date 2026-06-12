@@ -1374,24 +1374,59 @@ export class SandboxSdkClient extends BaseSandboxService {
 
             const filteredFiles = files.filter(file => !donttouchFiles.has(file.filePath));
 
-            const writePromises = filteredFiles.map(file => session.writeFile(`/workspace/${instanceId}/${file.filePath}`, file.fileContents));
-            
-            const writeResults = await Promise.all(writePromises);
-            
-            for (const writeResult of writeResults) {
+            // writeFile does not create parent directories: any file in a
+            // directory the template doesn't ship (e.g. src/pages/admin/)
+            // fails its write. Create the full directory set up front.
+            const parentDirs = new Set<string>();
+            for (const file of filteredFiles) {
+                const lastSlash = file.filePath.lastIndexOf('/');
+                if (lastSlash > 0) {
+                    parentDirs.add(file.filePath.slice(0, lastSlash));
+                }
+            }
+            if (parentDirs.size > 0) {
+                const mkdirCommand = `mkdir -p ${[...parentDirs].map(dir => `'${dir}'`).join(' ')}`;
+                const mkdirResult = await session.exec(mkdirCommand);
+                if (mkdirResult.exitCode !== 0) {
+                    this.logger.error('Failed to create parent directories', { stderr: mkdirResult.stderr });
+                }
+            }
+
+            // Bounded concurrency: a single Promise.all over the whole file
+            // set can overwhelm the container control channel on full syncs.
+            const writeResults: Awaited<ReturnType<typeof session.writeFile>>[] = [];
+            const WRITE_BATCH_SIZE = 10;
+            for (let i = 0; i < filteredFiles.length; i += WRITE_BATCH_SIZE) {
+                const batch = filteredFiles.slice(i, i + WRITE_BATCH_SIZE);
+                writeResults.push(...await Promise.all(
+                    batch.map(file => session.writeFile(`/workspace/${instanceId}/${file.filePath}`, file.fileContents))
+                ));
+            }
+
+            // One retry pass for transient per-file failures.
+            for (let i = 0; i < writeResults.length; i++) {
+                if (!writeResults[i].success) {
+                    const file = filteredFiles[i];
+                    this.logger.warn('File write failed, retrying once', { filePath: file.filePath });
+                    writeResults[i] = await session.writeFile(`/workspace/${instanceId}/${file.filePath}`, file.fileContents);
+                }
+            }
+
+            for (let i = 0; i < writeResults.length; i++) {
+                const writeResult = writeResults[i];
                 if (writeResult.success) {
                     results.push({
                         file: writeResult.path,
                         success: true
                     });
-                    
+
                     this.logger.info('File written', { filePath: writeResult.path });
                 } else {
-                    this.logger.error('File write failed', { filePath: writeResult.path });
+                    this.logger.error('File write failed', { filePath: filteredFiles[i].filePath });
                     results.push({
-                        file: writeResult.path,
+                        file: filteredFiles[i].filePath,
                         success: false,
-                        error: 'Unknown error'
+                        error: 'Write failed after retry'
                     });
                 }
             }
@@ -1423,6 +1458,19 @@ export class SandboxSdkClient extends BaseSandboxService {
                 this.logger.info('Files committed to git', { result: commitResult });
             } catch (error) {
                 this.logger.error('Git commit failed', { error: error instanceof Error ? error.message : 'Unknown error' });
+            }
+
+            // A write that silently drops files leaves the sandbox diverged
+            // from agent state — the agent then "fixes" code that was never
+            // the problem. Real failures (donttouch skips excluded) must
+            // fail the call so the deployment layer retries or redeploys.
+            const failedWrites = filteredFiles.filter((_, i) => !writeResults[i]?.success);
+            if (failedWrites.length > 0) {
+                return {
+                    success: false,
+                    results,
+                    error: `Failed to write ${failedWrites.length}/${filteredFiles.length} files: ${failedWrites.slice(0, 5).map(f => f.filePath).join(', ')}${failedWrites.length > 5 ? ', …' : ''}`
+                };
             }
 
             return {
