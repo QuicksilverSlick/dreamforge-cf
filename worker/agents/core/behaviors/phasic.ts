@@ -189,6 +189,7 @@ export class PhasicCodingBehavior
             templateMetaInfo: templateInfo.selection,
             images: initArgs.images,
             interviewSpec: initArgs.interviewSpec,
+            referenceSite: initArgs.referenceSite,
             stream: {
                 chunk_size: 256,
                 onChunk: (chunk) => {

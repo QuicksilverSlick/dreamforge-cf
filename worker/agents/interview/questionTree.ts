@@ -41,7 +41,8 @@ export const PHASE_CAPS: Record<InterviewPhase, number> = {
     1: 3,
     2: 3,
     3: 9,
-    4: 2,
+    // look + name + the two reference-site follow-ups (URL branch only).
+    4: 4,
     5: 1,
     clarify: 3,
 };
@@ -388,6 +389,44 @@ export const QUESTIONS: QuestionDef[] = [
         skippable: true,
         apply: (draft, answer) => {
             draft.fields.lookAndFeel = freeText(answer) ?? draft.fields.lookAndFeel;
+        },
+    },
+    {
+        id: 'p4-reference-likes',
+        phase: 4,
+        kind: 'multi',
+        text: 'Nice — what do you love about that site? Tap all that apply.',
+        chips: [
+            { id: 'colors-feel', label: 'The colors & overall feel' },
+            { id: 'fonts', label: 'The fonts' },
+            { id: 'layout', label: 'The layout' },
+            { id: 'images', label: 'The images & photos' },
+            { id: 'everything', label: 'Honestly, everything' },
+        ],
+        skippable: true,
+        askWhen: (derived) => derived.fields.referenceUrl !== undefined,
+        apply: (draft, answer) => {
+            const selected = chipIds(answer);
+            if (selected.length > 0) draft.fields.referenceLikes = selected;
+        },
+    },
+    {
+        id: 'p4-reference-ownership',
+        phase: 4,
+        kind: 'single',
+        text: 'Is that site yours? If it is, we can reuse what\'s already there.',
+        chips: [
+            { id: 'own-reuse', label: 'Yes — reuse my content and images' },
+            { id: 'own-fresh', label: 'Yes — but let\'s start fresh' },
+            { id: 'style-only', label: 'Someone else\'s — just capture the style' },
+        ],
+        skippable: false,
+        askWhen: (derived) => derived.fields.referenceUrl !== undefined,
+        apply: (draft, answer) => {
+            const [choice] = chipIds(answer);
+            if (choice === 'own-reuse' || choice === 'own-fresh' || choice === 'style-only') {
+                draft.fields.referenceOwnership = choice;
+            }
         },
     },
     {

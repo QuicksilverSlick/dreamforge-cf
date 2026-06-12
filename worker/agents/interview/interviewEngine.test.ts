@@ -305,6 +305,35 @@ describe('interview engine', () => {
             .toEqual(['Stripe API keys', 'Email provider API key (e.g. Resend)']);
     });
 
+    it('branches into reference-site follow-ups when the look answer has a URL', () => {
+        const session = newSession();
+        const asked = runInterview(session, {
+            ...BOOKING_ANSWERS,
+            'p4-look': text('I love how https://linear.app looks'),
+            'p4-reference-likes': chips('colors-feel', 'layout'),
+            'p4-reference-ownership': chips('style-only'),
+        });
+        expect(asked).toContain('p4-reference-likes');
+        expect(asked).toContain('p4-reference-ownership');
+        const derived = deriveState(session);
+        expect(derived.fields.referenceUrl).toBe('https://linear.app/');
+        expect(derived.fields.referenceLikes).toEqual(['colors-feel', 'layout']);
+        expect(derived.fields.referenceOwnership).toBe('style-only');
+        const summary = buildSummary(session);
+        expect(summary.points.join(' ')).toContain('Styled after https://linear.app/');
+    });
+
+    it('skips reference follow-ups when the look answer is plain prose', () => {
+        const session = newSession();
+        const asked = runInterview(session, {
+            ...BOOKING_ANSWERS,
+            'p4-look': text('clean, modern, lots of white space'),
+        });
+        expect(asked).not.toContain('p4-reference-likes');
+        expect(asked).not.toContain('p4-reference-ownership');
+        expect(deriveState(session).fields.referenceUrl).toBeUndefined();
+    });
+
     it('survives a JSON round-trip mid-interview', () => {
         const session = newSession();
         answerCurrent(session, text('problem'));

@@ -111,13 +111,16 @@ export class CodingAgentController extends BaseController {
                 modelConfigsCount: Object.keys(userModelConfigs).length,
             });
 
-            // Load the intake-interview spec when this build came through the
-            // interview. Owner-scoped; a missing/expired session degrades to
-            // a spec-less build of the (already enriched) query.
+            // Load the intake-interview spec (and the reference-site profile
+            // its background ingestion produced) when this build came through
+            // the interview. Owner-scoped; a missing/expired session degrades
+            // to a spec-less build of the (already enriched) query.
             let interviewSpec = null;
+            let referenceSite = null;
             if (body.interviewSessionId) {
                 const interviewSession = await new InterviewSessionService(env).getSession(body.interviewSessionId, user.id);
                 interviewSpec = interviewSession?.spec ?? null;
+                referenceSite = interviewSession?.referenceSite ?? null;
                 if (!interviewSpec) {
                     this.logger.warn('Interview session missing or has no spec; building without it', {
                         interviewSessionId: body.interviewSessionId,
@@ -135,6 +138,11 @@ export class CodingAgentController extends BaseController {
                 uploadedImages = await Promise.all(body.images.map(async (image) => {
                     return uploadImage(env, image, ImageType.UPLOADS);
                 }));
+            }
+            // The reference site's screenshot rides as a multimodal input so
+            // blueprint generation can see the design it's emulating.
+            if (referenceSite?.screenshot) {
+                uploadedImages.push(referenceSite.screenshot);
             }
         
             writer.write({
@@ -156,6 +164,7 @@ export class CodingAgentController extends BaseController {
                 inferenceContext,
                 images: uploadedImages,
                 interviewSpec,
+                referenceSite,
                 onBlueprintChunk: (chunk: string) => {
                     writer.write({chunk});
                 },
