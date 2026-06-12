@@ -21,6 +21,17 @@ const logger = createLogger('ReferenceSiteIngest');
 
 const PAGE_TIMEOUT_MS = 30_000;
 const MAX_ASSET_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Harvestable raster types: source Content-Type → the normalized mime the
+ * image pipeline supports and the extension the public serve route allows.
+ */
+const HARVEST_TYPE_BY_MIME: Record<string, { mime: SupportedImageMimeType; ext: string }> = {
+    'image/png': { mime: 'image/png', ext: 'png' },
+    'image/jpeg': { mime: 'image/jpeg', ext: 'jpeg' },
+    'image/jpg': { mime: 'image/jpeg', ext: 'jpeg' },
+    'image/webp': { mime: 'image/webp', ext: 'webp' },
+};
 const MAX_IMAGES = 8;
 const MAX_CONTENT_CHARS = 12_000;
 
@@ -187,12 +198,18 @@ async function harvestAsset(env: Env, sourceUrl: string, sessionId: string, alt?
         const buffer = await response.arrayBuffer();
         if (buffer.byteLength > MAX_ASSET_BYTES || buffer.byteLength < 1024) return null;
 
+        // The stored filename must carry a serveable extension — the public
+        // `/api/uploads/*` route rejects extensionless or exotic keys, and
+        // source-path basenames offer neither guarantee.
+        const harvestType = HARVEST_TYPE_BY_MIME[contentType.split(';')[0].trim()];
+        if (!harvestType) return null;
+
         const uploaded = await uploadImage(
             env,
             {
                 id: `${sessionId}-${crypto.randomUUID()}`,
-                filename: validation.url.pathname.split('/').pop() || 'asset',
-                mimeType: contentType.split(';')[0] as SupportedImageMimeType,
+                filename: `asset.${harvestType.ext}`,
+                mimeType: harvestType.mime,
                 base64Data: Buffer.from(buffer).toString('base64'),
             },
             ImageType.UPLOADS,

@@ -50,12 +50,14 @@ function getMimeByExtension(file: string): string | undefined {
     }
 }
 // -------------------------
-// Validators specific to the generated-image serve path. These are intentionally
-// looser than the screenshot validators (which use a single-segment `:id/:file`
-// pattern) because generated-image R2 keys can be either 1-segment
-// (`generated/<filename>`, legacy uploads) or 2-segment
-// (`generated/<id>/<filename>`, current upload code at worker/utils/images.ts:142).
-// The validator below sanitises the full suffix in one pass.
+// Validators for the public R2-image serve paths (`/api/generated/*` and
+// `/api/uploads/*`). These are intentionally looser than the screenshot
+// validators (which use a single-segment `:id/:file` pattern) because the
+// R2 keys can be either 1-segment (`generated/<filename>`, legacy uploads)
+// or 2-segment (`<type>/<id>/<filename>`, current upload code at
+// worker/utils/images.ts:144). The validator below sanitises the full
+// suffix in one pass. `%` is allowed because `uploadImageToR2`
+// percent-encodes filenames into the stored key.
 // -------------------------
 const ALLOWED_GENERATED_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
 
@@ -63,8 +65,9 @@ function validateGeneratedSuffix(suffix: string): { ok: true; filename: string; 
     if (!suffix) return { ok: false };
     if (suffix.length > 256) return { ok: false };
     if (suffix.includes('..') || suffix.includes('\\') || suffix.includes('\0')) return { ok: false };
-    // URL-safe characters only: alphanumerics, dot, hyphen, underscore, forward slash
-    if (!/^[A-Za-z0-9._/-]+$/.test(suffix)) return { ok: false };
+    // URL-safe characters only: alphanumerics, dot, hyphen, underscore,
+    // forward slash, percent (encoded filename bytes)
+    if (!/^[A-Za-z0-9._/%-]+$/.test(suffix)) return { ok: false };
     // No leading or trailing slash, no double slashes
     if (suffix.startsWith('/') || suffix.endsWith('/') || suffix.includes('//')) return { ok: false };
     const lastSlash = suffix.lastIndexOf('/');
@@ -110,9 +113,32 @@ export class ScreenshotsController extends BaseController {
         _ctx: ExecutionContext,
         _context: RouteContext,
     ): Promise<ControllerResponse<ApiResponse<never>>> {
+        return ScreenshotsController.serveBucketImage(request, env, 'generated');
+    }
+
+    /**
+     * Serve images stored in R2 under `uploads/<key>` — user-supplied assets
+     * referenced by generated apps (e.g. logos and photos harvested from the
+     * user's own reference website). Same posture as `/api/generated/*`:
+     * public, unguessable keys, immutable caching.
+     */
+    static async serveUploadedImage(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        _context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<never>>> {
+        return ScreenshotsController.serveBucketImage(request, env, 'uploads');
+    }
+
+    private static async serveBucketImage(
+        request: Request,
+        env: Env,
+        root: 'generated' | 'uploads',
+    ): Promise<ControllerResponse<ApiResponse<never>>> {
         try {
             const url = new URL(request.url);
-            const prefix = '/api/generated/';
+            const prefix = `/api/${root}/`;
             if (!url.pathname.startsWith(prefix)) {
                 return ScreenshotsController.createErrorResponse('Not found', 404);
             }
@@ -123,7 +149,7 @@ export class ScreenshotsController extends BaseController {
                 return ScreenshotsController.createErrorResponse('Not found', 404);
             }
 
-            const key = `generated/${suffix}`;
+            const key = `${root}/${suffix}`;
             const obj = await env.TEMPLATES_BUCKET.get(key);
             if (!obj || !obj.body) {
                 return ScreenshotsController.createErrorResponse('Image not found', 404);
@@ -135,8 +161,8 @@ export class ScreenshotsController extends BaseController {
                 'application/octet-stream';
             const headers = new Headers({
                 'Content-Type': contentType,
-                // Generated images are immutable once uploaded under a stable key,
-                // so we can cache aggressively. 1 day at the edge with revalidation
+                // Images are immutable once uploaded under a stable key, so we
+                // can cache aggressively. 1 day at the edge with revalidation
                 // matches the screenshot route's prior posture.
                 'Cache-Control': 'public, max-age=86400, immutable',
                 'X-Content-Type-Options': 'nosniff',
@@ -149,7 +175,7 @@ export class ScreenshotsController extends BaseController {
 
             return new Response(obj.body, { headers }) as unknown as ControllerResponse<ApiResponse<never>>;
         } catch (error) {
-            this.logger.error('Error serving generated image', { error });
+            ScreenshotsController.logger.error('Error serving R2 image', { root, error });
             return ScreenshotsController.createErrorResponse('Internal server error', 500);
         }
     }
