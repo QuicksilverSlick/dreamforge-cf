@@ -13,6 +13,12 @@ export interface PhaseGenerationInputs {
     issues: IssueReport;
     userContext?: UserContext;
     isUserSuggestedPhase?: boolean;
+    /**
+     * Set when recent phases regenerated the same file set without resolving
+     * the outstanding errors — instructs the model to re-diagnose instead of
+     * repeating itself.
+     */
+    repeatedPhaseWarning?: string;
 }
 
 const SYSTEM_PROMPT = `<ROLE>
@@ -124,12 +130,17 @@ Adhere to the following guidelines:
 •   Keep all the description fields very short and concise.
 •   If there are any files that were supposed to be generated in the previous phase, but were not, please mention them in the phase description and suggest them in the phase.
 •   Always suggest phases in sequential ordering - Phase 1 comes after Phase 0, Phase 2 comes after Phase 1 and so on.
+•   **DEPENDENCY ORDER**: Follow the blueprint's implementationRoadmap order and its dependsOn relationships. Never create a table, API, route import, or integration before the phase that uses it — and never leave an import pointing at a file no phase has created yet. Identity before ownership (auth before user-owned data), money after value (payments only once there is something working to pay for), admin areas after the flow they administer.
+•   When the blueprint carries a PRODUCT SPECIFICATION, treat its user stories and acceptance criteria as the authoritative definition of done; each phase should advance specific requirements, and the phase description should say which.
+•   Each phase must state one behavior a person can verify in the preview when it completes — working behavior, not merely code changes.
 •   **Every phase must be deployable with all views/pages working properly and looking professional.**
 •   IF you need to get any file to be deleted or cleaned, please set the \`changes\` field to \`delete\` for that file.
 •   **Visual assets:** Use external image URLs, canvas elements, or icon libraries. Reference these in file descriptions as needed.
 </SUGGESTING NEXT PHASE>
 
 {{issues}}
+
+{{repeatedPhaseWarning}}
 
 {{userSuggestions}}`;
 
@@ -167,9 +178,22 @@ ${serialized}`;
     return serialized;
 };
 
-const userPromptFormatter = (issues: IssueReport, userSuggestions?: string[], isUserSuggestedPhase?: boolean) => {
+const formatRepeatedPhaseWarning = (warning?: string): string => {
+    if (!warning) return '';
+    return `
+<LOOP DETECTED — RE-DIAGNOSE>
+${warning}
+Repeating the same regeneration will not converge. Step back and re-diagnose the root cause:
+- If an error says an import cannot be resolved, the correct fix is usually to CREATE the missing file (or fix the importer), not to regenerate files that already exist.
+- Cross-check every reported file path against the current file list before assuming the code in an existing file is at fault.
+- Plan a DIFFERENT phase than the previous ones: different files, different remediation.
+</LOOP DETECTED — RE-DIAGNOSE>`;
+};
+
+const userPromptFormatter = (issues: IssueReport, userSuggestions?: string[], isUserSuggestedPhase?: boolean, repeatedPhaseWarning?: string) => {
     let prompt = NEXT_PHASE_USER_PROMPT
         .replaceAll('{{issues}}', issuesPromptFormatterWithGuidelines(issues))
+        .replaceAll('{{repeatedPhaseWarning}}', formatRepeatedPhaseWarning(repeatedPhaseWarning))
         .replaceAll('{{userSuggestions}}', formatUserSuggestions(userSuggestions));
     
     if (isUserSuggestedPhase) {
@@ -185,7 +209,7 @@ export class PhaseGenerationOperation extends AgentOperation<PhaseGenerationInpu
         inputs: PhaseGenerationInputs,
         options: OperationOptions
     ): Promise<PhaseConceptGenerationSchemaType> {
-        const { issues, userContext, isUserSuggestedPhase } = inputs;
+        const { issues, userContext, isUserSuggestedPhase, repeatedPhaseWarning } = inputs;
         const { env, logger, context } = options;
         try {
             const suggestionsInfo = userContext?.suggestions && userContext.suggestions.length > 0
@@ -198,7 +222,7 @@ export class PhaseGenerationOperation extends AgentOperation<PhaseGenerationInpu
             logger.info(`Generating next phase ${suggestionsInfo}${imagesInfo}`);
     
             // Create user message with optional images
-            const userPrompt = userPromptFormatter(issues, userContext?.suggestions, isUserSuggestedPhase);
+            const userPrompt = userPromptFormatter(issues, userContext?.suggestions, isUserSuggestedPhase, repeatedPhaseWarning);
             const userMessage = userContext?.images && userContext.images.length > 0
                 ? createMultiModalUserMessage(
                     userPrompt,

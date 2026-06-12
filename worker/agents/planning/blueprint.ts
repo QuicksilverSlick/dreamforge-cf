@@ -2,6 +2,8 @@ import { TemplateDetails, TemplateFileSchema } from '../../services/sandbox/sand
 import { STRATEGIES, PROMPT_UTILS, generalSystemPromptBuilder } from '../prompts';
 import { executeInference } from '../inferutils/infer';
 import { Blueprint, BlueprintSchema, TemplateSelection } from '../schemas';
+import { validateRoadmap } from './roadmapValidator';
+import type { InterviewSpec } from '../interview/types';
 import { createLogger } from '../../logger';
 import { createSystemMessage, createUserMessage, createMultiModalUserMessage } from '../inferutils/common';
 import { InferenceContext } from '../inferutils/config.types';
@@ -165,6 +167,8 @@ export interface BlueprintGenerationArgs {
     templateDetails: TemplateDetails;
     templateMetaInfo: TemplateSelection;
     images?: ProcessedImageAttachment[];
+    /** Structured requirements from the intake interview, when one ran. */
+    interviewSpec?: InterviewSpec | null;
     stream?: {
         chunk_size: number;
         onChunk: (chunk: string) => void;
@@ -172,10 +176,60 @@ export interface BlueprintGenerationArgs {
 }
 
 /**
+ * Phase-ordering rules for the implementation roadmap (spec §6.4) —
+ * walking-skeleton doctrine plus the canonical capability sequence. The
+ * roadmap is additionally validated and reordered in code after inference.
+ */
+const ROADMAP_ORDERING_RULES = `
+<ROADMAP ORDERING RULES>
+For the implementationRoadmap, every phase MUST carry id, dependsOn, capability, and demonstrable:
+1. **Walking skeleton first**: the first phase produces a runnable app shell with the primary screen and navigation; every later phase must leave the app running and demonstrably better — working behavior, not merely code changes.
+2. **Vertical slices in dependency order**: each phase delivers one user-visible capability end-to-end (UI + logic + storage for that feature together). Declare dependsOn for every phase. Never plan a table, API, route import, or integration before the phase that uses it — a router must never import a page that a later phase creates.
+3. **Identity before ownership, money after value**: auth precedes any phase storing user-owned data or charging money; payments depend on auth plus an existing sellable flow (catalog → checkout → confirmation).
+4. **Trace everything**: when a product specification is provided, every phase lists the requirement ids it implements in satisfies, and every requirement id must be covered by some phase. If a requirement cannot be placed, say so in the phase description rather than inventing around it.
+5. **Demonstrable acceptance**: each phase's demonstrable states one behavior a person can verify in the preview (e.g. "pick a time, book it, see the booking after refresh") — never internal criteria like "added a model".
+</ROADMAP ORDERING RULES>`;
+
+function formatInterviewSpec(spec: InterviewSpec): string {
+    const flags = Object.entries(spec.capabilityFlags)
+        .filter(([, enabled]) => enabled)
+        .map(([flag]) => flag);
+    const lines = [
+        '',
+        '<PRODUCT SPECIFICATION (from the client intake interview — authoritative requirements)>',
+        `Problem: ${spec.problem}`,
+        `Success outcome: ${spec.outcome}`,
+        `Users and roles: ${spec.usersAndRoles}`,
+        '',
+        'User stories:',
+        ...spec.userStories.map((story) => `- [${story.id}] ${story.story}`),
+        '',
+        'Acceptance criteria (the finished app MUST meet these):',
+        ...spec.acceptanceCriteria.map((criterion) => `- [${criterion.id}] ${criterion.criterion}`),
+        '',
+        `Capabilities required: ${flags.join(', ') || 'none beyond the core flow'}`,
+    ];
+    if (spec.assumptions.length > 0) {
+        lines.push('', 'Defaults already agreed with the client:', ...spec.assumptions.map((assumption) => `- ${assumption}`));
+    }
+    if (spec.credentialsNeeded.length > 0) {
+        lines.push(
+            '',
+            `Third-party credentials (${spec.credentialsNeeded.join(', ')}) are NOT available at build time: scaffold those integrations code-complete behind a single clearly-marked mock module so real keys can be dropped in later.`,
+        );
+    }
+    if (spec.lookAndFeel) {
+        lines.push('', `Look and feel reference: ${spec.lookAndFeel}`);
+    }
+    lines.push('</PRODUCT SPECIFICATION>');
+    return lines.join('\n');
+}
+
+/**
  * Generate a blueprint for the application based on user prompt
  */
 // Update function signature and system prompt
-export async function generateBlueprint({ env, inferenceContext, query, language, frameworks, templateDetails, templateMetaInfo, images, stream }: BlueprintGenerationArgs): Promise<Blueprint> {
+export async function generateBlueprint({ env, inferenceContext, query, language, frameworks, templateDetails, templateMetaInfo, images, interviewSpec, stream }: BlueprintGenerationArgs): Promise<Blueprint> {
     try {
         logger.info("Generating application blueprint", { query, queryLength: query.length, imagesCount: images?.length || 0 });
         logger.info(templateDetails ? `Using template: ${templateDetails.name}` : "Not using a template.");
@@ -190,7 +244,7 @@ export async function generateBlueprint({ env, inferenceContext, query, language
         );
 
         const fileTreeText = PROMPT_UTILS.serializeTreeNodes(templateDetails.fileTree);
-        const systemPrompt = SYSTEM_PROMPT.replace('{{filesText}}', filesText).replace('{{fileTreeText}}', fileTreeText);
+        const systemPrompt = SYSTEM_PROMPT.replace('{{filesText}}', filesText).replace('{{fileTreeText}}', fileTreeText) + ROADMAP_ORDERING_RULES;
         const systemPromptMessage = createSystemMessage(generalSystemPromptBuilder(systemPrompt, {
             query,
             templateDetails,
@@ -201,13 +255,14 @@ export async function generateBlueprint({ env, inferenceContext, query, language
             dependencies: templateDetails.deps,
         }));
 
+        const clientRequest = `CLIENT REQUEST: "${query}"${interviewSpec ? formatInterviewSpec(interviewSpec) : ''}`;
         const userMessage = images && images.length > 0
             ? createMultiModalUserMessage(
-                `CLIENT REQUEST: "${query}"`,
-                await imagesToBase64(env, images), 
+                clientRequest,
+                await imagesToBase64(env, images),
                 'high'
               )
-            : createUserMessage(`CLIENT REQUEST: "${query}"`);
+            : createUserMessage(clientRequest);
 
         const messages = [
             systemPromptMessage,
@@ -236,13 +291,18 @@ export async function generateBlueprint({ env, inferenceContext, query, language
         if (results) {
             // Filter and remove any pdf files
             results.initialPhase.files = results.initialPhase.files.filter(f => !f.path.endsWith('.pdf'));
+
+            // Repair and dependency-order the roadmap in code — ids, broken
+            // references, cycles, and capability-sequence violations never
+            // reach the phase loop.
+            const { roadmap, issues } = validateRoadmap(results.implementationRoadmap, interviewSpec);
+            if (issues.length > 0) {
+                logger.warn('Roadmap validation repaired issues', { issues });
+            }
+            results.implementationRoadmap = roadmap;
         }
 
-        // // A hack
-        // if (results?.initialPhase) {
-        //     results.initialPhase.lastPhase = false;
-        // }
-        return results as Blueprint;
+        return { ...results, spec: interviewSpec ?? null };
     } catch (error) {
         logger.error("Error generating blueprint:", error);
         throw error;

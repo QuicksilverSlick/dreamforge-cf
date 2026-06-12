@@ -1,7 +1,7 @@
 import { FileTreeNode, RuntimeError, StaticAnalysisResponse, TemplateDetails } from "../services/sandbox/sandboxTypes";
 import { TemplateRegistry } from "./inferutils/schemaFormatters";
 import z from 'zod';
-import { Blueprint, BlueprintSchemaLite, ClientReportedErrorSchema, ClientReportedErrorType, FileOutputType, PhaseConceptSchema, PhaseConceptLiteSchema, PhaseConceptType, TemplateSelection } from "./schemas";
+import { Blueprint, BlueprintWithSpecSchemaLite, ClientReportedErrorSchema, ClientReportedErrorType, FileOutputType, PhaseConceptSchema, PhaseConceptLiteSchema, PhaseConceptType, TemplateSelection } from "./schemas";
 import { IssueReport } from "./domain/values/IssueReport";
 import { FileState, MAX_PHASES } from "./core/state";
 import { CODE_SERIALIZERS, CodeSerializerType } from "./utils/codeSerializers";
@@ -1270,7 +1270,10 @@ export function generalSystemPromptBuilder(
             ...params.blueprint,
             initialPhase: undefined,
         }
-        variables.blueprint = TemplateRegistry.markdown.serialize(blueprint, BlueprintSchemaLite);
+        // Serialized with the spec-carrying schema so interview requirements
+        // (user stories, EARS criteria, capability flags) reach every
+        // operation prompt that receives the blueprint.
+        variables.blueprint = TemplateRegistry.markdown.serialize(blueprint, BlueprintWithSpecSchemaLite);
         variables.blueprintDependencies = params.blueprint.frameworks?.join(', ') ?? '';
 
         // Generated image assets are hosted at their own URLs (stored in R2,

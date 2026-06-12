@@ -17,6 +17,8 @@ export interface CodeGenArgs {
     selectedTemplate?: string;
     agentMode: 'deterministic' | 'smart';
     images?: ImageAttachment[];
+    /** Intake-interview session whose spec should drive the blueprint. */
+    interviewSessionId?: string;
 }
 
 /**

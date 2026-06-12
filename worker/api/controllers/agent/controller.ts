@@ -9,6 +9,7 @@ import { RouteContext } from '../../types/route-context';
 import { ModelConfigService } from '../../../database';
 import { ModelConfig } from '../../../agents/inferutils/config.types';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
+import { InterviewSessionService } from '../../../database/services/InterviewSessionService';
 import { validateWebSocketOrigin } from '../../../middleware/security/websocket';
 import { createLogger } from '../../../logger';
 import { getPreviewDomain } from 'worker/utils/urls';
@@ -110,6 +111,20 @@ export class CodingAgentController extends BaseController {
                 modelConfigsCount: Object.keys(userModelConfigs).length,
             });
 
+            // Load the intake-interview spec when this build came through the
+            // interview. Owner-scoped; a missing/expired session degrades to
+            // a spec-less build of the (already enriched) query.
+            let interviewSpec = null;
+            if (body.interviewSessionId) {
+                const interviewSession = await new InterviewSessionService(env).getSession(body.interviewSessionId, user.id);
+                interviewSpec = interviewSession?.spec ?? null;
+                if (!interviewSpec) {
+                    this.logger.warn('Interview session missing or has no spec; building without it', {
+                        interviewSessionId: body.interviewSessionId,
+                    });
+                }
+            }
+
             const { sandboxSessionId, templateDetails, selection } = await getTemplateForQuery(env, inferenceContext, query, body.images, this.logger);
 
             const websocketUrl = `${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}/api/agent/${agentId}/ws`;
@@ -140,6 +155,7 @@ export class CodingAgentController extends BaseController {
                 hostname,
                 inferenceContext,
                 images: uploadedImages,
+                interviewSpec,
                 onBlueprintChunk: (chunk: string) => {
                     writer.write({chunk});
                 },

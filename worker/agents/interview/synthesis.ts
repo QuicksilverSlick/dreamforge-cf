@@ -13,7 +13,17 @@ import type { InferenceContext } from '../inferutils/config.types';
 import { createLogger } from '../../logger';
 import { expandAcceptanceCriteria, ARCHETYPE_LABELS } from './capabilityMap';
 import { deriveState } from './engine';
-import type { DerivedState, InterviewSession, InterviewSpec, UserStory } from './types';
+import type { CapabilityFlags, DerivedState, InterviewSession, InterviewSpec, UserStory } from './types';
+
+function toFlagRecord(flags: CapabilityFlags): Record<string, boolean> {
+    const record: Record<string, boolean> = {};
+    for (const [flag, enabled] of Object.entries(flags)) {
+        if (enabled !== undefined) {
+            record[flag] = enabled;
+        }
+    }
+    return record;
+}
 
 const logger = createLogger('InterviewSynthesis');
 
@@ -73,7 +83,7 @@ function buildSpec(
         usersAndRoles: narrative.usersAndRoles,
         userStories: narrative.userStories,
         acceptanceCriteria: expandAcceptanceCriteria(derived.flags),
-        capabilityFlags: derived.flags,
+        capabilityFlags: toFlagRecord(derived.flags),
         assumptions: derived.assumptions,
         credentialsNeeded: derived.credentialsNeeded,
         lookAndFeel: derived.fields.lookAndFeel ?? null,
