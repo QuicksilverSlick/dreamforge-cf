@@ -28,4 +28,13 @@ export function setupScreenshotRoutes(app: Hono<AppEnv>): void {
   generatedRouter.get('/:file', setAuthLevel(AuthConfig.public), adaptController(ScreenshotsController, ScreenshotsController.serveGeneratedImage));
   generatedRouter.get('/:id/:file', setAuthLevel(AuthConfig.public), adaptController(ScreenshotsController, ScreenshotsController.serveGeneratedImage));
   app.route('/api/generated', generatedRouter);
+
+  // Publicly serve user-supplied images stored at R2 key `uploads/<key>` —
+  // assets generated apps reference by URL (e.g. logos/photos harvested from
+  // the user's own reference website). Same key shapes and posture as
+  // `/api/generated/*`.
+  const uploadsRouter = new Hono<AppEnv>();
+  uploadsRouter.get('/:file', setAuthLevel(AuthConfig.public), adaptController(ScreenshotsController, ScreenshotsController.serveUploadedImage));
+  uploadsRouter.get('/:id/:file', setAuthLevel(AuthConfig.public), adaptController(ScreenshotsController, ScreenshotsController.serveUploadedImage));
+  app.route('/api/uploads', uploadsRouter);
 }
