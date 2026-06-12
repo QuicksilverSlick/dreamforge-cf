@@ -31,11 +31,13 @@ export function createApp(env: Env): Hono<AppEnv> {
         if (pathname.startsWith('/oauth/') || pathname === '/auth/callback') {
             return next();
         }
-        // Public generated images set their own headers, including
+        // Public image-serving routes (generated assets and harvested
+        // uploads) set their own headers, including
         // Cross-Origin-Resource-Policy: cross-origin so generated-app previews
         // can embed them as <img>/backgrounds. secureHeaders would otherwise
-        // force CORP: same-origin, which blocks the cross-origin load.
-        if (pathname.startsWith('/api/generated/')) {
+        // force CORP: same-origin, which blocks the cross-origin load
+        // (ERR_BLOCKED_BY_RESPONSE.NotSameOrigin despite a 200).
+        if (pathname.startsWith('/api/generated/') || pathname.startsWith('/api/uploads/')) {
             return next();
         }
         // Apply secure headers
@@ -50,7 +52,7 @@ export function createApp(env: Env): Hono<AppEnv> {
     // for non-allowlisted origins, which breaks cross-origin <img> loads from
     // browser-render preview subdomains and fragments edge caching per-origin.
     app.use('/api/*', async (c, next) => {
-        if (c.req.path.startsWith('/api/generated/')) {
+        if (c.req.path.startsWith('/api/generated/') || c.req.path.startsWith('/api/uploads/')) {
             return next();
         }
         return cors(getCORSConfig(env))(c, next);
