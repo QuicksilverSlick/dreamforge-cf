@@ -10,6 +10,7 @@ import {
     advance,
     applyTriage,
     buildSummary,
+    buildTranscript,
     createSession,
     deriveState,
     InterviewInputError,
@@ -344,5 +345,64 @@ describe('interview engine', () => {
         expect(question!.id).toBe('p1-outcome');
         const summary = buildSummary(revived);
         expect(summary.points.join(' ')).toContain('for your customers');
+    });
+});
+
+describe('transcript', () => {
+    it('lists answered questions in ask order with display labels, excluding the open question', () => {
+        const session = newSession();
+        answerCurrent(session, text('Clients text me at all hours'));
+        answerCurrent(session, chips('customers'));
+        advance(session);
+
+        const transcript = buildTranscript(session);
+        expect(transcript.map((entry) => entry.question.id)).toEqual(['p1-problem', 'p1-audience']);
+        expect(transcript[0].answerLabel).toBe('Clients text me at all hours');
+        const audienceChip = QUESTIONS.find((q) => q.id === 'p1-audience')!.chips!.find((chip) => chip.id === 'customers')!;
+        expect(transcript[1].answerLabel).toBe(audienceChip.label);
+        expect(transcript[1].question.chips.length).toBeGreaterThan(0);
+    });
+
+    it('labels skip and delegate answers', () => {
+        const session = newSession();
+        const answered = runInterview(session, {
+            ...BOOKING_ANSWERS,
+            'p4-look': { kind: 'skip' },
+            'p3-booking-reminders': { kind: 'delegate' },
+        });
+        const transcript = buildTranscript(session);
+        const byId = new Map(transcript.map((entry) => [entry.question.id, entry.answerLabel]));
+        expect(byId.get('p4-look')).toBe('Skipped');
+        expect(byId.get('p3-booking-reminders')).toBe('You decide');
+        expect(answered).toContain('p4-look');
+    });
+
+    it('excludes triage pre-answered questions and reflects revisions in place', () => {
+        const session = newSession('booking app');
+        applyTriage(session, {
+            problem: 'p', audience: 'customers', outcome: 'o', mainFlow: 'm',
+            archetypeGuess: 'booking', archetypeConfidence: 'high',
+            capabilities: ['booking'], paymentsModel: null,
+            appNameSuggestion: null, lookAndFeel: null,
+        });
+        answerCurrent(session, chips('live-availability'));
+        answerCurrent(session, chips('yes'));
+
+        let transcript = buildTranscript(session);
+        expect(transcript.map((entry) => entry.question.id)).toEqual(['p3-booking-mode', 'p3-booking-reminders']);
+
+        submitAnswer(session, 'p3-booking-mode', chips('fixed-slots'));
+        transcript = buildTranscript(session);
+        expect(transcript.map((entry) => entry.question.id)).toEqual(['p3-booking-mode', 'p3-booking-reminders']);
+        const modeChip = QUESTIONS.find((q) => q.id === 'p3-booking-mode')!.chips!.find((chip) => chip.id === 'fixed-slots')!;
+        expect(transcript[0].answerLabel).toBe(modeChip.label);
+    });
+
+    it('drops the confirm question from the transcript once "change something" reopens it', () => {
+        const session = newSession();
+        runInterview(session, { ...BOOKING_ANSWERS, 'p5-confirm': chips('change-something') });
+        const transcript = buildTranscript(session);
+        expect(transcript.map((entry) => entry.question.id)).not.toContain('p5-confirm');
+        expect(transcript.map((entry) => entry.question.id)).toContain('p4-name');
     });
 });

@@ -21,6 +21,7 @@ import type {
     InterviewSession,
     InterviewSummary,
     QuestionPayload,
+    TranscriptEntry,
     TriageResult,
 } from './types';
 
@@ -323,6 +324,41 @@ function validateAnswer(question: QuestionDef, answer: InterviewAnswer): void {
 
 export function getProgress(session: InterviewSession): InterviewProgress {
     return { asked: session.state.askedQuestionIds.length, cap: TOTAL_QUESTION_CAP };
+}
+
+function answerLabel(question: QuestionDef, answer: InterviewAnswer): string {
+    switch (answer.kind) {
+        case 'skip':
+            return 'Skipped';
+        case 'delegate':
+            return 'You decide';
+        case 'text':
+            return answer.text;
+        case 'chips':
+            return answer.chipIds
+                .map((id) => question.chips?.find((chip) => chip.id === id)?.label ?? id)
+                .join(', ');
+    }
+}
+
+/**
+ * The answered questions in ask order, as the client should display them.
+ * Open (unanswered) and triage pre-answered questions are excluded; the
+ * confirm question disappears once "change something" reopens it.
+ */
+export function buildTranscript(session: InterviewSession): TranscriptEntry[] {
+    const derived = deriveState(session);
+    const entries: TranscriptEntry[] = [];
+    for (const id of session.state.askedQuestionIds) {
+        const question = getQuestion(id);
+        const answer = session.state.answers[id];
+        if (!question || !answer) continue;
+        entries.push({
+            question: toPayload(question, derived),
+            answerLabel: answerLabel(question, answer),
+        });
+    }
+    return entries;
 }
 
 /** The live "Your app so far" panel, rebuilt after every answer. */

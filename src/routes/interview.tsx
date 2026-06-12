@@ -11,31 +11,9 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Check, Pencil, Sparkles, X } from 'lucide-react';
 import clsx from 'clsx';
 import { apiClient } from '@/lib/api-client';
-import type { InterviewAnswer, InterviewQuestion, InterviewStateData } from '@/api-types';
+import type { InterviewAnswer, InterviewQuestion, InterviewStateData, InterviewTranscriptEntry } from '@/api-types';
 
 const SESSION_STORAGE_KEY = 'dreamforge:interview-session';
-
-interface TranscriptEntry {
-    question: InterviewQuestion;
-    answerLabel: string;
-}
-
-function answerLabelFor(question: InterviewQuestion, answer: InterviewAnswer): string {
-    switch (answer.kind) {
-        case 'skip':
-            return 'Skipped';
-        case 'delegate':
-            return 'You decide';
-        case 'text':
-            return answer.text;
-        case 'chips': {
-            const labels = answer.chipIds.map(
-                (id) => question.chips.find((chip) => chip.id === id)?.label ?? id,
-            );
-            return labels.join(', ');
-        }
-    }
-}
 
 export default function InterviewPage() {
     const navigate = useNavigate();
@@ -45,7 +23,7 @@ export default function InterviewPage() {
     const imagesParam = searchParams.get('images');
 
     const [state, setState] = useState<InterviewStateData | null>(null);
-    const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+    const [transcript, setTranscript] = useState<InterviewTranscriptEntry[]>([]);
     const [multiSelection, setMultiSelection] = useState<string[]>([]);
     const [freeText, setFreeText] = useState('');
     const [editing, setEditing] = useState<InterviewQuestion | null>(null);
@@ -70,6 +48,7 @@ export default function InterviewPage() {
 
     const applyState = useCallback((data: InterviewStateData) => {
         setState(data);
+        setTranscript(data.transcript);
         setMultiSelection([]);
         setFreeText(data.question?.prefill ?? '');
         setEditing(null);
@@ -127,16 +106,6 @@ export default function InterviewPage() {
         try {
             const response = await apiClient.submitInterviewAnswer(state.sessionId, question.id, answer);
             if (response.data) {
-                const label = answerLabelFor(question, answer);
-                setTranscript((prev) => {
-                    const existingIndex = prev.findIndex((entry) => entry.question.id === question.id);
-                    if (existingIndex >= 0) {
-                        const next = [...prev];
-                        next[existingIndex] = { question, answerLabel: label };
-                        return next;
-                    }
-                    return [...prev, { question, answerLabel: label }];
-                });
                 setEditMode(false);
                 applyState(response.data);
             }

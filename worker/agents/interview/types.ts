@@ -159,6 +159,15 @@ export interface InterviewProgress {
     cap: number;
 }
 
+/**
+ * One answered question in ask order — the client renders these verbatim so
+ * the visible Q&A survives page reloads and stays editable.
+ */
+export interface TranscriptEntry {
+    question: QuestionPayload;
+    answerLabel: string;
+}
+
 /** Live "Your app so far" panel content, rebuilt after every answer. */
 export interface InterviewSummary {
     headline: string | null;

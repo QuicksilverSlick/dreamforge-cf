@@ -313,5 +313,6 @@ export type {
   InterviewAnswer,
   InterviewSpec,
   InterviewSummary,
-  QuestionPayload as InterviewQuestion
+  QuestionPayload as InterviewQuestion,
+  TranscriptEntry as InterviewTranscriptEntry
 } from 'worker/agents/interview/types';
