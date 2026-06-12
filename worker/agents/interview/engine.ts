@@ -12,6 +12,7 @@ import {
     ARCHETYPE_LABELS,
     deriveCredentialsNeeded,
 } from './capabilityMap';
+import { extractUrlFromText } from '../../services/referenceSite/urlSafety';
 import { getQuestion, PHASE_CAPS, QUESTIONS, TOTAL_QUESTION_CAP, type QuestionDef } from './questionTree';
 import type {
     DerivedState,
@@ -119,6 +120,13 @@ export function deriveState(session: InterviewSession): DerivedState {
 /** Maps checklist chips + follow-up fields to capability flags (spec §4). */
 function finalizeFlags(draft: DerivedState, session: InterviewSession): void {
     const { fields, capabilityChips: chips, flags } = draft;
+
+    // A usable URL in the look-and-feel answer unlocks the reference-site
+    // follow-up questions and, with consent, ingestion.
+    if (fields.lookAndFeel && fields.referenceUrl === undefined) {
+        const url = extractUrlFromText(fields.lookAndFeel);
+        if (url) fields.referenceUrl = url;
+    }
 
     if (chips.includes('payments')) {
         if (fields.paymentsModel === 'subscriptions') flags['payments.subscriptions'] = true;
@@ -345,6 +353,15 @@ export function buildSummary(session: InterviewSession): InterviewSummary {
     if (capabilityLabels.length > 0) points.push(`Includes: ${capabilityLabels.join(', ')}`);
     if (flags['admin.dashboard']) points.push('Has a private back room for you');
     if (fields.lookAndFeel) points.push(`Look and feel: ${fields.lookAndFeel}`);
+    if (fields.referenceUrl) {
+        const ownershipLabels: Record<string, string> = {
+            'own-reuse': 'your site — we\'ll reuse your content and images',
+            'own-fresh': 'your site — fresh start, same spirit',
+            'style-only': 'style inspiration only',
+        };
+        const detail = fields.referenceOwnership ? ` (${ownershipLabels[fields.referenceOwnership]})` : '';
+        points.push(`Styled after ${fields.referenceUrl}${detail}`);
+    }
 
     return { headline, points, assumptions: derived.assumptions };
 }

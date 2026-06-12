@@ -14,10 +14,12 @@ import {
     applyTriage,
     buildSummary,
     createSession,
+    deriveState,
     getProgress,
     InterviewInputError,
     submitAnswer,
 } from '../../../agents/interview/engine';
+import { ingestReferenceSite } from '../../../services/referenceSite/ingest';
 import { runTriage } from '../../../agents/interview/triage';
 import { runSynthesis } from '../../../agents/interview/synthesis';
 import { InterviewSessionService } from '../../../database/services/InterviewSessionService';
@@ -62,6 +64,43 @@ async function finishSession(env: Env, session: InterviewSession): Promise<void>
     session.state.currentQuestionId = null;
     if (!session.spec) {
         session.spec = await runSynthesis(env, buildInferenceContext(session.id, session.userId), session);
+    }
+}
+
+/**
+ * Background ingestion of the user's reference website, kicked off the
+ * moment they answer the ownership/consent question. Results land on the
+ * session for the build controller to pick up; failures are recorded and
+ * never block the interview or the build.
+ */
+async function runReferenceIngestion(env: Env, sessionId: string, userId: string): Promise<void> {
+    try {
+        const service = new InterviewSessionService(env);
+        const session = await service.getSession(sessionId, userId);
+        if (!session) return;
+
+        const derived = deriveState(session);
+        const { referenceUrl, referenceLikes, referenceOwnership } = derived.fields;
+        if (!referenceUrl || !referenceOwnership) return;
+
+        const profile = await ingestReferenceSite(env, {
+            url: referenceUrl,
+            ownership: referenceOwnership,
+            likes: referenceLikes ?? [],
+            sessionId,
+            inferenceContext: buildInferenceContext(sessionId, userId),
+        });
+
+        // Re-load before saving: the user kept answering while we browsed.
+        const fresh = await service.getSession(sessionId, userId);
+        if (!fresh) return;
+        fresh.referenceSite = profile;
+        await service.putSession(fresh);
+    } catch (error) {
+        InterviewController.logger.warn('Reference-site ingestion failed (non-fatal)', {
+            sessionId,
+            error: error instanceof Error ? error.message : String(error),
+        });
     }
 }
 
@@ -116,7 +155,7 @@ export class InterviewController extends BaseController {
      * POST /api/interview/:sessionId/answer — answer the open question (or
      * revise an earlier one after "Change something").
      */
-    static async submitAnswer(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<InterviewStateData>>> {
+    static async submitAnswer(request: Request, env: Env, ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<InterviewStateData>>> {
         try {
             const user = context.user!;
             const sessionId = context.pathParams.sessionId;
@@ -149,7 +188,15 @@ export class InterviewController extends BaseController {
             if (session.state.finished) {
                 await finishSession(env, session);
             }
-            return InterviewController.createSuccessResponse(await resolveAndSave(env, session));
+            const data = await resolveAndSave(env, session);
+
+            // Consent given (or revised): browse the reference site in the
+            // background while the user finishes the interview.
+            if (questionId === 'p4-reference-ownership') {
+                ctx.waitUntil(runReferenceIngestion(env, session.id, user.id));
+            }
+
+            return InterviewController.createSuccessResponse(data);
         } catch (error) {
             this.logger.error('Failed to submit interview answer', error);
             return InterviewController.createErrorResponse<InterviewStateData>('Failed to record the answer', 500);

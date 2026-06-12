@@ -84,6 +84,7 @@ export interface AgentConfig {
     conversationalResponse: ModelConfig;
     interviewTriage: ModelConfig;
     interviewSynthesis: ModelConfig;
+    referenceSiteAnalysis: ModelConfig;
 }
 
 // Provider and reasoning effort types for validation

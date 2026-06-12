@@ -167,6 +167,15 @@ export const AGENT_CONFIG: AgentConfig = {
         temperature: 0.2,
         fallbackModel: AIModels.GEMINI_3_1_FLASH_LITE,
     },
+    // Vision description of a reference website's design system during
+    // intake ingestion (services/referenceSite/ingest.ts).
+    referenceSiteAnalysis: {
+        name: AIModels.GEMINI_3_5_FLASH,
+        reasoning_effort: 'low',
+        max_tokens: 2000,
+        temperature: 0.2,
+        fallbackModel: AIModels.GEMINI_3_1_FLASH_LITE,
+    },
     codeReview: {
         name: AIModels.GEMINI_3_5_FLASH,
         reasoning_effort: 'medium',

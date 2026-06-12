@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod';
+import type { ReferenceOwnership, ReferenceSiteProfile } from '../../services/referenceSite/types';
 
 export type AudienceId = 'just-me' | 'team' | 'customers' | 'anyone';
 
@@ -85,6 +86,10 @@ export interface InterviewFields {
     bookingReminders?: 'yes' | 'no';
     backroom?: 'yes' | 'yes-roles' | 'no' | 'not-sure';
     lookAndFeel?: string;
+    /** Derived from lookAndFeel when it contains a usable URL. */
+    referenceUrl?: string;
+    referenceLikes?: string[];
+    referenceOwnership?: ReferenceOwnership;
     appName?: string;
     appNameSuggestion?: string;
 }
@@ -131,6 +136,8 @@ export interface InterviewSession {
     state: InterviewState;
     triage: TriageResult | null;
     spec: InterviewSpec | null;
+    /** Populated in the background once the user consents to ingestion. */
+    referenceSite?: ReferenceSiteProfile | null;
 }
 
 /** The question payload sent to the client. */

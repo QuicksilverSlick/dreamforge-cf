@@ -137,6 +137,11 @@
             "remote": true
         }
     ],
+    // Browser Run (Browser Rendering) — reference-site ingestion for the
+    // intake interview (screenshots, style probe, content extraction).
+    "browser": {
+        "binding": "BROWSER"
+    },
     // "placement": {
     //   "mode": "smart"
     // },
