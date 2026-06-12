@@ -83,6 +83,7 @@ import { WebSocketMessageResponses } from '../../constants';
 import { GenerationContext } from '../../domain/values/GenerationContext';
 import { IssueReport } from '../../domain/values/IssueReport';
 import { generateBlueprint } from '../../planning/blueprint';
+import { BRAND_ASSETS_MODULE_PATH, renderBrandAssetsModule } from '../../assets/brandAssetsFile';
 import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 import { FastCodeFixerOperation } from '../../operations/FastCodeFixer';
 import { PhaseGenerationOperation } from '../../operations/PhaseGeneration';
@@ -257,6 +258,19 @@ export class PhasicCodingBehavior
             this.fileManager.saveGeneratedFiles(filesToSave);
 
             this.logger.info('Saved customized template files');
+        }
+
+        // Hosted asset URLs (harvested reference-site assets bound onto the
+        // manifest) are written into a project module the coder imports —
+        // models mistranscribe long asset URLs when typing them into code.
+        const brandAssetsSource = renderBrandAssetsModule(blueprint.imageAssets);
+        if (brandAssetsSource) {
+            this.fileManager.saveGeneratedFiles([{
+                filePath: BRAND_ASSETS_MODULE_PATH,
+                fileContents: brandAssetsSource,
+                filePurpose: 'Hosted brand-asset URLs (pipeline-managed, not model-written)',
+            }]);
+            this.logger.info('Saved brand-assets module');
         }
 
         // Kick off async initialization (sandbox deploy + setup
