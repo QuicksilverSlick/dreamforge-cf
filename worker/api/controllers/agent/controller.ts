@@ -199,6 +199,16 @@ export class CodingAgentController extends BaseController {
                 writer.write("terminate");
                 writer.close();
                 this.logger.info(`Agent ${agentId} terminated successfully`);
+            }, async (error: unknown) => {
+                // Without this rejection branch a failed initialization
+                // leaves the response stream open forever — the runtime
+                // cancels the request as hung and the client sees a build
+                // frozen at the blueprint step with no error anywhere.
+                const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+                this.logger.error(`Agent ${agentId} initialization failed`, error);
+                writer.write({ error: `Code generation failed to start: ${message}` });
+                writer.write("terminate");
+                writer.close();
             });
 
             this.logger.info(`Agent ${agentId} init launched successfully`);
