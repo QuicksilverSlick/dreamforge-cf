@@ -201,9 +201,7 @@ export class RateLimitService {
 	 * Abuse-facing limits (auth) are NOT exempted.
 	 */
 	static isExemptUser(env: Env, userId: string): boolean {
-		// Widened: typegen types the var as its empty wrangler.jsonc default
-		// (literal "") but the runtime value comes from the secret.
-		const raw: string = env.RATE_LIMIT_EXEMPT_USER_IDS;
+		const raw = env.RATE_LIMIT_EXEMPT_USER_IDS;
 		if (!raw) return false;
 		return raw.split(',').map((id) => id.trim()).filter(Boolean).includes(userId);
 	}
