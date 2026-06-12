@@ -256,7 +256,7 @@ export default function InterviewPage() {
                     {/* Mount-only animation: an exit choreography here (AnimatePresence
                         mode="wait") proved able to strand the outgoing question and
                         never mount the next one. Robust beats pretty. */}
-                    {activeQuestion && !editMode && (
+                    {activeQuestion && (!editMode || editing) && (
                             <motion.div
                                 key={activeQuestion.id}
                                 initial={{ opacity: 0, y: 8 }}
