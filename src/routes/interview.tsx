@@ -15,6 +15,34 @@ import type { InterviewAnswer, InterviewQuestion, InterviewStateData, InterviewT
 
 const SESSION_STORAGE_KEY = 'dreamforge:interview-session';
 
+/**
+ * The stored session is keyed to the idea it was started from: resuming is
+ * only valid for the same query, otherwise a leftover unfinished interview
+ * would hijack every new build attempt in the tab.
+ */
+interface StoredInterviewRef {
+    sessionId: string;
+    query: string;
+}
+
+function readStoredSession(): StoredInterviewRef | null {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        if (
+            typeof parsed === 'object' && parsed !== null &&
+            'sessionId' in parsed && typeof parsed.sessionId === 'string' &&
+            'query' in parsed && typeof parsed.query === 'string'
+        ) {
+            return { sessionId: parsed.sessionId, query: parsed.query };
+        }
+    } catch {
+        // Pre-keyed format (bare session id) — treat as absent.
+    }
+    return null;
+}
+
 export default function InterviewPage() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -60,11 +88,12 @@ export default function InterviewPage() {
     useEffect(() => {
         let cancelled = false;
         const begin = async () => {
+            setStarting(true);
             try {
-                const existing = sessionStorage.getItem(SESSION_STORAGE_KEY);
-                if (existing) {
+                const stored = readStoredSession();
+                if (stored && stored.query === query) {
                     try {
-                        const response = await apiClient.getInterviewSession(existing);
+                        const response = await apiClient.getInterviewSession(stored.sessionId);
                         if (!cancelled && response.data) {
                             applyState(response.data);
                             return;
@@ -76,7 +105,10 @@ export default function InterviewPage() {
                 const response = await apiClient.startInterview(query);
                 if (cancelled) return;
                 if (response.data) {
-                    sessionStorage.setItem(SESSION_STORAGE_KEY, response.data.sessionId);
+                    sessionStorage.setItem(
+                        SESSION_STORAGE_KEY,
+                        JSON.stringify({ sessionId: response.data.sessionId, query } satisfies StoredInterviewRef),
+                    );
                     applyState(response.data);
                 }
             } catch {
@@ -92,7 +124,7 @@ export default function InterviewPage() {
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [query]);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
