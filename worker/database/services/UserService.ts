@@ -7,6 +7,7 @@ import { BaseService } from './BaseService';
 import * as schema from '../schema';
 import { eq, and, sql, lt, ne } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
+import type { UserRole } from '../../types/auth-types';
 
 /**
  * User Service Class
@@ -23,6 +24,37 @@ export class UserService extends BaseService {
             .values({ ...userData, id: generateId() })
             .returning();
         return user;
+    }
+
+    // ========================================
+    // OPERATOR-ONLY ACCOUNT ACTIONS
+    // Callers MUST gate these behind an operator role (AuthConfig.superadminOnly).
+    // Never expose them on a user-facing route — role/status are privilege-bearing
+    // and must never be settable via profile updates or OAuth upserts.
+    // ========================================
+
+    /** Set a user's platform role. Operator-only. */
+    async setRole(userId: string, role: UserRole): Promise<void> {
+        await this.database
+            .update(schema.users)
+            .set({ role, updatedAt: new Date() })
+            .where(eq(schema.users.id, userId));
+    }
+
+    /** Suspend an account (blocks login + every authenticated request). Operator-only. */
+    async suspendUser(userId: string): Promise<void> {
+        await this.database
+            .update(schema.users)
+            .set({ isSuspended: true, updatedAt: new Date() })
+            .where(eq(schema.users.id, userId));
+    }
+
+    /** Lift a suspension. Operator-only. */
+    async reactivateUser(userId: string): Promise<void> {
+        await this.database
+            .update(schema.users)
+            .set({ isSuspended: false, isActive: true, updatedAt: new Date() })
+            .where(eq(schema.users.id, userId));
     }
 
     /**

@@ -275,6 +275,7 @@ export function mapUserResponse(
 		provider: user.provider || undefined,
 		emailVerified: user.emailVerified || undefined,
 		createdAt: user.createdAt || undefined,
+		role: user.role || 'user',
 	};
 }
 

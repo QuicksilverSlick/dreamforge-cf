@@ -3,7 +3,7 @@
  */
 
 import { createMiddleware } from 'hono/factory';
-import { AuthUser } from '../../types/auth-types';
+import { AuthUser, UserRole, PLATFORM_STAFF_ROLES } from '../../types/auth-types';
 import { createLogger } from '../../logger';
 import { AppService } from '../../database';
 import { authMiddleware } from './auth';
@@ -20,15 +20,17 @@ const logger = createLogger('RouteAuth');
 /**
  * Authentication levels for route protection
  */
-export type AuthLevel = 'public' | 'authenticated' | 'owner-only';
+export type AuthLevel = 'public' | 'authenticated' | 'owner-only' | 'role';
 
 /**
  * Authentication requirement configuration
  */
 export interface AuthRequirement {
     required: boolean;
-    level: 'public' | 'authenticated' | 'owner-only';
+    level: AuthLevel;
     resourceOwnershipCheck?: (user: AuthUser, params: Record<string, string>, env: Env) => Promise<boolean>;
+    /** For level 'role': the platform roles allowed through (fail-closed). */
+    allowedRoles?: readonly UserRole[];
 }
 
 /**
@@ -48,15 +50,31 @@ export const AuthConfig = {
     },
     
     // Require resource ownership (for app editing)
-    ownerOnly: { 
-        required: true, 
+    ownerOnly: {
+        required: true,
         level: 'owner-only' as const,
         resourceOwnershipCheck: checkAppOwnership
     },
-    
+
+    // Platform operator only (the highest role). For destructive admin actions.
+    superadminOnly: {
+        required: true,
+        level: 'role' as const,
+        allowedRoles: ['superadmin'] as const,
+    },
+
+    // Any platform-staff role (superadmin/support/ai_support/ai_admin). For
+    // operator dashboard + read-only support surfaces. Excludes org 'admin'
+    // and 'user'.
+    platformStaff: {
+        required: true,
+        level: 'role' as const,
+        allowedRoles: PLATFORM_STAFF_ROLES,
+    },
+
     // Public read access, but owner required for modifications
-    publicReadOwnerWrite: { 
-        required: false 
+    publicReadOwnerWrite: {
+        required: false
     }
 } as const;
 
@@ -71,7 +89,6 @@ export async function routeAuthChecks(
 ): Promise<{ success: boolean; response?: Response }> {
     try {
         // Public routes always pass
-        console.log('requirement', requirement, 'for user', user);
         if (requirement.level === 'public') {
             return { success: true };
         }
@@ -115,6 +132,25 @@ export async function routeAuthChecks(
             return { success: true };
         }
 
+        // For role-gated routes (platform admin/support surfaces). Fail closed:
+        // no user => 401; user whose role is not in allowedRoles => 403.
+        if (requirement.level === 'role') {
+            if (!user) {
+                return {
+                    success: false,
+                    response: createAuthRequiredResponse('Account required')
+                };
+            }
+            const allowed = requirement.allowedRoles ?? [];
+            if (!user.role || !allowed.includes(user.role)) {
+                return {
+                    success: false,
+                    response: createForbiddenResponse('Operator access required')
+                };
+            }
+            return { success: true };
+        }
+
         // Default fallback
         return { success: true };
     } catch (error) {
@@ -145,7 +181,7 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
     }
     
     // Only perform auth if we need it or don't have user yet
-    if (!user && (requirement.level === 'authenticated' || requirement.level === 'owner-only')) {
+    if (!user && (requirement.level === 'authenticated' || requirement.level === 'owner-only' || requirement.level === 'role')) {
         const userSession = await authMiddleware(c.req.raw, c.env);
         if (!userSession) {
             return errorResponse('Authentication required', 401);

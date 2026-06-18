@@ -40,7 +40,14 @@ export const users = sqliteTable('users', {
     // Account Status
     isActive: integer('is_active', { mode: 'boolean' }).default(true),
     isSuspended: integer('is_suspended', { mode: 'boolean' }).default(false),
-    
+
+    // Platform authorization role. 'user' = normal end user. 'admin' is the
+    // org-admin role (org scoping activates in Phase 2). 'superadmin' is the
+    // platform operator; 'support'/'ai_support'/'ai_admin' are staff/agent
+    // roles. Resolved per-request from D1 (never trusted from the JWT) so
+    // revocation is instant; mutated only via operator-only service methods.
+    role: text('role', { enum: ['superadmin', 'admin', 'user', 'support', 'ai_support', 'ai_admin'] }).notNull().default('user'),
+
     // Metadata
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
@@ -55,6 +62,7 @@ export const users = sqliteTable('users', {
     failedLoginAttemptsIdx: index('users_failed_login_attempts_idx').on(table.failedLoginAttempts),
     lockedUntilIdx: index('users_locked_until_idx').on(table.lockedUntil),
     isActiveIdx: index('users_is_active_idx').on(table.isActive),
+    roleIdx: index('users_role_idx').on(table.role),
     lastActiveAtIdx: index('users_last_active_at_idx').on(table.lastActiveAt),
 }));
 

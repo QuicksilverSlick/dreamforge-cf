@@ -213,7 +213,18 @@ export class AuthService extends BaseService {
                     401
                 );
             }
-            
+
+            // Reject suspended/deactivated accounts only after a correct
+            // password (never reveal account status to a wrong-password probe).
+            if (user.isSuspended || user.isActive === false) {
+                await this.logAuthAttempt(credentials.email, 'login', false, request);
+                throw new SecurityError(
+                    SecurityErrorType.FORBIDDEN,
+                    'Your account has been suspended — please contact support.',
+                    403
+                );
+            }
+
             // Create session
             const { accessToken, session } = await this.sessionService.createSession(
                 user.id,
@@ -413,7 +424,19 @@ export class AuthService extends BaseService {
             
             // Find or create user
             const user = await this.findOrCreateOAuthUser(provider, oauthUserInfo);
-            
+
+            // Suspended/deactivated accounts must not get a session via OAuth
+            // either — mirror the email-login gate so enforcement is consistent
+            // at every authenticate chokepoint, not only defended downstream.
+            if (user.isSuspended || user.isActive === false) {
+                await this.logAuthAttempt(user.email, `oauth_${provider}`, false, request);
+                throw new SecurityError(
+                    SecurityErrorType.FORBIDDEN,
+                    'Your account has been suspended — please contact support.',
+                    403
+                );
+            }
+
             // Create session
             const { accessToken: sessionAccessToken, session } = await this.sessionService.createSession(
                 user.id,
@@ -704,12 +727,20 @@ export class AuthService extends BaseService {
                     provider: schema.users.provider,
                     emailVerified: schema.users.emailVerified,
                     createdAt: schema.users.createdAt,
+                    role: schema.users.role,
                 })
                 .from(schema.users)
                 .where(
                     and(
                         eq(schema.users.id, userId),
-                        isNull(schema.users.deletedAt)
+                        isNull(schema.users.deletedAt),
+                        // Suspended/deactivated accounts stop authenticating on
+                        // every request, not just at login (defense in depth).
+                        // NULL-tolerant: only an EXPLICIT suspended/inactive
+                        // state blocks (mirrors the login check), so legacy rows
+                        // with NULL status are never silently locked out.
+                        or(isNull(schema.users.isSuspended), eq(schema.users.isSuspended, false)),
+                        or(isNull(schema.users.isActive), eq(schema.users.isActive, true))
                     )
                 )
                 .get()

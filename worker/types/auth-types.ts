@@ -10,6 +10,16 @@ import type { ApiKey, AuthAttempt as SchemaAuthAttempt, AuditLog, OAuthState } f
 export type OAuthProvider = 'google' | 'github';
 
 /**
+ * Platform authorization roles. 'user' is the baseline end user. 'admin' is
+ * the org-admin role (org scoping lands in Phase 2). 'superadmin' is the
+ * platform operator. 'support'/'ai_support'/'ai_admin' are staff/agent roles.
+ */
+export type UserRole = 'superadmin' | 'admin' | 'user' | 'support' | 'ai_support' | 'ai_admin';
+
+/** Platform-staff roles that may access operator surfaces (NOT org 'admin', NOT 'user'). */
+export const PLATFORM_STAFF_ROLES: readonly UserRole[] = ['superadmin', 'support', 'ai_support', 'ai_admin'];
+
+/**
  * Authenticated user for middleware and session context
  */
 export interface AuthUser {
@@ -24,6 +34,8 @@ export interface AuthUser {
     emailVerified?: boolean;
     createdAt?: Date;
     isAnonymous?: boolean;
+    /** Platform role, resolved per-request from D1. Absent => treat as 'user'. */
+    role?: UserRole;
 }
 
 /**
