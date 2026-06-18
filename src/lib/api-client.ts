@@ -371,17 +371,24 @@ class ApiClient {
 
                 const errorData = data.error;
                 if (errorData && errorData.type) {
+                    // A CSRF violation that we're about to silently refresh+retry
+                    // (e.g. the token was rotated on login) should not surface a
+                    // scary toast — only toast if the retry is exhausted.
+                    const willRetryCsrf =
+                        errorData.type === SecurityErrorType.CSRF_VIOLATION &&
+                        response.status === 403 &&
+                        !isRetry;
                        // Send a toast notification for typed errors
-                    if (!noToast) {
+                    if (!noToast && !willRetryCsrf) {
                         toast.error(errorData.message);
                     }
                     switch (errorData.type) {
                         case SecurityErrorType.CSRF_VIOLATION:
                             // Handle CSRF failures with retry
-                            if (response.status === 403 && !isRetry) {
-                                // Clear expired token and retry with fresh one
+                            if (willRetryCsrf) {
+                                // Clear stale/rotated token and retry with a fresh one
                                 this.csrfTokenInfo = null;
-                                return this.requestRaw(endpoint, options, true);
+                                return this.requestRaw(endpoint, options, true, noToast);
                             }
                             break;
                         case SecurityErrorType.RATE_LIMITED:
@@ -1228,10 +1235,16 @@ class ApiClient {
 		email: string;
 		password: string;
 	}): Promise<ApiResponse<LoginResponseData>> {
-		return this.request<LoginResponseData>('/api/auth/login', {
+		const result = await this.request<LoginResponseData>('/api/auth/login', {
 			method: 'POST',
 			body: credentials,
 		});
+		// The server rotates the CSRF token on auth state changes
+		// (rotateOnAuth). Resync the client's cached token so the next
+		// state-changing request matches the rotated cookie instead of
+		// failing the double-submit check.
+		await this.refreshCsrfToken();
+		return result;
 	}
 
 	/**
@@ -1242,10 +1255,12 @@ class ApiClient {
 		password: string;
 		name?: string;
 	}): Promise<ApiResponse<RegisterResponseData>> {
-		return this.request<RegisterResponseData>('/api/auth/register', {
+		const result = await this.request<RegisterResponseData>('/api/auth/register', {
 			method: 'POST',
 			body: data,
 		});
+		await this.refreshCsrfToken();
+		return result;
 	}
 
 	/**
@@ -1255,10 +1270,12 @@ class ApiClient {
 		email: string;
 		otp: string;
 	}): Promise<ApiResponse<LoginResponseData>> {
-		return this.request<LoginResponseData>('/api/auth/verify-email', {
+		const result = await this.request<LoginResponseData>('/api/auth/verify-email', {
 			method: 'POST',
 			body: data,
 		});
+		await this.refreshCsrfToken();
+		return result;
 	}
 
 	/**
@@ -1294,9 +1311,13 @@ class ApiClient {
 	 * Logout current user
 	 */
 	async logout(): Promise<ApiResponse<{ message: string }>> {
-		return this.request<{ message: string }>('/api/auth/logout', {
+		const result = await this.request<{ message: string }>('/api/auth/logout', {
 			method: 'POST',
 		});
+		// Logout clears the CSRF cookie server-side; drop the cached token so
+		// the next state-changing request fetches a fresh one.
+		await this.refreshCsrfToken();
+		return result;
 	}
 
 	/**
