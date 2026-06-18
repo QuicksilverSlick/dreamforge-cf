@@ -77,3 +77,7 @@ deploy*.log
 
 # M3 port scratch files (upstream reference, never commit)
 .upstream-*.ts
+
+# Local operator-seed credentials (never commit plaintext)
+.seed.json
+*.seed.json
