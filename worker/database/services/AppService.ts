@@ -3,6 +3,7 @@
  */
 
 import { BaseService } from './BaseService';
+import { OrganizationService } from './OrganizationService';
 import * as schema from '../schema';
 import { eq, and, or, desc, asc, sql, isNull, inArray } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
@@ -63,10 +64,27 @@ export class AppService extends BaseService {
      * Create a new app
      */
     async createApp(appData:schema.NewApp): Promise<schema.App> {
+        // Phase 2 (dark dual-write): stamp the owner's personal org so new apps
+        // carry orgId before enforcement lands. Anonymous apps (no userId) have
+        // no org; an explicitly-provided orgId (future team orgs) is respected.
+        // Best-effort — never block app creation on org plumbing.
+        let orgId = appData.orgId ?? null;
+        if (!orgId && appData.userId) {
+            try {
+                orgId = await new OrganizationService(this.env).ensurePersonalOrg(appData.userId);
+            } catch (error) {
+                this.logger.error('Failed to resolve personal org for new app', {
+                    userId: appData.userId,
+                    error,
+                });
+            }
+        }
+
         const [app] = await this.database
             .insert(schema.apps)
             .values({
                 ...appData,
+                orgId,
             })
             .returning();
         return app;
