@@ -8,24 +8,11 @@ import * as schema from '../schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { generateId } from '../../utils/idGenerator';
+import type { GitHubTokenStatus } from '../types';
 
-/**
- * Plaintext-safe GitHub connection status for operator/admin views. Carries
- * metadata only — the encrypted token is never read or decrypted here. There
- * is no `keyPreview` for GitHub tokens (the whole value is encrypted), so an
- * admin view can show connection state and scopes but nothing of the token.
- */
-export interface GitHubTokenStatus {
-    connected: boolean;
-    isActive: boolean;
-    isRevoked: boolean;
-    tokenType: string;
-    scopes: string[];
-    lastUsed: Date | null;
-    revokedAt: Date | null;
-    createdAt: Date | null;
-    updatedAt: Date | null;
-}
+// GitHubTokenStatus (plaintext-safe, metadata only) lives in ../types so the
+// SPA can consume it without importing this service's runtime module.
+export type { GitHubTokenStatus } from '../types';
 
 export class GitHubTokenService extends BaseService {
     /**

@@ -58,7 +58,16 @@ import type{
     RateLimitError,
     CapabilitiesData,
     InterviewStateData,
-    InterviewAnswer
+    InterviewAnswer,
+    AdminOverviewData,
+    AdminUsersListData,
+    AdminUserDetailData,
+    AdminUserAppsData,
+    AdminUserSessionsData,
+    AdminUserSecretsData,
+    AdminAuditListData,
+    AdminUserSummary,
+    UserRole,
 } from '@/api-types';
 import {
 
@@ -1341,6 +1350,91 @@ class ApiClient {
 
 		// Redirect to OAuth provider
 		window.location.href = oauthUrl.toString();
+	}
+
+	// ===============================
+	// Admin Console API Methods (Phase 1)
+	// Every endpoint is gated server-side by AuthConfig.superadminOnly.
+	// ===============================
+
+	private buildAdminQuery(params: Record<string, string | number | undefined>): string {
+		const search = new URLSearchParams();
+		for (const [key, value] of Object.entries(params)) {
+			if (value !== undefined && value !== '') {
+				search.set(key, String(value));
+			}
+		}
+		const qs = search.toString();
+		return qs ? `?${qs}` : '';
+	}
+
+	async getAdminOverview(): Promise<ApiResponse<AdminOverviewData>> {
+		return this.request<AdminOverviewData>('/api/admin/overview');
+	}
+
+	async getAdminUsers(
+		params: {
+			q?: string;
+			role?: UserRole;
+			status?: 'all' | 'active' | 'suspended';
+			limit?: number;
+			offset?: number;
+		} = {},
+	): Promise<ApiResponse<AdminUsersListData>> {
+		return this.request<AdminUsersListData>(`/api/admin/users${this.buildAdminQuery(params)}`);
+	}
+
+	async getAdminUser(userId: string): Promise<ApiResponse<AdminUserDetailData>> {
+		return this.request<AdminUserDetailData>(`/api/admin/users/${encodeURIComponent(userId)}`);
+	}
+
+	async getAdminUserApps(
+		userId: string,
+		params: { limit?: number; offset?: number } = {},
+	): Promise<ApiResponse<AdminUserAppsData>> {
+		return this.request<AdminUserAppsData>(
+			`/api/admin/users/${encodeURIComponent(userId)}/apps${this.buildAdminQuery(params)}`,
+		);
+	}
+
+	async getAdminUserSessions(userId: string): Promise<ApiResponse<AdminUserSessionsData>> {
+		return this.request<AdminUserSessionsData>(
+			`/api/admin/users/${encodeURIComponent(userId)}/sessions`,
+		);
+	}
+
+	async getAdminUserSecrets(userId: string): Promise<ApiResponse<AdminUserSecretsData>> {
+		return this.request<AdminUserSecretsData>(
+			`/api/admin/users/${encodeURIComponent(userId)}/secrets`,
+		);
+	}
+
+	async getAdminAuditLogs(
+		params: {
+			userId?: string;
+			entityType?: string;
+			action?: string;
+			limit?: number;
+			offset?: number;
+		} = {},
+	): Promise<ApiResponse<AdminAuditListData>> {
+		return this.request<AdminAuditListData>(
+			`/api/admin/audit-logs${this.buildAdminQuery(params)}`,
+		);
+	}
+
+	async suspendUser(userId: string, reason: string): Promise<ApiResponse<AdminUserSummary>> {
+		return this.request<AdminUserSummary>(
+			`/api/admin/users/${encodeURIComponent(userId)}/suspend`,
+			{ method: 'POST', body: { reason } },
+		);
+	}
+
+	async reactivateUser(userId: string, reason?: string): Promise<ApiResponse<AdminUserSummary>> {
+		return this.request<AdminUserSummary>(
+			`/api/admin/users/${encodeURIComponent(userId)}/reactivate`,
+			{ method: 'POST', body: reason ? { reason } : {} },
+		);
 	}
 }
 
