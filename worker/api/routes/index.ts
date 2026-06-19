@@ -16,6 +16,7 @@ import { setupCloudflareConnectRoutes } from './cloudflareConnectRoutes';
 import { setupLimitsRoutes } from './limitsRoutes';
 import { setupCapabilitiesRoutes } from './capabilitiesRoutes';
 import { setupInterviewRoutes } from './interviewRoutes';
+import { setupAdminRoutes } from './adminRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
 import { setupStatusRoutes } from './statusRoutes';
@@ -82,4 +83,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Intake interview ("21 Questions") routes
     setupInterviewRoutes(app);
+
+    // Operator admin console (Phase 1) — superadmin-only, kill-switchable
+    setupAdminRoutes(app);
 }

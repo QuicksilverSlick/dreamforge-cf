@@ -99,6 +99,11 @@ declare namespace Cloudflare {
         // the worker boots without it (no exemptions).
         RATE_LIMIT_EXEMPT_USER_IDS?: string;
 
+        // Operator admin console kill-switch. When set to 'false' the whole
+        // /api/admin/* group 404s without a redeploy (set as a secret/var via
+        // the dashboard). Absent or any other value => enabled (default on).
+        ADMIN_CONSOLE_ENABLED?: string;
+
         // Observability
         SENTRY_DSN: string;
     }
@@ -157,6 +162,7 @@ interface Env {
     ALLOCATION_STRATEGY: string;
     USE_TUNNEL_FOR_PREVIEW: boolean;
     RATE_LIMIT_EXEMPT_USER_IDS?: string;
+    ADMIN_CONSOLE_ENABLED?: string;
 
     SENTRY_DSN: string;
 }

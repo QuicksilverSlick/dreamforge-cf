@@ -9,6 +9,24 @@ import { eq, and, desc } from 'drizzle-orm';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { generateId } from '../../utils/idGenerator';
 
+/**
+ * Plaintext-safe GitHub connection status for operator/admin views. Carries
+ * metadata only — the encrypted token is never read or decrypted here. There
+ * is no `keyPreview` for GitHub tokens (the whole value is encrypted), so an
+ * admin view can show connection state and scopes but nothing of the token.
+ */
+export interface GitHubTokenStatus {
+    connected: boolean;
+    isActive: boolean;
+    isRevoked: boolean;
+    tokenType: string;
+    scopes: string[];
+    lastUsed: Date | null;
+    revokedAt: Date | null;
+    createdAt: Date | null;
+    updatedAt: Date | null;
+}
+
 export class GitHubTokenService extends BaseService {
     /**
      * Helper: Convert Uint8Array to Base64 string (binary-safe)
@@ -364,6 +382,45 @@ export class GitHubTokenService extends BaseService {
             this.logger.error('Failed to revoke GitHub token', error);
             throw error;
         }
+    }
+
+    /**
+     * Read GitHub connection status for an operator/admin view. Metadata only:
+     * selects no encrypted column and never calls decryptToken. Returns null
+     * when the user has never connected GitHub.
+     */
+    async getTokenStatus(userId: string): Promise<GitHubTokenStatus | null> {
+        const record = await this.getReadDb('fast')
+            .select({
+                isActive: schema.githubTokens.isActive,
+                isRevoked: schema.githubTokens.isRevoked,
+                tokenType: schema.githubTokens.tokenType,
+                scopes: schema.githubTokens.scopes,
+                lastUsed: schema.githubTokens.lastUsed,
+                revokedAt: schema.githubTokens.revokedAt,
+                createdAt: schema.githubTokens.createdAt,
+                updatedAt: schema.githubTokens.updatedAt,
+            })
+            .from(schema.githubTokens)
+            .where(eq(schema.githubTokens.userId, userId))
+            .orderBy(desc(schema.githubTokens.createdAt))
+            .get();
+
+        if (!record) {
+            return null;
+        }
+
+        return {
+            connected: true,
+            isActive: record.isActive ?? false,
+            isRevoked: record.isRevoked ?? false,
+            tokenType: record.tokenType,
+            scopes: record.scopes,
+            lastUsed: record.lastUsed ?? null,
+            revokedAt: record.revokedAt ?? null,
+            createdAt: record.createdAt ?? null,
+            updatedAt: record.updatedAt ?? null,
+        };
     }
 
     /**
