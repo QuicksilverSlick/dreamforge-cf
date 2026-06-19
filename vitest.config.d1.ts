@@ -22,6 +22,10 @@ export default defineWorkersProject(async () => {
               TEST_MIGRATIONS: migrations,
               SECRETS_ENCRYPTION_KEY:
                 '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+              // Valid per jwtUtils validator (>=32 chars, mixed classes, no weak
+              // words/runs). Lets services that construct SessionService/JWTUtils
+              // (e.g. AdminService session revocation) instantiate in tests.
+              JWT_SECRET: 'Zr7Kp-Q2mWn9xB3fL6hYd1Sg4Jc5Va8Et0uX',
             },
           },
         },
