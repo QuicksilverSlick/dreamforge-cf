@@ -11,6 +11,7 @@ import {
 	Bookmark,
 	// LayoutGrid,
 	Compass,
+	ShieldCheck,
 } from 'lucide-react';
 import './sidebar-overrides.css';
 import { useRecentApps, useFavoriteApps, useApps } from '@/hooks/use-apps';
@@ -31,6 +32,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/auth-context';
+import { isAdminRole } from '@/routes/admin/admin-utils';
 import { useNavigate } from 'react-router';
 import { cn } from '@/lib/utils';
 import {
@@ -570,6 +572,22 @@ export function AppSidebar() {
 				<SidebarFooter>
 					{user && (
 						<SidebarMenu>
+							{isAdminRole(user.role) && (
+								<SidebarMenuItem>
+									<SidebarMenuButton
+										onClick={() => navigate('/admin')}
+										tooltip="Admin"
+										className="group hover:opacity-80 hover:cursor-pointer hover:bg-bg-1/50 transition-all duration-200"
+									>
+										<ShieldCheck className="h-6 w-6 text-text-primary/60 group-hover:text-primary/80 transition-colors" />
+										{!isCollapsed && (
+											<span className="font-medium text-text-primary/80 group-hover:text-primary transition-colors">
+												Admin
+											</span>
+										)}
+									</SidebarMenuButton>
+								</SidebarMenuItem>
+							)}
 							<SidebarMenuItem>
 								<SidebarMenuButton
 									id="discover-link"

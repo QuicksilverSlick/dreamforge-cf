@@ -21,27 +21,14 @@ import { AuditLogService, AdminAuditAction } from './AuditLogService';
 import { SessionService } from './SessionService';
 import type { UserRole } from '../../types/auth-types';
 import { PLATFORM_STAFF_ROLES } from '../../types/auth-types';
-import type { PaginatedResult } from '../types';
+import type {
+    PaginatedResult,
+    AdminUserSummary,
+    AdminUserStatusFilter,
+    AdminOverview,
+} from '../types';
 
-/** Plaintext-safe user projection for operator views (no passwordHash). */
-export interface AdminUserSummary {
-    id: string;
-    email: string;
-    displayName: string;
-    username: string | null;
-    avatarUrl: string | null;
-    role: UserRole;
-    isActive: boolean | null;
-    isSuspended: boolean | null;
-    emailVerified: boolean | null;
-    provider: string;
-    createdAt: Date | null;
-    updatedAt: Date | null;
-    lastActiveAt: Date | null;
-    deletedAt: Date | null;
-}
-
-export type AdminUserStatusFilter = 'all' | 'active' | 'suspended';
+export type { AdminUserSummary, AdminUserStatusFilter, AdminOverview } from '../types';
 
 export interface AdminListUsersParams {
     search?: string;
@@ -49,14 +36,6 @@ export interface AdminListUsersParams {
     status?: AdminUserStatusFilter;
     limit?: number;
     offset?: number;
-}
-
-export interface AdminOverview {
-    totalUsers: number;
-    suspendedUsers: number;
-    staffUsers: number;
-    totalApps: number;
-    publicApps: number;
 }
 
 export interface AdminMutationParams {

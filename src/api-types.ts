@@ -316,3 +316,22 @@ export type {
   QuestionPayload as InterviewQuestion,
   TranscriptEntry as InterviewTranscriptEntry
 } from 'worker/agents/interview/types';
+
+// Admin console API Types (Phase 1)
+export type {
+  AdminOverviewData,
+  AdminUsersListData,
+  AdminUserDetailData,
+  AdminUserAppsData,
+  AdminUserSessionsData,
+  AdminUserSecretsData,
+  AdminAppDetailData,
+  AdminAuditListData,
+} from 'worker/api/controllers/admin/types';
+export type {
+  AdminUserSummary,
+  AdminUserStatusFilter,
+  GitHubTokenStatus,
+} from 'worker/database/types';
+export type { AuditLog } from 'worker/database/schema';
+export type { UserRole } from 'worker/types/auth-types';

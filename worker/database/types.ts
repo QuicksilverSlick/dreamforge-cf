@@ -4,6 +4,7 @@
 
 import * as schema from './schema';
 import type { ModelConfig } from '../agents/inferutils/config.types';
+import type { UserRole } from '../types/auth-types';
 
 // ========================================
 // CORE SHARED INTERFACES
@@ -226,6 +227,65 @@ export interface SecretData extends Omit<schema.UserSecret, 'encryptedValue' | '
  * Encrypted secret response (without sensitive data)
  */
 export type EncryptedSecret = Omit<schema.UserSecret, 'encryptedValue'>;
+
+// ========================================
+// ADMIN CONSOLE (Phase 1) — client-safe shapes
+// Defined here (not in services) so the SPA can import them without pulling
+// worker-runtime modules (which reference Env/D1Database) into the client
+// typecheck. Services and the admin controller consume these from here.
+// ========================================
+
+export type AdminUserStatusFilter = 'all' | 'active' | 'suspended';
+
+/** Plaintext-safe user projection for operator views (never includes passwordHash). */
+export interface AdminUserSummary {
+    id: string;
+    email: string;
+    displayName: string;
+    username: string | null;
+    avatarUrl: string | null;
+    role: UserRole;
+    isActive: boolean | null;
+    isSuspended: boolean | null;
+    emailVerified: boolean | null;
+    provider: string;
+    createdAt: Date | null;
+    updatedAt: Date | null;
+    lastActiveAt: Date | null;
+    deletedAt: Date | null;
+}
+
+/** Platform-wide counts for the console landing. */
+export interface AdminOverview {
+    totalUsers: number;
+    suspendedUsers: number;
+    staffUsers: number;
+    totalApps: number;
+    publicApps: number;
+}
+
+/** Plaintext-safe GitHub connection status (metadata only; never the token). */
+export interface GitHubTokenStatus {
+    connected: boolean;
+    isActive: boolean;
+    isRevoked: boolean;
+    tokenType: string;
+    scopes: string[];
+    lastUsed: Date | null;
+    revokedAt: Date | null;
+    createdAt: Date | null;
+    updatedAt: Date | null;
+}
+
+/** Active session metadata for an operator view (no tokens). */
+export interface AdminSessionInfo {
+    id: string;
+    userAgent: string | null;
+    ipAddress: string | null;
+    lastActivity: Date;
+    createdAt: Date;
+    isCurrent?: boolean;
+}
 
 /**
  * Model configuration with user override metadata

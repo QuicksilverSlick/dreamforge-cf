@@ -12,6 +12,11 @@ import DiscoverPage from './routes/discover';
 import ImportPage from './routes/import';
 import InterviewPage from './routes/interview';
 import { ProtectedRoute } from './routes/protected-route';
+import { AdminRoute } from './routes/admin-route';
+import AdminOverview from './routes/admin/overview';
+import AdminUsers from './routes/admin/users';
+import AdminUserDetail from './routes/admin/user-detail';
+import AdminAudit from './routes/admin/audit';
 
 const routes = [
 	{
@@ -53,6 +58,22 @@ const routes = [
 			{
 				path: 'interview',
 				element: React.createElement(ProtectedRoute, { children: React.createElement(InterviewPage) }),
+			},
+			{
+				path: 'admin',
+				element: React.createElement(AdminRoute, { children: React.createElement(AdminOverview) }),
+			},
+			{
+				path: 'admin/users',
+				element: React.createElement(AdminRoute, { children: React.createElement(AdminUsers) }),
+			},
+			{
+				path: 'admin/users/:id',
+				element: React.createElement(AdminRoute, { children: React.createElement(AdminUserDetail) }),
+			},
+			{
+				path: 'admin/audit',
+				element: React.createElement(AdminRoute, { children: React.createElement(AdminAudit) }),
 			},
 		],
 	},
