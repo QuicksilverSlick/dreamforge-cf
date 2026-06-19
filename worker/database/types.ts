@@ -118,8 +118,11 @@ export interface PublicAppQueryOptions extends BaseAppQueryOptions {
  */
 export interface OwnershipResult {
     exists: boolean;
+    /** True if the user may access the app (org member, or legacy userId owner). */
     isOwner: boolean;
     visibility?: 'private' | 'public' | null;
+    /** The user's role in the app's org, or null (no membership / null orgId). */
+    orgRole?: 'owner' | 'admin' | 'member' | null;
 }
 
 /**

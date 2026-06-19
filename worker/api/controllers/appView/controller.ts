@@ -35,9 +35,15 @@ export class AppViewController extends BaseController {
                 return AppViewController.createErrorResponse<AppDetailsData>('App not found', 404);
             }
 
-            // Check if user has permission to view
-            if (appResult.visibility === 'private' && appResult.userId !== userId) {
-                return AppViewController.createErrorResponse<AppDetailsData>('App not found', 404);
+            // Private apps are visible only to members of the app's org (or the
+            // legacy userId owner). Public apps are visible to everyone.
+            if (appResult.visibility === 'private') {
+                const canView = userId
+                    ? (await appService.checkAppOwnership(appId, userId)).isOwner
+                    : false;
+                if (!canView) {
+                    return AppViewController.createErrorResponse<AppDetailsData>('App not found', 404);
+                }
             }
 
             // Track view for all users (including owners and anonymous users)

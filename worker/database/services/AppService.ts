@@ -5,6 +5,7 @@
 import { BaseService } from './BaseService';
 import { OrganizationService } from './OrganizationService';
 import * as schema from '../schema';
+import { userAppAccessCondition } from '../appAccess';
 import { eq, and, or, desc, asc, sql, isNull, inArray } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
 import { formatRelativeTime } from '../../utils/timeFormatter';
@@ -330,7 +331,7 @@ export class AppService extends BaseService {
         const apps = await readDb
             .select()
             .from(schema.apps)
-            .where(eq(schema.apps.userId, userId))
+            .where(userAppAccessCondition(readDb, userId))
             .orderBy(desc(schema.apps.updatedAt))
             .limit(limit)
             .offset(offset);
@@ -439,7 +440,9 @@ export class AppService extends BaseService {
         const app = await readDb
             .select({
                 id: schema.apps.id,
-                userId: schema.apps.userId
+                userId: schema.apps.userId,
+                orgId: schema.apps.orgId,
+                visibility: schema.apps.visibility,
             })
             .from(schema.apps)
             .where(eq(schema.apps.id, appId))
@@ -449,9 +452,26 @@ export class AppService extends BaseService {
             return { exists: false, isOwner: false };
         }
 
+        // Org membership is the access boundary; the userId fallback covers any
+        // not-yet-stamped (null orgId) app so nobody is locked out mid-transition.
+        let orgRole: 'owner' | 'admin' | 'member' | null = null;
+        if (app.orgId) {
+            const membership = await readDb
+                .select({ role: schema.organizationMembers.role })
+                .from(schema.organizationMembers)
+                .where(and(
+                    eq(schema.organizationMembers.orgId, app.orgId),
+                    eq(schema.organizationMembers.userId, userId),
+                ))
+                .get();
+            orgRole = membership?.role ?? null;
+        }
+
         return {
             exists: true,
-            isOwner: app.userId === userId
+            isOwner: orgRole !== null || app.userId === userId,
+            visibility: app.visibility,
+            orgRole,
         };
     }
 
@@ -503,24 +523,15 @@ export class AppService extends BaseService {
         userId: string,
         visibility: 'private' | 'public'
     ): Promise<AppVisibilityUpdateResult> {
-        // Check if app exists and user owns it
-        const existingApp = await this.database
-            .select({
-                id: schema.apps.id,
-                title: schema.apps.title,
-                userId: schema.apps.userId,
-                visibility: schema.apps.visibility
-            })
-            .from(schema.apps)
-            .where(eq(schema.apps.id, appId))
-            .limit(1);
+        // Verify the user can access this app (org member, or legacy owner).
+        const ownership = await this.checkAppOwnership(appId, userId);
 
-        if (existingApp.length === 0) {
+        if (!ownership.exists) {
             return { success: false, error: 'App not found' };
         }
 
-        if (existingApp[0].userId !== userId) {
-            return { success: false, error: 'You can only change visibility of your own apps' };
+        if (!ownership.isOwner) {
+            return { success: false, error: 'You can only change visibility of apps in your organization' };
         }
 
         // Update the app visibility
@@ -711,7 +722,7 @@ export class AppService extends BaseService {
         } = options;
 
         const whereConditions: WhereCondition[] = [
-            eq(schema.apps.userId, userId),
+            userAppAccessCondition(this.database, userId),
             status ? eq(schema.apps.status, status) : undefined,
             visibility ? eq(schema.apps.visibility, visibility) : undefined,
             ...this.buildCommonAppFilters(framework, search),
@@ -785,16 +796,16 @@ export class AppService extends BaseService {
     async getUserAppsCount(userId: string, options: Partial<AppQueryOptions> = {}): Promise<number> {
         const { status, visibility, framework, search, sort = 'recent' } = options;
 
+        const readDb = this.getReadDb('fast');
+
         const whereConditions: WhereCondition[] = [
-            eq(schema.apps.userId, userId),
+            userAppAccessCondition(readDb, userId),
             status ? eq(schema.apps.status, status) : undefined,
             visibility ? eq(schema.apps.visibility, visibility) : undefined,
             ...this.buildCommonAppFilters(framework, search),
         ];
 
         const whereClause = this.buildWhereConditions(whereConditions);
-
-        const readDb = this.getReadDb('fast');
         const countQuery = readDb
             .select({ count: sql<number>`COUNT(*)` })
             .from(schema.apps);
@@ -1042,7 +1053,7 @@ export class AppService extends BaseService {
                 .delete(schema.apps)
                 .where(and(
                     eq(schema.apps.id, appId),
-                    eq(schema.apps.userId, userId)
+                    userAppAccessCondition(this.database, userId)
                 ))
                 .returning({ id: schema.apps.id });
 
