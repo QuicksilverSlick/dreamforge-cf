@@ -220,13 +220,15 @@ export interface AppStats {
 /**
  * Raw Secret data for storage (before encryption)  
  */
-export interface SecretData extends Omit<schema.UserSecret, 'encryptedValue' | 'id' | 'isActive' | 'createdAt' | 'updatedAt' | 'lastUsed' | 'userId' | 'usageCount' | 'keyPreview' > {
+export interface SecretData extends Omit<schema.UserSecret, 'encryptedValue' | 'id' | 'isActive' | 'createdAt' | 'updatedAt' | 'lastUsed' | 'userId' | 'usageCount' | 'keyPreview' | 'orgId' > {
     value: string;
 }
 /**
- * Encrypted secret response (without sensitive data)
+ * Encrypted secret response (without sensitive data). orgId is omitted: the
+ * column exists (Phase 2 forward-compat) but secrets remain user-owned, so it
+ * stays invisible to the secrets API until the org-secrets phase.
  */
-export type EncryptedSecret = Omit<schema.UserSecret, 'encryptedValue'>;
+export type EncryptedSecret = Omit<schema.UserSecret, 'encryptedValue' | 'orgId'>;
 
 // ========================================
 // ADMIN CONSOLE (Phase 1) — client-safe shapes

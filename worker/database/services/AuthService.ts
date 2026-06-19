@@ -8,6 +8,7 @@ import { eq, and, sql, or, lt, isNull } from 'drizzle-orm';
 import { JWTUtils } from '../../utils/jwtUtils';
 import { generateSecureToken } from '../../utils/cryptoUtils';
 import { SessionService } from './SessionService';
+import { OrganizationService } from './OrganizationService';
 import { PasswordService } from '../../utils/passwordService';
 import { GoogleOAuthProvider } from '../../services/oauth/google';
 import { GitHubOAuthProvider } from '../../services/oauth/github';
@@ -140,7 +141,18 @@ export class AuthService extends BaseService {
                     500
                 );
             }
-            
+
+            // Phase 2 (dark): every new user gets a personal org. Best-effort —
+            // org plumbing must never block signup while orgId is unenforced.
+            try {
+                await new OrganizationService(this.env).ensurePersonalOrg(userId, {
+                    displayName: newUser.displayName,
+                    email: newUser.email,
+                });
+            } catch (error) {
+                this.logger.error('Failed to ensure personal org on register', { userId, error });
+            }
+
             // Log successful registration
             await this.logAuthAttempt(data.email, 'register', true, request);
             logger.info('User registered and logged in directly', { userId, email: data.email });
@@ -507,6 +519,16 @@ export class AuthService extends BaseService {
                 .from(schema.users)
                 .where(eq(schema.users.id, userId))
                 .get();
+
+            // Phase 2 (dark): new OAuth users get a personal org (best-effort).
+            try {
+                await new OrganizationService(this.env).ensurePersonalOrg(userId, {
+                    displayName: user?.displayName,
+                    email: user?.email,
+                });
+            } catch (error) {
+                this.logger.error('Failed to ensure personal org on OAuth signup', { userId, error });
+            }
         } else {
             // Always update OAuth info and user data on login
             await this.database
