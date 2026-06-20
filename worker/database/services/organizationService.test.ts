@@ -165,15 +165,16 @@ describe('OrganizationService Phase 2.2 — teams, invitations, members', () => 
         await expect(svc.acceptInvitation(token, 'invitee1')).rejects.toBeInstanceOf(OrgActionError);
     });
 
-    it('rejects acceptance from an account whose email does not match the invite', async () => {
+    it('lets any authenticated user accept with a valid token, even when their email differs from the invited address (capability model)', async () => {
         await insertUser('owner1');
-        await insertUser('wrong'); // email wrong@example.com
+        await insertUser('wrong'); // account email wrong@example.com, invite is for someone-else@
         const svc = new OrganizationService(env);
         const org = await team(svc, 'owner1');
         const { token } = await svc.createInvitation(org.id, 'someone-else@example.com', 'member', ctx('owner1'));
 
-        await expect(svc.acceptInvitation(token, 'wrong')).rejects.toMatchObject({ statusCode: 403 });
-        expect(await svc.getMembership(org.id, 'wrong')).toBeNull();
+        const joined = await svc.acceptInvitation(token, 'wrong');
+        expect(joined.id).toBe(org.id);
+        expect((await svc.getMembership(org.id, 'wrong'))?.role).toBe('member');
     });
 
     it('rejects invitations on a personal org', async () => {
