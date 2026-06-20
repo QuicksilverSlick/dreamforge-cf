@@ -1,4 +1,5 @@
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
+DROP TABLE IF EXISTS `__av_bak_0011`;--> statement-breakpoint
+CREATE TABLE `__av_bak_0011` AS SELECT * FROM `app_views`;--> statement-breakpoint
 CREATE TABLE `__new_apps` (
 	`id` text PRIMARY KEY NOT NULL,
 	`title` text NOT NULL,
@@ -31,7 +32,6 @@ CREATE TABLE `__new_apps` (
 INSERT INTO `__new_apps`("id", "title", "description", "icon_url", "original_prompt", "final_prompt", "framework", "user_id", "org_id", "session_token", "visibility", "status", "deployment_id", "github_repository_url", "github_repository_visibility", "is_archived", "is_featured", "version", "parent_app_id", "screenshot_url", "screenshot_captured_at", "created_at", "updated_at", "last_deployed_at") SELECT "id", "title", "description", "icon_url", "original_prompt", "final_prompt", "framework", "user_id", "org_id", "session_token", "visibility", "status", "deployment_id", "github_repository_url", "github_repository_visibility", "is_archived", "is_featured", "version", "parent_app_id", "screenshot_url", "screenshot_captured_at", "created_at", "updated_at", "last_deployed_at" FROM `apps`;--> statement-breakpoint
 DROP TABLE `apps`;--> statement-breakpoint
 ALTER TABLE `__new_apps` RENAME TO `apps`;--> statement-breakpoint
-PRAGMA foreign_keys=ON;--> statement-breakpoint
 CREATE INDEX `apps_user_idx` ON `apps` (`user_id`);--> statement-breakpoint
 CREATE INDEX `apps_org_idx` ON `apps` (`org_id`);--> statement-breakpoint
 CREATE INDEX `apps_org_created_at_idx` ON `apps` (`org_id`,`created_at`);--> statement-breakpoint
@@ -43,4 +43,6 @@ CREATE INDEX `apps_search_idx` ON `apps` (`title`,`description`);--> statement-b
 CREATE INDEX `apps_framework_status_idx` ON `apps` (`framework`,`status`);--> statement-breakpoint
 CREATE INDEX `apps_visibility_status_idx` ON `apps` (`visibility`,`status`);--> statement-breakpoint
 CREATE INDEX `apps_created_at_idx` ON `apps` (`created_at`);--> statement-breakpoint
-CREATE INDEX `apps_updated_at_idx` ON `apps` (`updated_at`);
+CREATE INDEX `apps_updated_at_idx` ON `apps` (`updated_at`);--> statement-breakpoint
+INSERT INTO `app_views` SELECT * FROM `__av_bak_0011`;--> statement-breakpoint
+DROP TABLE `__av_bak_0011`;
