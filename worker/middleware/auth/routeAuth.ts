@@ -20,7 +20,7 @@ const logger = createLogger('RouteAuth');
 /**
  * Authentication levels for route protection
  */
-export type AuthLevel = 'public' | 'authenticated' | 'owner-only' | 'role';
+export type AuthLevel = 'public' | 'authenticated' | 'owner-only' | 'role' | 'org-admin';
 
 /**
  * Authentication requirement configuration
@@ -70,6 +70,15 @@ export const AuthConfig = {
         required: true,
         level: 'role' as const,
         allowedRoles: PLATFORM_STAFF_ROLES,
+    },
+
+    // Org owner/admin of the route's target org — and only when that org is the
+    // actor's ACTIVE org. For team member-management surfaces. This plane is
+    // entirely separate from the platform-role plane: an org admin is NOT
+    // platform staff and can never satisfy superadminOnly/platformStaff.
+    orgAdminOnly: {
+        required: true,
+        level: 'org-admin' as const,
     },
 
     // Public read access, but owner required for modifications
@@ -151,6 +160,30 @@ export async function routeAuthChecks(
             return { success: true };
         }
 
+        // For org-admin routes (tenant member-management surfaces). Fail closed:
+        // no user => 401; otherwise require the actor to be owner/admin AND the
+        // route's :id (org id) to equal the actor's ACTIVE org. Tying to the
+        // active org means user.orgRole is exactly the actor's role in the org
+        // under management, so cross-tenant management is structurally
+        // impossible — a member of org A can never act on org B.
+        if (requirement.level === 'org-admin') {
+            if (!user) {
+                return {
+                    success: false,
+                    response: createAuthRequiredResponse('Account required')
+                };
+            }
+            const targetOrgId = params?.id;
+            const isOrgAdmin = user.orgRole === 'owner' || user.orgRole === 'admin';
+            if (!targetOrgId || !user.orgId || targetOrgId !== user.orgId || !isOrgAdmin) {
+                return {
+                    success: false,
+                    response: createForbiddenResponse('Organization admin access required')
+                };
+            }
+            return { success: true };
+        }
+
         // Default fallback
         return { success: true };
     } catch (error) {
@@ -181,7 +214,7 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
     }
     
     // Only perform auth if we need it or don't have user yet
-    if (!user && (requirement.level === 'authenticated' || requirement.level === 'owner-only' || requirement.level === 'role')) {
+    if (!user && (requirement.level === 'authenticated' || requirement.level === 'owner-only' || requirement.level === 'role' || requirement.level === 'org-admin')) {
         const userSession = await authMiddleware(c.req.raw, c.env);
         if (!userSession) {
             return errorResponse('Authentication required', 401);

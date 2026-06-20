@@ -13,7 +13,7 @@ import type {
     UserRole,
 } from '@/api-types';
 
-interface AsyncState<T> {
+export interface AsyncState<T> {
     data: T | null;
     loading: boolean;
     error: string | null;
@@ -31,7 +31,7 @@ function messageOf(err: unknown): string {
  * after a filter change, or an overtaken debounce) can never overwrite newer
  * data. `deps` are intentionally the dependency array (exhaustive-deps off).
  */
-function useAsyncData<T>(fetcher: () => Promise<ApiResponse<T>>, deps: React.DependencyList): AsyncState<T> {
+export function useAsyncData<T>(fetcher: () => Promise<ApiResponse<T>>, deps: React.DependencyList): AsyncState<T> {
     const [data, setData] = useState<T | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);

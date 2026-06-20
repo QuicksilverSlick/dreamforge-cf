@@ -55,13 +55,15 @@ export interface RegistrationData {
 export class AuthService extends BaseService {
     private readonly sessionService: SessionService;
     private readonly passwordService: PasswordService;
-    
+    private readonly organizationService: OrganizationService;
+
     constructor(
         env: Env,
     ) {
         super(env);
         this.sessionService = new SessionService(env);
         this.passwordService = new PasswordService();
+        this.organizationService = new OrganizationService(env);
     }
     
     /**
@@ -817,9 +819,15 @@ export class AuthService extends BaseService {
             if (!user) {
                 return null;
             }
-            
+
+            // Resolve the active org per-request (NEVER from the JWT) from the
+            // session's currentOrgId, re-validating membership so an org-switch
+            // or revocation is effective on the very next request. Falls back to
+            // the personal org for a null/stale/left active org.
+            const activeOrg = await this.organizationService.resolveActiveOrg(user.id, payload.sessionId);
+
             return {
-                user,
+                user: { ...user, orgId: activeOrg.orgId, orgRole: activeOrg.orgRole },
                 sessionId: payload.sessionId,
             };
         } catch (error) {

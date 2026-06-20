@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { AuthButton } from '../auth/auth-button';
+import { OrgSwitcher } from './org-switcher';
 import { ThemeToggle } from '../theme-toggle';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/auth-context';
@@ -95,6 +96,7 @@ export function GlobalHeader() {
 								variant="inline"
 							/>
 						)} */}
+							{user && <OrgSwitcher />}
 							<ThemeToggle />
 							<AuthButton />
 						</motion.div>

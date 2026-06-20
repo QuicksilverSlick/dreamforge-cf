@@ -12,6 +12,7 @@ import { generateId } from '../../utils/idGenerator';
 import { JWTUtils } from '../../utils/jwtUtils';
 import { extractRequestMetadata } from '../../utils/authUtils';
 import { BaseService } from './BaseService';
+import { OrganizationService } from './OrganizationService';
 
 const logger = createLogger('SessionService');
 
@@ -99,6 +100,11 @@ export class SessionService extends BaseService {
             // Generate session ID first
             const sessionId = generateId();
             const userEmail = await this.getUserEmail(userId);
+
+            // Default the session's active org to the user's personal org. If it
+            // isn't created yet (e.g. ensurePersonalOrg races a fresh signup),
+            // leave it null — per-request resolution falls back to personal.
+            const currentOrgId = await new OrganizationService(this.env).getPersonalOrgId(userId);
             
             // Generate tokens WITH session ID
             const { accessToken } = await this.jwtUtils.createAccessToken(
@@ -123,6 +129,7 @@ export class SessionService extends BaseService {
             await this.db.db.insert(schema.sessions).values({
                 id: sessionId,
                 userId,
+                currentOrgId: currentOrgId ?? null,
                 accessTokenHash,
                 refreshTokenHash: '',
                 expiresAt,
