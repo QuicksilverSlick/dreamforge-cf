@@ -109,14 +109,15 @@ describe('AppService.createApp dual-write (Phase 2 dark)', () => {
         expect(app.orgId).toBe(personalOrgId);
     });
 
-    it('leaves anonymous apps without an org', async () => {
-        const app = await new AppService(env).createApp({
-            id: 'app-2',
-            title: 'Anon app',
-            originalPrompt: 'anon build',
-            sessionToken: 'anon-token',
-        } as NewApp);
-        expect(app.orgId).toBeNull();
+    it('rejects an anonymous app (no userId) — orgId is NOT NULL after 2.3', async () => {
+        await expect(
+            new AppService(env).createApp({
+                id: 'app-2',
+                title: 'Anon app',
+                originalPrompt: 'anon build',
+                sessionToken: 'anon-token',
+            } as NewApp),
+        ).rejects.toThrow();
     });
 
     it('files the app under an explicit active org the creator is a member of (team sharing)', async () => {

@@ -1,11 +1,12 @@
 /**
- * Phase 2.1 org-access enforcement — the cross-tenant isolation gate.
+ * Org-access enforcement — the cross-tenant isolation gate (Phase 2.1 → 2.3).
  *
- * Runs against the real D1 schema (migrations incl. 0009). Proves that app
- * access is now scoped by org membership: two users in separate personal orgs
- * cannot see, mutate, or claim ownership of each other's apps; the owner keeps
- * full access; and a legacy null-org app stays accessible to its userId owner
- * (the transition fallback) without leaking to others.
+ * Runs against the real D1 schema. Proves app access is scoped PURELY by org
+ * membership (the 2.3 contract enforced apps.orgId NOT NULL and dropped the
+ * transition userId fallback): two users in separate personal orgs cannot see,
+ * mutate, or claim ownership of each other's apps; the owner keeps full access;
+ * and a plain org member (not the userId creator) gets access via membership
+ * alone.
  */
 
 import { env, applyD1Migrations } from 'cloudflare:test';
@@ -85,27 +86,15 @@ describe('Phase 2.1 org access enforcement', () => {
         expect((await svc.deleteApp('app-B', 'B')).success).toBe(true);
     });
 
-    it('keeps a legacy null-org app accessible to its userId owner, isolated from others', async () => {
+    it('rejects creating an app with no organization (orgId is NOT NULL)', async () => {
         const svc = new AppService(env);
-        await insertUser('A');
-        await insertUser('B');
-        await env.DB.prepare(
-            "INSERT INTO apps (id, title, original_prompt, user_id, org_id) VALUES ('legacy', 'L', 'p', 'A', NULL)",
-        ).run();
-
-        const ownerView = await svc.checkAppOwnership('legacy', 'A');
-        expect(ownerView.isOwner).toBe(true);
-        expect(ownerView.orgRole).toBeNull();
-
-        const otherView = await svc.checkAppOwnership('legacy', 'B');
-        expect(otherView.exists).toBe(true);
-        expect(otherView.isOwner).toBe(false);
-
-        // The fallback surfaces it in the owner's list (no lockout).
-        const aList = await svc.getUserAppsWithFavorites('A');
-        expect(aList.map((x) => x.id)).toContain('legacy');
-        // …but never in another user's list.
-        expect((await svc.getUserAppsCount('B'))).toBe(0);
+        // A null-org / anonymous app (no userId) can no longer exist after the
+        // 2.3 contract — createApp throws rather than insert a null orgId.
+        await expect(
+            svc.createApp({ id: 'anon', title: 'L', originalPrompt: 'p', sessionToken: 'tok' } as NewApp),
+        ).rejects.toThrow();
+        const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM apps WHERE id = 'anon'").first<{ n: number }>();
+        expect(count!.n).toBe(0);
     });
 
     it('grants access via org membership alone (not userId) — fails if the org branch is dropped', async () => {

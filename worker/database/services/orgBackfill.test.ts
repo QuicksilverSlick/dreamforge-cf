@@ -6,8 +6,10 @@
  * test runtime can't read the .sql at test time, so the statements below mirror
  * the appended backfill by hand (keep in sync with 0009_dizzy_lila_cheney.sql).
  * This asserts the load-bearing prod behavior: one org + owner membership per
- * LIVE user, soft-deleted users excluded, owned rows stamped, anonymous apps
- * left alone, and a second run is a no-op (idempotent).
+ * LIVE user, soft-deleted users excluded, owned user_secrets stamped, and a
+ * second run is a no-op (idempotent). (The apps org-stamping the backfill also
+ * performed is now SEALED by the 2.3 apps.orgId NOT NULL contract — null-org
+ * apps can no longer be inserted to reconstruct that scenario here.)
  */
 
 import { env, applyD1Migrations } from 'cloudflare:test';
@@ -62,9 +64,6 @@ describe('0009 personal-org backfill (populated data)', () => {
         await env.DB.prepare(
             "INSERT INTO users (id, email, display_name, provider, provider_id, deleted_at) VALUES ('u2','u2@example.com','Bob','github','p2', CAST(strftime('%s','now') AS INTEGER))",
         ).run();
-        await env.DB.prepare("INSERT INTO apps (id, title, original_prompt, user_id) VALUES ('a1','A','p','u1')").run();
-        await env.DB.prepare("INSERT INTO apps (id, title, original_prompt, session_token) VALUES ('a2','Anon','p','tok')").run();
-        await env.DB.prepare("INSERT INTO apps (id, title, original_prompt, user_id) VALUES ('a3','Bob app','p','u2')").run();
         await env.DB.prepare(
             "INSERT INTO user_secrets (id, user_id, name, provider, secret_type, encrypted_value, key_preview) VALUES ('s1','u1','k','openai','api_key','v1:x','sk-**')",
         ).run();
@@ -81,11 +80,6 @@ describe('0009 personal-org backfill (populated data)', () => {
         // Soft-deleted u2 → no org.
         const orgs2 = await env.DB.prepare("SELECT COUNT(*) AS n FROM organizations WHERE owner_user_id='u2'").first<{ n: number }>();
         expect(orgs2!.n).toBe(0);
-
-        // Owned app stamped; anonymous untouched; deleted user's app not stamped.
-        expect((await env.DB.prepare("SELECT org_id FROM apps WHERE id='a1'").first<{ org_id: string | null }>())!.org_id).toBe('org_u1');
-        expect((await env.DB.prepare("SELECT org_id FROM apps WHERE id='a2'").first<{ org_id: string | null }>())!.org_id).toBeNull();
-        expect((await env.DB.prepare("SELECT org_id FROM apps WHERE id='a3'").first<{ org_id: string | null }>())!.org_id).toBeNull();
 
         // Secret stamped.
         expect((await env.DB.prepare("SELECT org_id FROM user_secrets WHERE id='s1'").first<{ org_id: string | null }>())!.org_id).toBe('org_u1');

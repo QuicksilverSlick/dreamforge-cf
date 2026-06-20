@@ -64,7 +64,7 @@ export class AppService extends BaseService {
     /**
      * Create a new app
      */
-    async createApp(appData:schema.NewApp): Promise<schema.App> {
+    async createApp(appData: Omit<schema.NewApp, 'orgId'> & { orgId?: string | null }): Promise<schema.App> {
         // Phase 2.2.1: file the app under the creator's ACTIVE org (passed by the
         // agent) so org members share it; fall back to the personal org. Anonymous
         // apps (no userId) have no org.
@@ -104,6 +104,15 @@ export class AppService extends BaseService {
                     error,
                 });
             }
+        }
+
+        if (!orgId) {
+            // apps.orgId is NOT NULL (Phase 2.3 contract): every app belongs to an
+            // org. This is only reachable for an anonymous app (no userId — an
+            // unsupported, auth-gated-out path) or a failed personal-org
+            // resolution; fail with a clear error rather than a raw DB constraint
+            // violation.
+            throw new Error('Cannot create an app without an organization.');
         }
 
         const [app] = await this.database
@@ -465,7 +474,6 @@ export class AppService extends BaseService {
         const app = await readDb
             .select({
                 id: schema.apps.id,
-                userId: schema.apps.userId,
                 orgId: schema.apps.orgId,
                 visibility: schema.apps.visibility,
             })
@@ -477,8 +485,11 @@ export class AppService extends BaseService {
             return { exists: false, isOwner: false };
         }
 
-        // Org membership is the access boundary; the userId fallback covers any
-        // not-yet-stamped (null orgId) app so nobody is locked out mid-transition.
+        // Access is purely org-membership (Phase 2.3 contract): a user "owns" the
+        // app iff they hold a role in the app's org. orgId is NOT NULL, so every
+        // app resolves through this branch; a non-member gets orgRole null →
+        // isOwner false (fail-closed, cross-tenant safe). The transition userId
+        // fallback was dropped now that no null-org / orphan apps exist.
         let orgRole: 'owner' | 'admin' | 'member' | null = null;
         if (app.orgId) {
             const membership = await readDb
@@ -494,7 +505,7 @@ export class AppService extends BaseService {
 
         return {
             exists: true,
-            isOwner: orgRole !== null || app.userId === userId,
+            isOwner: orgRole !== null,
             visibility: app.visibility,
             orgRole,
         };

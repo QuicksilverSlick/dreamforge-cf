@@ -1,20 +1,21 @@
 /**
- * Centralized tenant-access predicate for apps (Phase 2.1).
+ * Centralized tenant-access predicate for apps (Phase 2.3 contract).
  *
  * Every app read/ownership check scopes through this single condition so the
  * tenant boundary is defined in exactly one auditable place. An app is
- * accessible to a user when it belongs to an org the user is a member of, OR
- * (transition fallback) it is directly owned by the user's userId.
+ * accessible to a user when, and only when, it belongs to an org the user is a
+ * member of — access is PURELY org-membership.
  *
- * The userId fallback guarantees no lockout while apps.orgId is still nullable
- * (some rows may predate the backfill); it is a SUPERSET of the prior
- * userId-only scoping, so the cutover cannot be more restrictive than before.
- * Cross-tenant isolation still holds: another user is neither a member of this
- * app's org nor the app's userId. The fallback is dropped in the 2.3 contract
- * step once orgId is enforced NOT NULL.
+ * The Phase 2.1/2.2 transition `OR apps.userId === userId` fallback was dropped
+ * here in 2.3 now that `apps.orgId` is enforced NOT NULL and every app is filed
+ * under an org the creator is a verified member of (AppService.createApp). No
+ * lockout results (the contract migration confirmed zero apps whose owner is not
+ * a member of the app's org). This is also the correct team semantic: an app
+ * built in a team belongs to the team, so leaving the team loses access to it —
+ * the lingering userId fallback would otherwise leak it back.
  */
 
-import { type SQL, eq, inArray, or } from 'drizzle-orm';
+import { type SQL, eq, inArray } from 'drizzle-orm';
 import type { DrizzleD1Database } from 'drizzle-orm/d1';
 import * as schema from './schema';
 
@@ -27,5 +28,5 @@ export function userAppAccessCondition(
         .from(schema.organizationMembers)
         .where(eq(schema.organizationMembers.userId, userId));
 
-    return or(inArray(schema.apps.orgId, memberOrgIds), eq(schema.apps.userId, userId))!;
+    return inArray(schema.apps.orgId, memberOrgIds);
 }

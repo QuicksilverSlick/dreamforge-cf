@@ -51,10 +51,17 @@ async function insertUser(id: string, opts: UserOpts = {}): Promise<void> {
 }
 
 async function insertApp(id: string, userId: string, visibility: 'public' | 'private'): Promise<void> {
+    // apps.orgId is NOT NULL (2.3) — file the app under a personal org for the
+    // user (idempotent; covers multiple apps for the same user).
     await env.DB.prepare(
-        `INSERT INTO apps (id, title, original_prompt, user_id, visibility, status) VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT OR IGNORE INTO organizations (id, name, slug, is_personal, owner_user_id) VALUES (?, ?, ?, 1, ?)`,
     )
-        .bind(id, `App ${id}`, 'build me an app', userId, visibility, 'completed')
+        .bind(`org_${userId}`, `${userId} ws`, `ws-${userId}`, userId)
+        .run();
+    await env.DB.prepare(
+        `INSERT INTO apps (id, title, original_prompt, user_id, org_id, visibility, status) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+        .bind(id, `App ${id}`, 'build me an app', userId, `org_${userId}`, visibility, 'completed')
         .run();
 }
 

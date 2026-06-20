@@ -239,10 +239,11 @@ export const apps = sqliteTable('apps', {
     
     // Ownership and Context
     userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }), // Null for anonymous
-    // Tenant boundary (Phase 2). Nullable during the dark/backfill window;
-    // anonymous apps (userId null) have no org. Enforced NOT NULL in a later
-    // contract step once every write path stamps it.
-    orgId: text('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
+    // Tenant boundary (Phase 2). Enforced NOT NULL in the 2.3 contract step:
+    // every app belongs to exactly one org (the creator's active org, validated
+    // against membership in AppService.createApp), and access scopes purely by
+    // org membership (the transition userId fallback was dropped in 2.3).
+    orgId: text('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
     sessionToken: text('session_token'), // For anonymous users
     
     // Visibility and Sharing
