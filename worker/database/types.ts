@@ -23,9 +23,22 @@ export interface PaginationInfo {
 }
 
 /**
+ * Org-scope display info stamped onto the viewer's OWN app lists so the client
+ * can show a "Private (personal org) vs Shared · {team}" indicator. Optional:
+ * present only on a viewer's own apps (resolved from their org membership), and
+ * absent on public/foreign-org apps where the indicator must not render.
+ */
+export interface OrgDisplayInfo {
+    /** Name of the org the app belongs to (the viewer's own org). */
+    orgName?: string;
+    /** True when the app's org is the viewer's personal org (vs a shared team). */
+    orgIsPersonal?: boolean;
+}
+
+/**
  * Enhanced app data with user and social statistics
  */
-export interface EnhancedAppData extends schema.App {
+export interface EnhancedAppData extends schema.App, OrgDisplayInfo {
     userName: string | null;
     userAvatar: string | null;
     starCount: number;
@@ -39,7 +52,7 @@ export interface EnhancedAppData extends schema.App {
 /**
  * App with favorite status for user-specific queries
  */
-export interface AppWithFavoriteStatus extends schema.App {
+export interface AppWithFavoriteStatus extends schema.App, OrgDisplayInfo {
     isFavorite: boolean;
     updatedAtFormatted: string;
 }

@@ -124,3 +124,36 @@ describe('Phase 2.1 org access enforcement', () => {
         expect((await svc.checkAppOwnership('app-B', 'C')).isOwner).toBe(false);
     });
 });
+
+describe('org-scope display decoration (Private vs Shared indicator)', () => {
+    it('stamps a viewer’s personal-org app as orgIsPersonal=true with the org name', async () => {
+        const svc = new AppService(env);
+        await seedTwoOrgs(svc); // app-A lives in A's personal org (createApp dual-write)
+
+        const [appA] = await svc.getUserAppsWithFavorites('A');
+        expect(appA.orgIsPersonal).toBe(true);
+        expect(typeof appA.orgName).toBe('string');
+        expect(appA.orgName!.length).toBeGreaterThan(0);
+    });
+
+    it('stamps a team-org app as orgIsPersonal=false with the team name', async () => {
+        const svc = new AppService(env);
+        await insertUser('A');
+        await env.DB.prepare(
+            "INSERT INTO organizations (id, name, slug, is_personal, owner_user_id) VALUES ('team1','Acme','acme',0,'A')",
+        ).run();
+        await env.DB.prepare(
+            "INSERT INTO organization_members (id, org_id, user_id, role) VALUES ('m1','team1','A','owner')",
+        ).run();
+        await svc.createApp({ id: 'team-app', title: 'T', originalPrompt: 'p', userId: 'A', orgId: 'team1' } as NewApp);
+
+        const teamApp = (await svc.getUserAppsWithFavorites('A')).find((a) => a.id === 'team-app');
+        expect(teamApp?.orgIsPersonal).toBe(false);
+        expect(teamApp?.orgName).toBe('Acme');
+
+        // The same decoration flows through the analytics list path used by /apps.
+        const analyticsApp = (await svc.getUserAppsWithAnalytics('A')).find((a) => a.id === 'team-app');
+        expect(analyticsApp?.orgIsPersonal).toBe(false);
+        expect(analyticsApp?.orgName).toBe('Acme');
+    });
+});
