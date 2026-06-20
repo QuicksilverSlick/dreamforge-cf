@@ -85,7 +85,16 @@
                 "memory_mib": 8192,
                 "disk_mb": 16000
             },
-            "rollout_step_percentage": 100,
+            // Gradual rollout (CF default) instead of all-at-once: on a deploy,
+            // only 10% of running sandbox instances roll first, so warm instances
+            // keep serving and the FIRST build after a deploy is far less likely
+            // to hit a cold container (the prior `100` replaced every instance at
+            // once — the root cause of the post-deploy "Bootstrapping" stall).
+            "rollout_step_percentage": [10, 100],
+            // Don't SIGTERM an ACTIVELY-building container the instant a deploy
+            // lands — give it 10 min of grace so an in-flight build survives a
+            // merge/deploy instead of being killed mid-bootstrap.
+            "rollout_active_grace_period": 600,
             "ssh": {
                 "enabled": true
             }

@@ -190,10 +190,17 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
      * `SandboxSdkClient.createInstance` orchestration is unbounded — several
      * `sandbox.exec` calls (template move, instance setup) carry no per-call
      * timeout, so an unresponsive container hangs the deploy, and with it the
-     * dependent generation flow, indefinitely. Matches upstream's 60s value
-     * for the same deploy path.
+     * dependent generation flow, indefinitely.
+     *
+     * Raised from upstream's 60s to 120s: a genuinely COLD container (first
+     * build after a deploy) can take longer than 60s to boot from the image,
+     * and 60s killed those legitimate boots — surfacing a spurious
+     * DEPLOYMENT_FAILED right when the container was about to come up. 120s
+     * still bounds a truly-wedged container while giving a cold boot headroom.
+     * Belt-and-suspenders with the gradual-rollout + grace-period config that
+     * keeps warm instances alive across deploys in the first place.
      */
-    protected static readonly SANDBOX_DEPLOY_TIMEOUT_MS = 60_000;
+    protected static readonly SANDBOX_DEPLOY_TIMEOUT_MS = 120_000;
 
     protected projectSetupAssistant: ProjectSetupAssistant | undefined;
     protected templateDetailsCache: TemplateDetails | null = null;
