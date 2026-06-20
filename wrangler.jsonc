@@ -142,6 +142,17 @@
     "browser": {
         "binding": "BROWSER"
     },
+    // Cloudflare Email Service — Email Sending (public beta, 2026). Outbound
+    // transactional email (org invitations) via env.EMAIL.send(EmailMessage).
+    // Unrestricted binding: once the sending domain (getdreamforge.com) is
+    // onboarded in the dashboard, it can deliver to any recipient. Invite
+    // delivery degrades gracefully (copy-link fallback) if the binding/DNS
+    // isn't live yet — see worker/services/email/EmailService.ts.
+    "send_email": [
+        {
+            "name": "EMAIL"
+        }
+    ],
     // "placement": {
     //   "mode": "smart"
     // },
@@ -242,6 +253,10 @@
         },
         "CUSTOM_DOMAIN": "app.getdreamforge.com",
         "CUSTOM_PREVIEW_DOMAIN": "app.getdreamforge.com",
+        // Sender identity for transactional email (org invitations). The
+        // address local-part must be on the onboarded Email Sending domain.
+        "EMAIL_FROM_ADDRESS": "noreply@getdreamforge.com",
+        "EMAIL_FROM_NAME": "Dreamforge",
         "MAX_SANDBOX_INSTANCES": "10",
         "SANDBOX_INSTANCE_TYPE": "standard-3",
         "USE_CLOUDFLARE_IMAGES": false,

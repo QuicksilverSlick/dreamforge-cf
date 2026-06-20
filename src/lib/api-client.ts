@@ -68,6 +68,15 @@ import type{
     AdminAuditListData,
     AdminUserSummary,
     UserRole,
+    MyOrgsData,
+    OrgData,
+    MembersData,
+    InvitesData,
+    CreateInviteData,
+    MemberData,
+    RemoveMemberData,
+    RevokeInviteData,
+    OrgRole,
 } from '@/api-types';
 import {
 
@@ -1435,6 +1444,78 @@ class ApiClient {
 			`/api/admin/users/${encodeURIComponent(userId)}/reactivate`,
 			{ method: 'POST', body: reason ? { reason } : {} },
 		);
+	}
+
+	// ---- Organizations (Phase 2.2) ----
+
+	async getMyOrgs(): Promise<ApiResponse<MyOrgsData>> {
+		return this.request<MyOrgsData>('/api/orgs');
+	}
+
+	async createTeam(name: string): Promise<ApiResponse<OrgData>> {
+		return this.request<OrgData>('/api/orgs', { method: 'POST', body: { name } });
+	}
+
+	async switchOrg(orgId: string): Promise<ApiResponse<OrgData>> {
+		return this.request<OrgData>('/api/auth/switch-org', { method: 'POST', body: { orgId } });
+	}
+
+	async renameOrg(orgId: string, name: string): Promise<ApiResponse<OrgData>> {
+		return this.request<OrgData>(`/api/orgs/${encodeURIComponent(orgId)}`, {
+			method: 'PATCH',
+			body: { name },
+		});
+	}
+
+	async getOrgMembers(orgId: string): Promise<ApiResponse<MembersData>> {
+		return this.request<MembersData>(`/api/orgs/${encodeURIComponent(orgId)}/members`);
+	}
+
+	async getOrgInvites(orgId: string): Promise<ApiResponse<InvitesData>> {
+		return this.request<InvitesData>(`/api/orgs/${encodeURIComponent(orgId)}/invites`);
+	}
+
+	async createOrgInvite(
+		orgId: string,
+		email: string,
+		role: 'admin' | 'member',
+	): Promise<ApiResponse<CreateInviteData>> {
+		return this.request<CreateInviteData>(`/api/orgs/${encodeURIComponent(orgId)}/invites`, {
+			method: 'POST',
+			body: { email, role },
+		});
+	}
+
+	async revokeOrgInvite(orgId: string, inviteId: string): Promise<ApiResponse<RevokeInviteData>> {
+		return this.request<RevokeInviteData>(
+			`/api/orgs/${encodeURIComponent(orgId)}/invites/${encodeURIComponent(inviteId)}`,
+			{ method: 'DELETE' },
+		);
+	}
+
+	async updateOrgMember(
+		orgId: string,
+		userId: string,
+		role: OrgRole,
+	): Promise<ApiResponse<MemberData>> {
+		return this.request<MemberData>(
+			`/api/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
+			{ method: 'PATCH', body: { role } },
+		);
+	}
+
+	async removeOrgMember(orgId: string, userId: string): Promise<ApiResponse<RemoveMemberData>> {
+		return this.request<RemoveMemberData>(
+			`/api/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
+			{ method: 'DELETE' },
+		);
+	}
+
+	async acceptInvite(token: string): Promise<ApiResponse<OrgData>> {
+		return this.request<OrgData>(`/api/invites/${encodeURIComponent(token)}/accept`, {
+			method: 'POST',
+			body: {},
+		});
 	}
 }
 

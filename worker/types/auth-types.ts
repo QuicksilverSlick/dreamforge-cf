@@ -2,7 +2,9 @@
  * Authentication Type Definitions
  */
 
-import type { ApiKey, AuthAttempt as SchemaAuthAttempt, AuditLog, OAuthState } from '../database/schema';
+import type { ApiKey, AuthAttempt as SchemaAuthAttempt, AuditLog, OAuthState, OrgRole } from '../database/schema';
+
+export type { OrgRole };
 
 /**
  * OAuth provider types
@@ -36,6 +38,15 @@ export interface AuthUser {
     isAnonymous?: boolean;
     /** Platform role, resolved per-request from D1. Absent => treat as 'user'. */
     role?: UserRole;
+    /**
+     * Active organization for this request, resolved per-request from D1 via
+     * the session's currentOrgId (NEVER from the JWT) so an org-switch or a
+     * membership revocation takes effect on the very next request. Falls back to
+     * the user's personal org when the session has no/stale active org.
+     */
+    orgId?: string;
+    /** The user's role IN the active org (orgId). Absent => not resolved. */
+    orgRole?: OrgRole;
 }
 
 /**

@@ -8,8 +8,9 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import type { D1Migration } from 'cloudflare:test';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { OrganizationService } from './OrganizationService';
+import { OrganizationService, OrgActionError } from './OrganizationService';
 import { AppService } from './AppService';
+import { sha256Hash } from '../../utils/cryptoUtils';
 import type { NewApp } from '../schema';
 
 declare module 'cloudflare:test' {
@@ -33,7 +34,9 @@ beforeAll(async () => {
 beforeEach(async () => {
     // Children before parents (FK order).
     await env.DB.prepare('DELETE FROM apps').run();
+    await env.DB.prepare('DELETE FROM org_invitations').run();
     await env.DB.prepare('DELETE FROM organization_members').run();
+    await env.DB.prepare('DELETE FROM sessions').run();
     await env.DB.prepare('DELETE FROM organizations').run();
     await env.DB.prepare('DELETE FROM users').run();
 });
@@ -114,5 +117,172 @@ describe('AppService.createApp dual-write (Phase 2 dark)', () => {
             sessionToken: 'anon-token',
         } as NewApp);
         expect(app.orgId).toBeNull();
+    });
+});
+
+describe('OrganizationService Phase 2.2 — teams, invitations, members', () => {
+    const ctx = (actorUserId: string) => ({ actorUserId });
+
+    function team(svc: OrganizationService, ownerId: string, name = 'Acme') {
+        return svc.createTeamOrg(name, ctx(ownerId));
+    }
+
+    it('createTeamOrg creates a non-personal org with an owner membership', async () => {
+        await insertUser('owner1');
+        const svc = new OrganizationService(env);
+        const org = await team(svc, 'owner1');
+        expect(org.isPersonal).toBe(false);
+        expect(org.name).toBe('Acme');
+        expect((await svc.getMembership(org.id, 'owner1'))?.role).toBe('owner');
+    });
+
+    it('stores only a hash of the invite token; accept adds the member; token is single-use', async () => {
+        await insertUser('owner1');
+        await insertUser('invitee1');
+        const svc = new OrganizationService(env);
+        const org = await team(svc, 'owner1');
+
+        const { token, invitation } = await svc.createInvitation(
+            org.id,
+            'INVITEE1@example.com',
+            'member',
+            ctx('owner1'),
+        );
+        expect(invitation.status).toBe('pending');
+        expect(invitation.inviteeEmail).toBe('invitee1@example.com'); // normalized lowercase
+
+        const stored = await env.DB.prepare('SELECT token_hash FROM org_invitations WHERE id = ?')
+            .bind(invitation.id)
+            .first<{ token_hash: string }>();
+        expect(stored!.token_hash).not.toBe(token);
+        expect(stored!.token_hash).toBe(await sha256Hash(token));
+
+        const joined = await svc.acceptInvitation(token, 'invitee1');
+        expect(joined.id).toBe(org.id);
+        expect((await svc.getMembership(org.id, 'invitee1'))?.role).toBe('member');
+
+        // Single-use: a second accept of the same (now-accepted) token is rejected.
+        await expect(svc.acceptInvitation(token, 'invitee1')).rejects.toBeInstanceOf(OrgActionError);
+    });
+
+    it('rejects acceptance from an account whose email does not match the invite', async () => {
+        await insertUser('owner1');
+        await insertUser('wrong'); // email wrong@example.com
+        const svc = new OrganizationService(env);
+        const org = await team(svc, 'owner1');
+        const { token } = await svc.createInvitation(org.id, 'someone-else@example.com', 'member', ctx('owner1'));
+
+        await expect(svc.acceptInvitation(token, 'wrong')).rejects.toMatchObject({ statusCode: 403 });
+        expect(await svc.getMembership(org.id, 'wrong')).toBeNull();
+    });
+
+    it('rejects invitations on a personal org', async () => {
+        await insertUser('solo');
+        const svc = new OrganizationService(env);
+        const personalOrgId = await svc.ensurePersonalOrg('solo');
+        await expect(
+            svc.createInvitation(personalOrgId, 'x@example.com', 'member', ctx('solo')),
+        ).rejects.toMatchObject({ statusCode: 400 });
+    });
+
+    it('protects the last owner from removal and demotion', async () => {
+        await insertUser('owner1');
+        const svc = new OrganizationService(env);
+        const org = await team(svc, 'owner1');
+        await expect(svc.removeMember(org.id, 'owner1', ctx('owner1'))).rejects.toBeInstanceOf(OrgActionError);
+        await expect(svc.updateMemberRole(org.id, 'owner1', 'member', ctx('owner1'))).rejects.toBeInstanceOf(
+            OrgActionError,
+        );
+        // Owner is still there.
+        expect((await svc.getMembership(org.id, 'owner1'))?.role).toBe('owner');
+    });
+
+    it('only owners can manage owners; admins cannot', async () => {
+        await insertUser('owner1');
+        await insertUser('admin2');
+        const svc = new OrganizationService(env);
+        const org = await team(svc, 'owner1');
+        const { token } = await svc.createInvitation(org.id, 'admin2@example.com', 'admin', ctx('owner1'));
+        await svc.acceptInvitation(token, 'admin2');
+        expect((await svc.getMembership(org.id, 'admin2'))?.role).toBe('admin');
+
+        await expect(svc.removeMember(org.id, 'owner1', ctx('admin2'))).rejects.toMatchObject({ statusCode: 403 });
+        await expect(svc.updateMemberRole(org.id, 'owner1', 'member', ctx('admin2'))).rejects.toMatchObject({
+            statusCode: 403,
+        });
+        await expect(svc.updateMemberRole(org.id, 'admin2', 'owner', ctx('admin2'))).rejects.toMatchObject({
+            statusCode: 403,
+        });
+    });
+
+    it('a non-member cannot mutate the org', async () => {
+        await insertUser('owner1');
+        await insertUser('outsider');
+        const svc = new OrganizationService(env);
+        const org = await team(svc, 'owner1');
+        await expect(svc.renameOrg(org.id, 'Hacked', ctx('outsider'))).rejects.toMatchObject({ statusCode: 403 });
+        await expect(
+            svc.createInvitation(org.id, 'x@example.com', 'member', ctx('outsider')),
+        ).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    it('ownership transfer unblocks the old owner leaving', async () => {
+        await insertUser('owner1');
+        await insertUser('member2');
+        const svc = new OrganizationService(env);
+        const org = await team(svc, 'owner1');
+        const { token } = await svc.createInvitation(org.id, 'member2@example.com', 'member', ctx('owner1'));
+        await svc.acceptInvitation(token, 'member2');
+
+        await svc.updateMemberRole(org.id, 'member2', 'owner', ctx('owner1'));
+        await svc.removeMember(org.id, 'owner1', ctx('owner1'));
+
+        expect(await svc.getMembership(org.id, 'owner1')).toBeNull();
+        expect((await svc.getMembership(org.id, 'member2'))?.role).toBe('owner');
+    });
+});
+
+describe('OrganizationService.resolveActiveOrg', () => {
+    async function insertSession(id: string, userId: string, currentOrgId: string | null): Promise<void> {
+        await env.DB.prepare(
+            'INSERT INTO sessions (id, user_id, current_org_id, access_token_hash, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+            .bind(id, userId, currentOrgId, 'hash', '', 9999999999)
+            .run();
+    }
+
+    it('returns the session active org when the user is still a member', async () => {
+        await insertUser('owner1');
+        const svc = new OrganizationService(env);
+        await svc.ensurePersonalOrg('owner1');
+        const teamOrg = await svc.createTeamOrg('Acme', { actorUserId: 'owner1' });
+        await insertSession('s1', 'owner1', teamOrg.id);
+
+        const active = await svc.resolveActiveOrg('owner1', 's1');
+        expect(active.orgId).toBe(teamOrg.id);
+        expect(active.orgRole).toBe('owner');
+    });
+
+    it('falls back to the personal org for a stale active org (no longer a member)', async () => {
+        await insertUser('owner1');
+        await insertUser('other');
+        const svc = new OrganizationService(env);
+        const personal = await svc.ensurePersonalOrg('owner1');
+        const othersTeam = await svc.createTeamOrg('Theirs', { actorUserId: 'other' });
+        await insertSession('s1', 'owner1', othersTeam.id); // owner1 is NOT a member
+
+        const active = await svc.resolveActiveOrg('owner1', 's1');
+        expect(active.orgId).toBe(personal);
+        expect(active.orgRole).toBe('owner');
+    });
+
+    it('falls back to the personal org when the session has no active org', async () => {
+        await insertUser('owner1');
+        const svc = new OrganizationService(env);
+        const personal = await svc.ensurePersonalOrg('owner1');
+        await insertSession('s1', 'owner1', null);
+
+        const active = await svc.resolveActiveOrg('owner1', 's1');
+        expect(active.orgId).toBe(personal);
     });
 });

@@ -276,6 +276,11 @@ export function mapUserResponse(
 		emailVerified: user.emailVerified || undefined,
 		createdAt: user.createdAt || undefined,
 		role: user.role || 'user',
+		// Active-org context is resolved per-request onto AuthUser (not a DB
+		// column), so carry it through when present so /api/auth/profile
+		// surfaces it to the SPA.
+		orgId: 'orgId' in user ? user.orgId : undefined,
+		orgRole: 'orgRole' in user ? user.orgRole : undefined,
 	};
 }
 

@@ -72,7 +72,13 @@ export const users = sqliteTable('users', {
 export const sessions = sqliteTable('sessions', {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    
+
+    // Active organization for this session (Phase 2.2). Per-session so an
+    // org-switch is scoped to one device and instantly effective. Nullable with
+    // ON DELETE SET NULL: a since-deleted org collapses to NULL and the user
+    // falls back to their personal org at auth-resolution time.
+    currentOrgId: text('current_org_id').references(() => organizations.id, { onDelete: 'set null' }),
+
     // Session Details
     deviceInfo: text('device_info'),
     userAgent: text('user_agent'),
@@ -98,6 +104,7 @@ export const sessions = sqliteTable('sessions', {
     refreshTokenHashIdx: index('sessions_refresh_token_hash_idx').on(table.refreshTokenHash),
     lastActivityIdx: index('sessions_last_activity_idx').on(table.lastActivity),
     isRevokedIdx: index('sessions_is_revoked_idx').on(table.isRevoked),
+    currentOrgIdIdx: index('sessions_current_org_id_idx').on(table.currentOrgId),
 }));
 
 /**
@@ -177,6 +184,35 @@ export const organizationMembers = sqliteTable('organization_members', {
     orgUserIdx: uniqueIndex('organization_members_org_user_idx').on(table.orgId, table.userId),
     orgIdx: index('organization_members_org_idx').on(table.orgId),
     userIdx: index('organization_members_user_idx').on(table.userId),
+}));
+
+/**
+ * Organization invitations (Phase 2.2). A pending invite to join a TEAM org
+ * with a target org role. The raw token is surfaced ONCE to the inviter (for
+ * the email + copy-link); only its SHA-256 hash is stored, mirroring
+ * emailVerificationTokens — the token is a bearer capability, so it never lands
+ * in the DB in plaintext. At most one active pending invite per
+ * (orgId, inviteeEmail); 'accepted'/'revoked' are terminal. Personal orgs never
+ * carry invitations (enforced in OrganizationService).
+ */
+export const orgInvitations = sqliteTable('org_invitations', {
+    id: text('id').primaryKey(),
+    orgId: text('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+    inviteeEmail: text('invitee_email').notNull(),
+    role: text('role', { enum: ['owner', 'admin', 'member'] }).notNull().default('member'),
+    tokenHash: text('token_hash').notNull(),
+    inviterUserId: text('inviter_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['pending', 'accepted', 'revoked'] }).notNull().default('pending'),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    acceptedAt: integer('accepted_at', { mode: 'timestamp' }),
+    acceptedUserId: text('accepted_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    tokenHashIdx: uniqueIndex('org_invitations_token_hash_idx').on(table.tokenHash),
+    orgEmailIdx: index('org_invitations_org_email_idx').on(table.orgId, table.inviteeEmail),
+    expiresAtIdx: index('org_invitations_expires_at_idx').on(table.expiresAt),
+    orgIdx: index('org_invitations_org_idx').on(table.orgId),
 }));
 
 // ========================================
@@ -824,6 +860,12 @@ export type NewOrganization = typeof organizations.$inferInsert;
 
 export type OrganizationMember = typeof organizationMembers.$inferSelect;
 export type NewOrganizationMember = typeof organizationMembers.$inferInsert;
+
+export type OrgInvitation = typeof orgInvitations.$inferSelect;
+export type NewOrgInvitation = typeof orgInvitations.$inferInsert;
+
+/** Org-scoped roles (organization_members.role / org_invitations.role). */
+export type OrgRole = OrganizationMember['role'];
 
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
