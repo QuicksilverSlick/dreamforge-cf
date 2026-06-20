@@ -104,6 +104,10 @@ export class CodingAgentController extends BaseController {
                 userModelConfigs: Object.fromEntries(userModelConfigs),
                 agentId: agentId,
                 userId: user.id,
+                // Active org (membership-validated in AuthService.resolveActiveOrg):
+                // the app is filed under it so org members share it (Phase 2.2.1).
+                // Undefined => createApp falls back to the user's personal org.
+                orgId: user.orgId,
                 enableRealtimeCodeFix: false, // This costs us too much, so disabled it for now
                 enableFastSmartCodeFix: true, // Post-phase AI fixer: catches semantic model slips the deterministic TS fixer cannot
             }

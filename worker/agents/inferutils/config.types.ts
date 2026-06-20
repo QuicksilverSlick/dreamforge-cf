@@ -96,6 +96,13 @@ export type AgentActionKey = keyof AgentConfig;
 export type InferenceMetadata = {
     agentId: string;
     userId: string;
+    /**
+     * Active organization at build time (Phase 2.2.1). The app is filed under
+     * this org so org members share it. Resolved per-request from AuthUser.orgId
+     * (a membership-validated active org); absent => createApp falls back to the
+     * creator's personal org.
+     */
+    orgId?: string;
     // llmRateLimits: LLMCallsRateLimitConfig;
 }
 
