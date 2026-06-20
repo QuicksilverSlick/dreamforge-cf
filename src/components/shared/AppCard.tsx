@@ -251,6 +251,34 @@ const StatsDisplay = ({ stats }: { stats: StatsData }) => (
 	</div>
 );
 
+// Org-scope indicator: "Private" when the app lives in the viewer's personal
+// org, "{Team}" when it's shared with a team the viewer belongs to. Distinct
+// from the visibility (public/private) overlay badge — that's a separate axis.
+// Only the viewer's own apps carry orgIsPersonal; undecorated (public /
+// foreign-org) cards render nothing.
+const OrgScopeBadge = ({ app }: { app: AppCardData }) => {
+	if (app.orgIsPersonal === undefined) {
+		return null;
+	}
+	if (app.orgIsPersonal) {
+		return (
+			<span className="inline-flex items-center gap-1 text-xs font-medium text-text-tertiary/70">
+				<Lock className="h-3 w-3 shrink-0" />
+				Private
+			</span>
+		);
+	}
+	return (
+		<span
+			className="inline-flex items-center gap-1 max-w-[10rem] text-xs font-medium text-accent"
+			title={app.orgName ? `Shared with ${app.orgName}` : 'Shared with your team'}
+		>
+			<Users2 className="h-3 w-3 shrink-0" />
+			<span className="truncate">{app.orgName ?? 'Team'}</span>
+		</span>
+	);
+};
+
 const AppMetadata = ({
 	app,
 	layoutConfig,
@@ -302,6 +330,7 @@ const AppMetadata = ({
 					{app.title}
 				</span>
 				<div className="flex items-center gap-2.5 text-sm">
+					<OrgScopeBadge app={app} />
 					{/* Only show deployment status if there's no overlay status indicator */}
 					{deploymentStatus && !hasOverlayStatus && (
 						<>

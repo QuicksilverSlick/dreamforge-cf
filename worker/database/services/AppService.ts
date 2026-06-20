@@ -13,6 +13,7 @@ import { ScreenshotSecurity } from '../../utils/screenshot-security';
 import type {
     EnhancedAppData,
     AppWithFavoriteStatus,
+    OrgDisplayInfo,
     FavoriteToggleResult,
     PaginatedResult,
     AppQueryOptions,
@@ -53,6 +54,30 @@ export class AppService extends BaseService {
      */
     private enrichScreenshotUrls<T extends { id: string; screenshotUrl?: string | null }>(apps: T[]): Promise<T[]> {
         return new ScreenshotSecurity(this.env).enrichUrls(apps);
+    }
+
+    /**
+     * Stamp each app with its org's display name and whether that org is the
+     * viewer's personal org, so the client can render a "Private (personal) vs
+     * Shared · {team}" indicator. The viewer's orgs are resolved once per call
+     * (membership-scoped, index-backed) — every orgId in a user's own list is by
+     * construction one of those orgs (userAppAccessCondition scopes both). Apps
+     * whose org isn't in the viewer's membership set (should not occur on the
+     * viewer's own lists) are left undecorated and render no indicator.
+     */
+    private async attachOrgDisplay<T extends schema.App & OrgDisplayInfo>(
+        apps: T[],
+        userId: string,
+    ): Promise<T[]> {
+        if (apps.length === 0) {
+            return apps;
+        }
+        const orgs = await new OrganizationService(this.env).getUserOrganizations(userId);
+        const byId = new Map(orgs.map(({ org }) => [org.id, org]));
+        return apps.map((app) => {
+            const org = byId.get(app.orgId);
+            return org ? { ...app, orgName: org.name, orgIsPersonal: org.isPersonal } : app;
+        });
     }
 
 
@@ -386,11 +411,14 @@ export class AppService extends BaseService {
 
         const favoriteSet = new Set(favorites.map(f => f.appId));
 
-        return this.enrichScreenshotUrls(apps.map(app => ({
-            ...app,
-            isFavorite: favoriteSet.has(app.id),
-            updatedAtFormatted: formatRelativeTime(app.updatedAt)
-        })));
+        return this.attachOrgDisplay(
+            await this.enrichScreenshotUrls(apps.map(app => ({
+                ...app,
+                isFavorite: favoriteSet.has(app.id),
+                updatedAtFormatted: formatRelativeTime(app.updatedAt)
+            }))),
+            userId,
+        );
     }
 
     /**
@@ -420,11 +448,14 @@ export class AppService extends BaseService {
             ))
             .orderBy(desc(schema.apps.updatedAt));
 
-        return this.enrichScreenshotUrls(results.map(row => ({
-            ...row.app,
-            isFavorite: true as const,
-            updatedAtFormatted: formatRelativeTime(row.app.updatedAt)
-        })));
+        return this.attachOrgDisplay(
+            await this.enrichScreenshotUrls(results.map(row => ({
+                ...row.app,
+                isFavorite: true as const,
+                updatedAtFormatted: formatRelativeTime(row.app.updatedAt)
+            }))),
+            userId,
+        );
     }
 
 
@@ -783,17 +814,20 @@ export class AppService extends BaseService {
                 .limit(limit)
                 .offset(offset);
                 
-            return this.enrichScreenshotUrls(results.map(r => ({
-                ...r.app,
-                userName: r.userName,
-                userAvatar: r.userAvatar,
-                viewCount: r.viewCount || 0,
-                starCount: r.starCount || 0,
-                forkCount: r.forkCount || 0,
-                likeCount: 0,
-                userStarred: false,
-                userFavorited: true // These are favorited apps
-            })));
+            return this.attachOrgDisplay(
+                await this.enrichScreenshotUrls(results.map(r => ({
+                    ...r.app,
+                    userName: r.userName,
+                    userAvatar: r.userAvatar,
+                    viewCount: r.viewCount || 0,
+                    starCount: r.starCount || 0,
+                    forkCount: r.forkCount || 0,
+                    likeCount: 0,
+                    userStarred: false,
+                    userFavorited: true // These are favorited apps
+                }))),
+                userId,
+            );
         }
 
         const basicApps = await this.executeRankedQuery(
@@ -813,17 +847,20 @@ export class AppService extends BaseService {
         const appIds = basicApps.map((row: RankedAppQueryResult) => row.app.id);
         const { userStars, userFavorites } = await this.addUserSpecificAppData(appIds, userId);
         
-        return this.enrichScreenshotUrls(basicApps.map((row: RankedAppQueryResult) => ({
-            ...row.app,
-            userName: row.userName,
-            userAvatar: row.userAvatar,
-            viewCount: row.viewCount || 0,
-            starCount: row.starCount || 0,
-            forkCount: row.forkCount || 0,
-            likeCount: 0,
-            userStarred: userStars.has(row.app.id),
-            userFavorited: userFavorites.has(row.app.id)
-        })));
+        return this.attachOrgDisplay(
+            await this.enrichScreenshotUrls(basicApps.map((row: RankedAppQueryResult) => ({
+                ...row.app,
+                userName: row.userName,
+                userAvatar: row.userAvatar,
+                viewCount: row.viewCount || 0,
+                starCount: row.starCount || 0,
+                forkCount: row.forkCount || 0,
+                likeCount: 0,
+                userStarred: userStars.has(row.app.id),
+                userFavorited: userFavorites.has(row.app.id)
+            }))),
+            userId,
+        );
     }
 
     /**

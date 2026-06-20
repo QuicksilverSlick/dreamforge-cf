@@ -52,6 +52,9 @@ interface App {
 	updatedAtFormatted?: string;
 	visibility: 'private' | 'team' | 'board' | 'public';
 	isFavorite?: boolean;
+	/** Org-scope display info (viewer's own apps only); see AppService.attachOrgDisplay. */
+	orgName?: string;
+	orgIsPersonal?: boolean;
 }
 
 interface Board {
@@ -115,8 +118,16 @@ function AppMenuItem({
 									<span className="text-ellipsis w-fit overflow-hidden">
 										{app.title}{' '}
 									</span>
-									<div className="flex-shrink-0 min-w-6">
+									<div className="flex-shrink-0 flex items-center gap-1">
 										{getVisibilityIcon(app.visibility)}
+										{app.orgIsPersonal === false && (
+											<span
+												className="inline-flex items-center text-accent"
+												title={app.orgName ? `Shared with ${app.orgName}` : 'Shared with your team'}
+											>
+												<Users2 className="h-3 w-3" />
+											</span>
+										)}
 									</div>
 								</span>
 
