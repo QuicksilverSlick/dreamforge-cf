@@ -118,6 +118,37 @@ describe('AppService.createApp dual-write (Phase 2 dark)', () => {
         } as NewApp);
         expect(app.orgId).toBeNull();
     });
+
+    it('files the app under an explicit active org the creator is a member of (team sharing)', async () => {
+        await insertUser('u4');
+        const orgSvc = new OrganizationService(env);
+        const teamOrg = await orgSvc.createTeamOrg('Acme', { actorUserId: 'u4' });
+        const app = await new AppService(env).createApp({
+            id: 'app-team',
+            title: 'Team app',
+            originalPrompt: 'build',
+            userId: 'u4',
+            orgId: teamOrg.id,
+        } as NewApp);
+        expect(app.orgId).toBe(teamOrg.id);
+    });
+
+    it('ignores an org the creator is NOT a member of and falls back to personal (cross-tenant guard)', async () => {
+        await insertUser('u5');
+        await insertUser('outsider');
+        const orgSvc = new OrganizationService(env);
+        const teamOrg = await orgSvc.createTeamOrg('Acme', { actorUserId: 'u5' }); // outsider is NOT a member
+        const app = await new AppService(env).createApp({
+            id: 'app-foreign',
+            title: 'Foreign',
+            originalPrompt: 'build',
+            userId: 'outsider',
+            orgId: teamOrg.id,
+        } as NewApp);
+        const outsiderPersonal = await orgSvc.getPersonalOrgId('outsider');
+        expect(app.orgId).toBe(outsiderPersonal);
+        expect(app.orgId).not.toBe(teamOrg.id);
+    });
 });
 
 describe('OrganizationService Phase 2.2 — teams, invitations, members', () => {

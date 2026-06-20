@@ -65,14 +65,39 @@ export class AppService extends BaseService {
      * Create a new app
      */
     async createApp(appData:schema.NewApp): Promise<schema.App> {
-        // Phase 2 (dark dual-write): stamp the owner's personal org so new apps
-        // carry orgId before enforcement lands. Anonymous apps (no userId) have
-        // no org; an explicitly-provided orgId (future team orgs) is respected.
-        // Best-effort — never block app creation on org plumbing.
+        // Phase 2.2.1: file the app under the creator's ACTIVE org (passed by the
+        // agent) so org members share it; fall back to the personal org. Anonymous
+        // apps (no userId) have no org.
+        //
+        // Defense in depth: only honor an explicitly-provided orgId the creator is
+        // actually a MEMBER of. The agent passes the per-request active org (already
+        // membership-validated in resolveActiveOrg), so this guards any future
+        // caller against filing an app into a foreign org. Best-effort — never block
+        // app creation on org plumbing (any error falls back to the personal org).
         let orgId = appData.orgId ?? null;
+        const orgService = new OrganizationService(this.env);
+        if (orgId && appData.userId) {
+            try {
+                const membership = await orgService.getMembership(orgId, appData.userId);
+                if (!membership) {
+                    this.logger.warn('createApp: ignoring orgId the creator is not a member of; using personal org', {
+                        userId: appData.userId,
+                        orgId,
+                    });
+                    orgId = null;
+                }
+            } catch (error) {
+                this.logger.error('createApp: membership check failed; using personal org', {
+                    userId: appData.userId,
+                    orgId,
+                    error,
+                });
+                orgId = null;
+            }
+        }
         if (!orgId && appData.userId) {
             try {
-                orgId = await new OrganizationService(this.env).ensurePersonalOrg(appData.userId);
+                orgId = await orgService.ensurePersonalOrg(appData.userId);
             } catch (error) {
                 this.logger.error('Failed to resolve personal org for new app', {
                     userId: appData.userId,

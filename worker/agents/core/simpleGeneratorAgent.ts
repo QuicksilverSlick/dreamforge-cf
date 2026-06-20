@@ -254,6 +254,9 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
         await appService.createApp({
             id: this.state.inferenceContext.agentId,
             userId: this.state.inferenceContext.userId,
+            // File under the active org so org members share the app (Phase 2.2.1);
+            // createApp falls back to the personal org when this is null.
+            orgId: this.state.inferenceContext.orgId ?? null,
             sessionToken: null,
             title: this.state.blueprint.title || this.state.query.substring(0, 100),
             description: this.state.blueprint.description || null,
