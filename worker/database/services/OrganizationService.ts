@@ -363,19 +363,15 @@ export class OrganizationService extends BaseService {
             throw new OrgActionError('This invitation has expired.', 400);
         }
 
-        // Bind acceptance to the invited email. The token is a bearer secret,
-        // but it was ISSUED to a specific address (and emailed there), so only
-        // an account with that email may redeem it — a forwarded/leaked link
-        // can't let an arbitrary logged-in user join. Case-insensitive.
-        const acceptingUser = await this.database
-            .select({ email: schema.users.email })
-            .from(schema.users)
-            .where(eq(schema.users.id, userId))
-            .get();
-        if (!acceptingUser || acceptingUser.email.toLowerCase() !== invitation.inviteeEmail.toLowerCase()) {
-            throw new OrgActionError('This invitation was issued to a different email address.', 403);
-        }
-
+        // Token-is-capability model (owner decision 2026-06-20): ANY authenticated
+        // user holding the valid token may redeem it and join at the invited role,
+        // even if their account email differs from the address the invite was sent
+        // to — so an invited person can always join (their Dreamforge account may
+        // use a different email than where the invite was delivered). This is the
+        // shareable-invite-link posture; safety rests on the token being
+        // high-entropy, single-use, 7-day-expiring, revocable, and hashed at rest,
+        // plus org-admin member review/removal. The invited address is recorded in
+        // the audit trail below for accountability when it differs from the joiner.
         const org = await this.getOrgById(invitation.orgId);
         if (!org) {
             throw new OrgActionError('The organization no longer exists.', 404);
@@ -386,7 +382,12 @@ export class OrganizationService extends BaseService {
             entityType: 'organization',
             entityId: invitation.orgId,
             action: OrgAuditAction.MEMBER_INVITE_ACCEPT,
-            newValues: { invitationId: invitation.id, role: invitation.role, joinedUserId: userId },
+            newValues: {
+                invitationId: invitation.id,
+                role: invitation.role,
+                joinedUserId: userId,
+                inviteeEmail: invitation.inviteeEmail,
+            },
             metadata: ctx?.metadata,
         });
 
