@@ -826,10 +826,11 @@ export default function AppView() {
 											ref={previewIframeRef}
 											src={appUrl}
 											className="w-full h-[80vh] min-h-[600px]"
+											surfaceClassName="bg-bg-2"
 											title={`${app.title} Preview`}
 										/>
 									) : (
-										<div className="relative w-full h-[400px] bg-bg-3 flex items-center justify-center overflow-hidden">
+										<div className="relative w-full h-[400px] bg-bg-2 flex items-center justify-center overflow-hidden">
 											{/* Dotted accent backdrop */}
 											<div className="absolute inset-0 text-accent opacity-[0.12] pointer-events-none">
 												<svg width="100%" height="100%">
