@@ -136,6 +136,30 @@ describe('org-scope display decoration (Private vs Shared indicator)', () => {
         expect(appA.orgName!.length).toBeGreaterThan(0);
     });
 
+    it('lists deployed apps and filters to those missing a screenshot (backfill)', async () => {
+        const svc = new AppService(env);
+        await insertUser('A');
+        await env.DB.prepare(
+            "INSERT INTO organizations (id, name, slug, is_personal, owner_user_id) VALUES ('orgA','A ws','ws-a',1,'A')",
+        ).run();
+        const insApp = (id: string, dep: string | null, shot: string | null) =>
+            env.DB.prepare(
+                'INSERT INTO apps (id, title, original_prompt, user_id, org_id, deployment_id, screenshot_url, visibility, status) VALUES (?,?,?,?,?,?,?,?,?)',
+            )
+                .bind(id, id, 'p', 'A', 'orgA', dep, shot, 'private', 'completed')
+                .run();
+        await insApp('d1', 'https://d1.app.getdreamforge.com', 'https://app/api/screenshots/d1/latest.png');
+        await insApp('d2', 'v1-bare-label', null);
+        await insApp('nd', null, null);
+
+        const all = await svc.listDeployedApps();
+        expect(all.map((a) => a.id).sort()).toEqual(['d1', 'd2']); // 'nd' (no deployment) excluded
+
+        const missing = await svc.listDeployedApps({ missingScreenshotOnly: true });
+        expect(missing.map((a) => a.id)).toEqual(['d2']); // 'd1' already has a screenshot
+        expect(missing[0].deploymentId).toBe('v1-bare-label'); // bare label preserved for normalization
+    });
+
     it('stamps a team-org app as orgIsPersonal=false with the team name', async () => {
         const svc = new AppService(env);
         await insertUser('A');

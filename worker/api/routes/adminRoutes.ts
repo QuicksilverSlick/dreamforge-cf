@@ -102,4 +102,18 @@ export function setupAdminRoutes(app: Hono<AppEnv>): void {
         setAuthLevel(AuthConfig.superadminOnly),
         adaptController(AdminController, AdminController.reactivateUser),
     );
+
+    // ---- Preview screenshots (operator-triggered capture/backfill) ----
+    app.post(
+        '/api/admin/apps/:id/screenshot',
+        requireAdminConsole,
+        setAuthLevel(AuthConfig.superadminOnly),
+        adaptController(AdminController, AdminController.captureAppScreenshot),
+    );
+    app.post(
+        '/api/admin/screenshots/backfill',
+        requireAdminConsole,
+        setAuthLevel(AuthConfig.superadminOnly),
+        adaptController(AdminController, AdminController.backfillScreenshots),
+    );
 }

@@ -26,6 +26,8 @@ import {
 } from '../../../database/services/AuditLogService';
 import { AnalyticsService } from '../../../database/services/AnalyticsService';
 import { AppService } from '../../../database/services/AppService';
+import { captureAndStoreScreenshot } from '../../../services/screenshots/screenshotCapture';
+import { buildUserWorkerUrl } from '../../../utils/urls';
 import { SecretsService } from '../../../database/services/SecretsService';
 import { SessionService } from '../../../database/services/SessionService';
 import { GitHubTokenService } from '../../../database/services/GitHubTokenService';
@@ -39,6 +41,8 @@ import type {
     AdminUserSecretsData,
     AdminAppDetailData,
     AdminAuditListData,
+    AdminScreenshotCaptureData,
+    AdminScreenshotBackfillData,
 } from './types';
 
 export class AdminController extends BaseController {
@@ -283,6 +287,91 @@ export class AdminController extends BaseController {
         } catch (error) {
             this.logger.error('Error fetching app detail', error);
             return AdminController.createErrorResponse<AdminAppDetailData>('Failed to load app', 500);
+        }
+    }
+
+    /**
+     * Build the publicly reachable deployed URL from a stored deployment_id,
+     * which is either a full https URL (new agent) or a bare subdomain label
+     * (legacy agent) that needs the preview domain appended.
+     */
+    private static resolveDeployedUrl(env: Env, deploymentId: string): string {
+        return deploymentId.startsWith('http') ? deploymentId : buildUserWorkerUrl(env, deploymentId);
+    }
+
+    /** POST /api/admin/apps/:id/screenshot — capture a fresh preview thumbnail for one deployed app. */
+    static async captureAppScreenshot(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<AdminScreenshotCaptureData>>> {
+        try {
+            const appId = context.pathParams.id;
+            if (!appId) {
+                return AdminController.createErrorResponse<AdminScreenshotCaptureData>('App ID is required', 400);
+            }
+
+            const app = await new AppService(env).getAppDetails(appId);
+            if (!app) {
+                return AdminController.createErrorResponse<AdminScreenshotCaptureData>('App not found', 404);
+            }
+            if (!app.deploymentId) {
+                return AdminController.createErrorResponse<AdminScreenshotCaptureData>(
+                    'App has no deployment to screenshot',
+                    400,
+                );
+            }
+
+            const url = AdminController.resolveDeployedUrl(env, app.deploymentId);
+            const { publicUrl } = await captureAndStoreScreenshot(env, appId, url);
+
+            return AdminController.createSuccessResponse({ appId, url, screenshotUrl: publicUrl });
+        } catch (error) {
+            this.logger.error('Error capturing app screenshot', error);
+            return AdminController.createErrorResponse<AdminScreenshotCaptureData>('Failed to capture screenshot', 500);
+        }
+    }
+
+    /**
+     * POST /api/admin/screenshots/backfill — capture preview thumbnails for
+     * deployed apps. Defaults to apps missing a thumbnail; ?all=true refreshes
+     * every deployed app. Best-effort and idempotent (re-capture overwrites
+     * latest.png); a single unreachable URL never aborts the batch.
+     */
+    static async backfillScreenshots(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<AdminScreenshotBackfillData>>> {
+        try {
+            const refreshAll = context.queryParams.get('all') === 'true';
+            const deployed = await new AppService(env).listDeployedApps({ missingScreenshotOnly: !refreshAll });
+
+            const result: AdminScreenshotBackfillData = { total: deployed.length, succeeded: 0, failed: [] };
+            // Sequential — respect Browser Rendering concurrency/rate limits.
+            for (const app of deployed) {
+                try {
+                    const url = AdminController.resolveDeployedUrl(env, app.deploymentId);
+                    await captureAndStoreScreenshot(env, app.id, url);
+                    result.succeeded++;
+                } catch (error) {
+                    result.failed.push({
+                        appId: app.id,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+            }
+
+            this.logger.info('Screenshot backfill complete', { ...result, refreshAll });
+            return AdminController.createSuccessResponse(result);
+        } catch (error) {
+            this.logger.error('Error during screenshot backfill', error);
+            return AdminController.createErrorResponse<AdminScreenshotBackfillData>(
+                'Failed to backfill screenshots',
+                500,
+            );
         }
     }
 
