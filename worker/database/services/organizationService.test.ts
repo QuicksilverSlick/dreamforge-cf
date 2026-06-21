@@ -335,6 +335,24 @@ describe('OrganizationService.deleteOrg (Phase 2.4 — team deletion)', () => {
         await expect(svc.deleteOrg(org.id, ctx('outsider'))).rejects.toMatchObject({ statusCode: 403 });
         expect(await svc.getOrgById(org.id)).not.toBeNull(); // survived both attempts
     });
+
+    it('refuses to delete a team that still holds connected resources (no silent cascade-wipe)', async () => {
+        await insertUser('owner1');
+        const svc = new OrganizationService(env);
+        const org = await svc.createTeamOrg('Acme', ctx('owner1'));
+        // A credential-bearing resource scoped to the team org (org_id CASCADE-deletes).
+        await env.DB.prepare(
+            "INSERT INTO user_secrets (id, user_id, org_id, name, provider, secret_type, encrypted_value, key_preview, is_active) VALUES ('s1','owner1',?,'k','custom','api_key','v1:x','sk-**',1)",
+        )
+            .bind(org.id)
+            .run();
+
+        await expect(svc.deleteOrg(org.id, ctx('owner1'))).rejects.toMatchObject({ statusCode: 409 });
+        expect(await svc.getOrgById(org.id)).not.toBeNull(); // org survived
+        expect(
+            (await env.DB.prepare("SELECT COUNT(*) AS n FROM user_secrets WHERE org_id=?").bind(org.id).first<{ n: number }>())!.n,
+        ).toBe(1); // secret survived
+    });
 });
 
 describe('OrganizationService.resolveActiveOrg', () => {
