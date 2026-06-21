@@ -22,6 +22,14 @@ export interface GeneratedCodeFile {
 export interface AppDetailsData extends EnhancedAppData {
     cloudflareUrl: string | null;
     previewUrl: string | null;
+    /**
+     * Whether the requesting user can open + drive this app (build/iterate/deploy).
+     * True for any member of the app's org — NOT creator-only. Drives the editor
+     * entry point and owner-level controls in the UI.
+     */
+    canEdit: boolean;
+    /** The requesting user's role in the app's org, or null if not a member. */
+    viewerOrgRole: 'owner' | 'admin' | 'member' | null;
     user: {
         id: string;
         displayName: string;
