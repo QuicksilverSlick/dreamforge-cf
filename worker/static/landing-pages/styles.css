@@ -99,8 +99,10 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--accent-deep); display: inline-block; margin-bottom: 1.25rem;
 }
 [data-theme="dark"] .eyebrow { color: var(--accent); }
-a { color: var(--accent-deep); }
-[data-theme="dark"] a { color: var(--accent); }
+/* Generic link colour — scoped away from .btn so primary buttons keep their own
+   text colour (otherwise teal text lands on the teal .btn-primary fill). */
+a:not(.btn) { color: var(--accent-deep); }
+[data-theme="dark"] a:not(.btn) { color: var(--accent); }
 
 /* ===== Buttons ===== */
 .btn {
@@ -154,12 +156,21 @@ a { color: var(--accent-deep); }
 .nav-links a:hover { color: var(--ink); }
 .nav-cta { background: var(--accent); color: var(--accent-ink) !important; padding: 0.6rem 1.25rem; border-radius: var(--pill); font-weight: 700 !important; font-size: 0.95rem; white-space: nowrap; text-decoration: none; transition: background 0.18s var(--ease), box-shadow 0.18s var(--ease); }
 .nav-cta:hover { background: var(--accent-deep); box-shadow: var(--glow); }
+.nav-right a.nav-signin { color: var(--ink-soft); font-weight: 600; font-size: 0.95rem; white-space: nowrap; text-decoration: none; transition: color 0.18s var(--ease); }
+.nav-right a.nav-signin:hover { color: var(--ink); }
 @media (max-width: 900px) { .nav-links { display: none; } }
 @media (max-width: 480px) {
     .nav-container { padding: 0.85rem 1.1rem; }
-    .nav-right { gap: 0.6rem; }
+    .nav-right { gap: 0.7rem; }
     .nav-cta { padding: 0.5rem 0.95rem; font-size: 0.85rem; }
-    .nav-brand { font-size: 1.2rem; }
+    .nav-right a.nav-signin { font-size: 0.85rem; }
+    /* Drop the wordmark on phones (the logo mark stays) so the added Sign in +
+       CTA pair never overflows the bar. */
+    .nav-brand { display: none; }
+}
+@media (max-width: 340px) {
+    .nav-right { gap: 0.5rem; }
+    .nav-cta { padding: 0.45rem 0.8rem; }
 }
 
 /* ===== Hero ===== */
@@ -350,7 +361,10 @@ a { color: var(--accent-deep); }
 .launch-card { text-align: center; padding: 1.5rem; }
 .launch-status { display: inline-flex; align-items: center; gap: 0.45rem; font-weight: 600; color: var(--accent-deep); margin: 0.4rem 0 1rem; }
 [data-theme="dark"] .launch-status { color: var(--accent); }
-.launch-url { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 500; color: var(--ink); }
+.launch-url { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+/* The single-column plan grid otherwise stretches to the demo URL's unbroken
+   width, forcing horizontal scroll on phones — let the tracks shrink. */
+.plan-step, .step-text, .step-visual { min-width: 0; }
 .launch-metrics { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.5rem; }
 .launch-metrics span { font-size: 0.78rem; font-weight: 600; color: var(--ink-soft); background: var(--surface-2); border: 1px solid var(--border); padding: 0.35rem 0.7rem; border-radius: var(--pill); }
 

@@ -27,7 +27,8 @@ export default function Home() {
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const [agentMode, setAgentMode] = useState<AgentMode>('deterministic');
 	const [query, setQuery] = useState('');
-	const { user } = useAuth();
+	const { user, isLoading: isAuthLoading } = useAuth();
+	const loginDeepLinkHandled = useRef(false);
 	// The intake interview is on by default; the preference sticks per browser.
 	const [interviewEnabled, setInterviewEnabled] = useState(
 		() => localStorage.getItem(INTERVIEW_PREF_KEY) !== 'off',
@@ -126,6 +127,30 @@ export default function Home() {
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
+
+	// Deep-link from the marketing site's "Sign in" button: `?login=1` opens the
+	// auth modal once the auth state has settled. No-ops for already-signed-in
+	// users; the param is stripped so a refresh or back-nav can't reopen it.
+	useEffect(() => {
+		if (isAuthLoading || loginDeepLinkHandled.current) return;
+		const params = new URLSearchParams(window.location.search);
+		if (params.get('login') === null && params.get('signin') === null) return;
+		loginDeepLinkHandled.current = true;
+		if (!user) {
+			requireAuth({
+				requireFullAuth: true,
+				actionContext: 'to sign in to your account',
+			});
+		}
+		params.delete('login');
+		params.delete('signin');
+		const qs = params.toString();
+		window.history.replaceState(
+			null,
+			'',
+			`${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`,
+		);
+	}, [isAuthLoading, user, requireAuth]);
 
 	// Typewriter effect
 	useEffect(() => {
