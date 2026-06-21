@@ -50,9 +50,10 @@ export class UserController extends BaseController {
             const appService = new AppService(env);
             
             // Get user apps with analytics and proper total count
+            // Scope the list to the user's ACTIVE org (the switcher context).
             const [apps, totalCount] = await Promise.all([
-                appService.getUserAppsWithAnalytics(user.id, queryOptions),
-                appService.getUserAppsCount(user.id, queryOptions)
+                appService.getUserAppsWithAnalytics(user.id, queryOptions, user.orgId),
+                appService.getUserAppsCount(user.id, queryOptions, user.orgId)
             ]);
 
             const responseData: UserAppsData = {

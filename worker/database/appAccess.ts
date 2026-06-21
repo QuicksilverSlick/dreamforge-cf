@@ -30,3 +30,17 @@ export function userAppAccessCondition(
 
     return inArray(schema.apps.orgId, memberOrgIds);
 }
+
+/**
+ * Narrower LIST predicate: apps belonging to a single (the ACTIVE) org. Used by
+ * the user-facing app lists so the sidebar / Apps page show only the org the
+ * user has selected in the switcher, reducing "which context am I in" confusion.
+ *
+ * This is a strict subset of userAppAccessCondition (the active org is always one
+ * of the user's member orgs). It scopes the LIST only — ownership/open/drive/
+ * delete checks (checkAppOwnership, deleteApp) keep using userAppAccessCondition
+ * so a member can still act on any org app regardless of the active switcher.
+ */
+export function activeOrgAppCondition(orgId: string): SQL {
+    return eq(schema.apps.orgId, orgId);
+}

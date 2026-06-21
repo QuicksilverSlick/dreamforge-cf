@@ -5,7 +5,7 @@
 import { BaseService } from './BaseService';
 import { OrganizationService } from './OrganizationService';
 import * as schema from '../schema';
-import { userAppAccessCondition } from '../appAccess';
+import { userAppAccessCondition, activeOrgAppCondition } from '../appAccess';
 import { eq, and, or, desc, asc, sql, isNull, isNotNull, inArray } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
 import { formatRelativeTime } from '../../utils/timeFormatter';
@@ -378,19 +378,21 @@ export class AppService extends BaseService {
      * Optimized to fetch favorites separately to avoid subquery memory issues
      */
     async getUserAppsWithFavorites(
-        userId: string, 
-        options: PaginationParams = {}
+        userId: string,
+        options: PaginationParams = {},
+        activeOrgId?: string,
     ): Promise<AppWithFavoriteStatus[]> {
         const { limit = 50, offset = 0 } = options;
-        
+
         // Use 'fresh' strategy for user's own data to ensure they see latest changes
         const readDb = this.getReadDb('fresh');
-        
-        // Fetch user's apps first
+
+        // List scopes to the ACTIVE org when one is given (switcher context), else
+        // to all the user's member orgs.
         const apps = await readDb
             .select()
             .from(schema.apps)
-            .where(userAppAccessCondition(readDb, userId))
+            .where(activeOrgId ? activeOrgAppCondition(activeOrgId) : userAppAccessCondition(readDb, userId))
             .orderBy(desc(schema.apps.updatedAt))
             .limit(limit)
             .offset(offset);
@@ -425,17 +427,19 @@ export class AppService extends BaseService {
      * Get recent user apps with favorite status
      */
     async getRecentAppsWithFavorites(
-        userId: string, 
-        limit: number = 10
+        userId: string,
+        limit: number = 10,
+        activeOrgId?: string,
     ): Promise<AppWithFavoriteStatus[]> {
-        return this.getUserAppsWithFavorites(userId, { limit, offset: 0 });
+        return this.getUserAppsWithFavorites(userId, { limit, offset: 0 }, activeOrgId);
     }
 
     /**
      * Get only favorited apps for a user
      */
     async getFavoriteAppsOnly(
-        userId: string
+        userId: string,
+        activeOrgId?: string,
     ): Promise<AppWithFavoriteStatus[]> {
         const results = await this.database
             .select({
@@ -446,6 +450,9 @@ export class AppService extends BaseService {
                 eq(schema.favorites.appId, schema.apps.id),
                 eq(schema.favorites.userId, userId)
             ))
+            // Favorites carry no org predicate of their own; scope to the active org
+            // when given so favorited apps from other member orgs don't leak in.
+            .where(activeOrgId ? activeOrgAppCondition(activeOrgId) : undefined)
             .orderBy(desc(schema.apps.updatedAt));
 
         return this.attachOrgDisplay(
@@ -797,21 +804,21 @@ export class AppService extends BaseService {
     /**
      * Get user apps with analytics data
      */
-    async getUserAppsWithAnalytics(userId: string, options: Partial<AppQueryOptions> = {}): Promise<EnhancedAppData[]> {
-        const { 
-            limit = 50, 
-            offset = 0, 
-            status, 
-            visibility, 
+    async getUserAppsWithAnalytics(userId: string, options: Partial<AppQueryOptions> = {}, activeOrgId?: string): Promise<EnhancedAppData[]> {
+        const {
+            limit = 50,
+            offset = 0,
+            status,
+            visibility,
             framework,
             search,
-            sort = 'recent', 
+            sort = 'recent',
             order = 'desc',
             period = 'all'
         } = options;
 
         const whereConditions: WhereCondition[] = [
-            userAppAccessCondition(this.database, userId),
+            activeOrgId ? activeOrgAppCondition(activeOrgId) : userAppAccessCondition(this.database, userId),
             status ? eq(schema.apps.status, status) : undefined,
             visibility ? eq(schema.apps.visibility, visibility) : undefined,
             ...this.buildCommonAppFilters(framework, search),
@@ -888,13 +895,13 @@ export class AppService extends BaseService {
     /**
      * Get total count of user apps with filters (for pagination)
      */
-    async getUserAppsCount(userId: string, options: Partial<AppQueryOptions> = {}): Promise<number> {
+    async getUserAppsCount(userId: string, options: Partial<AppQueryOptions> = {}, activeOrgId?: string): Promise<number> {
         const { status, visibility, framework, search, sort = 'recent' } = options;
 
         const readDb = this.getReadDb('fast');
 
         const whereConditions: WhereCondition[] = [
-            userAppAccessCondition(readDb, userId),
+            activeOrgId ? activeOrgAppCondition(activeOrgId) : userAppAccessCondition(readDb, userId),
             status ? eq(schema.apps.status, status) : undefined,
             visibility ? eq(schema.apps.visibility, visibility) : undefined,
             ...this.buildCommonAppFilters(framework, search),
