@@ -28,6 +28,24 @@ import { MAX_IMAGES_PER_MESSAGE, MAX_IMAGE_SIZE_BYTES, type ImageAttachment } fr
 import { checkUsageAndBalance } from '../../services/rate-limit';
 import type { CodeGeneratorAgent } from './codingAgent';
 import { sendToConnection, sendError } from './websocket';
+import { ensureCanDrive, claimDriver, releaseDriver, handlePresenceOnClose } from './presence';
+
+/**
+ * Commands that DRIVE the shared build (mutate state / spend the creator's
+ * credits). Gated by the single-driver seat: only the current driver runs them;
+ * a non-driver is soft-blocked with a take-over affordance. Read-only commands
+ * (model configs, conversation state) and the driver claim/release are NOT here.
+ */
+const DRIVING_COMMANDS = new Set<string>([
+    WebSocketMessageRequests.GENERATE_ALL,
+    WebSocketMessageRequests.DEPLOY,
+    WebSocketMessageRequests.PREVIEW,
+    WebSocketMessageRequests.CAPTURE_SCREENSHOT,
+    WebSocketMessageRequests.STOP_GENERATION,
+    WebSocketMessageRequests.RESUME_GENERATION,
+    WebSocketMessageRequests.USER_SUGGESTION,
+    WebSocketMessageRequests.CLEAR_CONVERSATION,
+]);
 
 interface IncomingWebSocketMessage {
     type: string;
@@ -50,6 +68,12 @@ export async function handleWebSocketMessage(
     try {
         logger.info(`Received WebSocket message from ${connection.id}: ${message}`);
         const parsedMessage = JSON.parse(message) as IncomingWebSocketMessage;
+
+        // Single-driver gate (soft): a non-driver's driving command is not run
+        // concurrently — they're notified who's driving and may take over.
+        if (DRIVING_COMMANDS.has(parsedMessage.type) && !ensureCanDrive(agent, connection)) {
+            return;
+        }
 
         switch (parsedMessage.type) {
             case WebSocketMessageRequests.GENERATE_ALL:
@@ -299,6 +323,12 @@ export async function handleWebSocketMessage(
                     );
                 }
                 break;
+            case WebSocketMessageRequests.CLAIM_DRIVER:
+                claimDriver(agent, connection);
+                break;
+            case WebSocketMessageRequests.RELEASE_DRIVER:
+                releaseDriver(agent, connection);
+                break;
             default:
                 sendError(connection, `Unknown message type: ${parsedMessage.type}`);
         }
@@ -308,6 +338,7 @@ export async function handleWebSocketMessage(
     }
 }
 
-export function handleWebSocketClose(connection: Connection): void {
+export function handleWebSocketClose(agent: CodeGeneratorAgent, connection: Connection): void {
     logger.info(`WebSocket connection closed: ${connection.id}`);
+    handlePresenceOnClose(agent, connection);
 }

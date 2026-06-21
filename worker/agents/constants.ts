@@ -87,6 +87,11 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
     TEMPLATE_UPDATED: 'template_updated',
     AGENT_CONNECTED: 'agent_connected',
     USAGE_UPDATED: 'usage_updated',
+
+    // Org collaboration: live presence roster + single-driver state, and the soft
+    // "someone else is driving" notice sent when a non-driver tries to drive.
+    PRESENCE_UPDATE: 'presence_update',
+    DRIVING_BLOCKED: 'driving_blocked',
 }
 
 // WebSocket message types
@@ -114,6 +119,10 @@ export const WebSocketMessageRequests = {
     
     // Model configuration info request
     GET_MODEL_CONFIGS: 'get_model_configs',
+
+    // Org collaboration: claim / release the single driver seat.
+    CLAIM_DRIVER: 'claim_driver',
+    RELEASE_DRIVER: 'release_driver',
     
     // Terminal command request
     TERMINAL_COMMAND: 'terminal_command',

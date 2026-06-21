@@ -458,6 +458,27 @@ type ImageGenerationErrorMessage = {
 	path?: string;
 };
 
+/** One member present in a live collaborative editing session. */
+export interface PresenceMember {
+	userId: string;
+	displayName: string;
+	avatar: string | null;
+	/** True for the member who currently holds the single driver seat. */
+	isDriver: boolean;
+}
+
+type PresenceUpdateMessage = {
+	type: 'presence_update';
+	members: PresenceMember[];
+	currentDriverUserId: string | null;
+};
+
+type DrivingBlockedMessage = {
+	type: 'driving_blocked';
+	currentDriverUserId: string;
+	currentDriverName: string;
+};
+
 export type WebSocketMessage =
 	| StateMessage
 	| ConversationStateMessage
@@ -516,7 +537,9 @@ export type WebSocketMessage =
 	| ImageGenerationStartedMessage
 	| ImageGenerationProgressMessage
 	| ImageGenerationCompletedMessage
-	| ImageGenerationErrorMessage;
+	| ImageGenerationErrorMessage
+	| PresenceUpdateMessage
+	| DrivingBlockedMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)
 export type WebSocketMessageType = WebSocketMessage['type'];

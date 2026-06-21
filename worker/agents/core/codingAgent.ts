@@ -92,6 +92,7 @@ import {
     handleWebSocketMessage,
     handleWebSocketClose,
 } from './codingAgentWebsocket';
+import { readConnectionIdentity, broadcastPresence } from './presence';
 import {
     WebSocketMessageData,
     WebSocketMessageType,
@@ -323,22 +324,25 @@ export class CodeGeneratorAgent
             ctx,
         });
 
-        // Capture the encrypted Cloudflare OAuth blob from the WS upgrade
-        // request's HttpOnly cookie and stash it on the DO state. Per-frame
-        // WS messages don't carry cookies, so the upgrade handshake is the
-        // one chance to read it.
+        // Attach this connection's identity (stamped on the upgrade request by the
+        // route) so presence + the single-driver seat can identify each viewer.
+        const identity = readConnectionIdentity(ctx.request);
+        if (identity) {
+            connection.setState(identity);
+        }
+
+        // Capture the encrypted Cloudflare OAuth blob from the WS upgrade request's
+        // HttpOnly cookie — but ONLY for the app's CREATOR (the billing/deploy
+        // identity). A collaborating member's token must never overwrite it. Per-
+        // frame WS messages don't carry cookies, so the handshake is the one chance.
         try {
-            const blob = readTokenCookie(ctx.request, this.env);
             const origin = new URL(ctx.request.url).origin;
-            const needsUpdate =
-                (blob && blob !== this.state.cloudflareToken) ||
-                (origin && origin !== this.state.wsOrigin);
-            if (needsUpdate) {
-                this.setState({
-                    ...this.state,
-                    cloudflareToken: blob || this.state.cloudflareToken,
-                    wsOrigin: origin || this.state.wsOrigin,
-                });
+            const isCreator = identity?.userId === this.state.metadata.userId;
+            const blob = isCreator ? readTokenCookie(ctx.request, this.env) : null;
+            const nextToken = blob || this.state.cloudflareToken;
+            const nextOrigin = origin || this.state.wsOrigin;
+            if (nextToken !== this.state.cloudflareToken || nextOrigin !== this.state.wsOrigin) {
+                this.setState({ ...this.state, cloudflareToken: nextToken, wsOrigin: nextOrigin });
             }
         } catch (error) {
             this.logger().warn('Failed to capture CF token cookie on WS connect', { error });
@@ -374,6 +378,15 @@ export class CodeGeneratorAgent
             templateDetails,
             previewUrl,
         });
+
+        // Announce the updated presence roster (incl. the current driver) to all
+        // connected members. Best-effort — a presence failure must never break the
+        // just-established connection.
+        try {
+            broadcastPresence(this);
+        } catch (error) {
+            this.logger().warn('Failed to broadcast presence on connect', { error });
+        }
     }
 
     private initLogger(agentId: string, userId: string, sessionId?: string) {
@@ -711,7 +724,7 @@ export class CodeGeneratorAgent
     }
 
     async onClose(connection: Connection): Promise<void> {
-        handleWebSocketClose(connection);
+        handleWebSocketClose(this, connection);
     }
 
     /**

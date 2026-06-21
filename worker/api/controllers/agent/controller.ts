@@ -3,6 +3,7 @@ import { BaseController } from '../baseController';
 import { generateId } from '../../../utils/idGenerator';
 import { CodeGenState } from '../../../agents/core/state';
 import { getAgentStub, getTemplateForQuery } from '../../../agents';
+import { setIdentityHeaders } from '../../../agents/core/presence';
 import { AgentConnectionData, AgentPreviewResponse, CodeGenArgs } from './types';
 import { ApiResponse, ControllerResponse } from '../types';
 import { RouteContext } from '../../types/route-context';
@@ -286,8 +287,22 @@ export class CodingAgentController extends BaseController {
                 
                 this.logger.info(`Successfully got agent instance for chat: ${chatId}`);
 
+                // Stamp the resolved user's identity onto the upgrade request so the
+                // DO can attach it to this connection (presence + driver coordination).
+                // WS frames carry no auth, so the handshake is the one chance. Fail-safe:
+                // if reconstruction fails, forward the original request so the editor
+                // still connects (presence simply won't have this viewer's identity).
+                let upgradeRequest = request;
+                try {
+                    const upgradeHeaders = new Headers(request.headers);
+                    setIdentityHeaders(upgradeHeaders, user);
+                    upgradeRequest = new Request(request, { headers: upgradeHeaders });
+                } catch (identityError) {
+                    this.logger.warn('Failed to stamp identity on WS upgrade; forwarding original', identityError);
+                }
+
                 // Let the agent handle the WebSocket connection directly
-                return agentInstance.fetch(request);
+                return agentInstance.fetch(upgradeRequest);
             } catch (error) {
                 this.logger.error(`Failed to get agent instance with ID ${chatId}:`, error);
                 // Return an appropriate WebSocket error response
