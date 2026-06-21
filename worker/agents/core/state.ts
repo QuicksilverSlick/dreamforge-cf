@@ -137,6 +137,13 @@ export interface BaseProjectState {
     cloudflareToken?: string;
     /** Origin captured at WS upgrade time; same gating as `cloudflareToken`. */
     wsOrigin?: string;
+    /**
+     * Org collaboration: the userId currently holding the single "driver" seat
+     * (the one member allowed to drive build/deploy commands). null/undefined =
+     * seat open (next driving command auto-claims it). Persists in DO state so it
+     * survives hibernation and is consistent across all connected members.
+     */
+    currentDriverUserId?: string | null;
 
     // ---- Fork-local additions preserved from pre-M3 CodeGenState ----
 
