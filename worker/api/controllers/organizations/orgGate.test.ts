@@ -28,6 +28,7 @@ const ORG_ROUTES: Array<[string, string]> = [
     ['POST', '/api/auth/switch-org'],
     ['POST', '/api/invites/tok-123/accept'],
     ['PATCH', '/api/orgs/o1'],
+    ['DELETE', '/api/orgs/o1'],
     ['GET', '/api/orgs/o1/members'],
     ['PATCH', '/api/orgs/o1/members/u1'],
     ['DELETE', '/api/orgs/o1/members/u1'],

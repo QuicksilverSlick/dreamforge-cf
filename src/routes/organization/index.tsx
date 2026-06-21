@@ -103,7 +103,115 @@ export default function OrganizationPage() {
             />
 
             <InvitesCard orgId={activeOrgId} />
+
+            {isOwner && activeOrgId && (
+                <DangerZoneCard
+                    orgId={activeOrgId}
+                    orgName={active?.org.name ?? ''}
+                    onDeleted={async () => {
+                        await Promise.all([refreshUser(), refetchOrgs()]);
+                        navigate('/');
+                    }}
+                />
+            )}
         </div>
+    );
+}
+
+/** Owner-only delete with a type-the-name confirmation (the action is irreversible). */
+function DangerZoneCard({
+    orgId,
+    orgName,
+    onDeleted,
+}: {
+    orgId: string;
+    orgName: string;
+    onDeleted: () => Promise<void>;
+}) {
+    const [open, setOpen] = React.useState(false);
+    const [confirmText, setConfirmText] = React.useState('');
+    const [busy, setBusy] = React.useState(false);
+    const canDelete = confirmText.trim() === orgName.trim() && orgName.trim() !== '';
+
+    const handleDelete = async () => {
+        if (!canDelete || busy) {
+            return;
+        }
+        setBusy(true);
+        try {
+            const res = await apiClient.deleteOrg(orgId);
+            if (!res.success) {
+                throw new Error(res.error?.message ?? 'Failed to delete organization');
+            }
+            toast.success(`Deleted "${orgName}"`);
+            setOpen(false);
+            await onDeleted();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to delete organization');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Card className="border-destructive/40">
+            <CardHeader>
+                <CardTitle className="text-destructive">Danger zone</CardTitle>
+                <CardDescription>
+                    Deleting this team is permanent and can’t be undone. Its apps move to your personal
+                    workspace, and all members lose access.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Button
+                    variant="destructive"
+                    onClick={() => {
+                        setConfirmText('');
+                        setOpen(true);
+                    }}
+                >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete this team
+                </Button>
+            </CardContent>
+
+            <AlertDialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete “{orgName}”?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This permanently deletes the team. Its apps will be moved to your personal
+                            workspace and all members will lose access. To confirm, type the team name below.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="space-y-2 py-2">
+                        <Label htmlFor="confirm-org-name">
+                            Type <span className="font-medium text-text-primary">{orgName}</span> to confirm
+                        </Label>
+                        <Input
+                            id="confirm-org-name"
+                            value={confirmText}
+                            onChange={(e) => setConfirmText(e.target.value)}
+                            placeholder={orgName}
+                            autoComplete="off"
+                        />
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                void handleDelete();
+                            }}
+                            disabled={!canDelete || busy}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {busy ? 'Deleting…' : 'Delete team'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </Card>
     );
 }
 

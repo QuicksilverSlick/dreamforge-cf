@@ -40,6 +40,7 @@ import type {
     MemberData,
     RemoveMemberData,
     RevokeInviteData,
+    DeleteOrgData,
 } from './types';
 
 export class OrgController extends BaseController {
@@ -140,6 +141,28 @@ export class OrgController extends BaseController {
             return OrgController.createSuccessResponse({ organization: org });
         } catch (error) {
             return OrgController.mapError<OrgData>(error, 'rename organization');
+        }
+    }
+
+    /** DELETE /api/orgs/:id — delete a team org (owner-only, enforced in the service). */
+    static async deleteOrg(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<DeleteOrgData>>> {
+        const orgId = context.pathParams.id;
+        if (!orgId) {
+            return OrgController.createErrorResponse<DeleteOrgData>('Organization id is required', 400);
+        }
+        try {
+            const result = await new OrganizationService(env).deleteOrg(
+                orgId,
+                OrgController.mutationContext(request, context),
+            );
+            return OrgController.createSuccessResponse(result);
+        } catch (error) {
+            return OrgController.mapError<DeleteOrgData>(error, 'delete organization');
         }
     }
 

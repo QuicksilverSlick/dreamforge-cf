@@ -57,6 +57,7 @@ export const OrgAuditAction = {
     MEMBER_ROLE_CHANGE: 'org.member.role_change',
     MEMBER_REMOVE: 'org.member.remove',
     INVITE_REVOKE: 'org.invite.revoke',
+    TEAM_DELETE: 'org.team.delete',
 } as const;
 
 export type OrgAuditActionType = (typeof OrgAuditAction)[keyof typeof OrgAuditAction];
