@@ -7,7 +7,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useNavigate } from 'react-router';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { useSentryUser } from '@/hooks/useSentryUser';
-import type { AuthSession, AuthUser } from '../api-types';
+import type { AuthSession, AuthUser, OrgRole } from '../api-types';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -36,6 +36,11 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   clearError: () => void;
+
+  // Active-org context (Phase 2.2), resolved per-request onto the user.
+  activeOrgId: string | undefined;
+  activeOrgRole: OrgRole | undefined;
+  switchOrg: (orgId: string) => Promise<void>;
   
   // Redirect URL management
   setIntendedUrl: (url: string) => void;
@@ -304,6 +309,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await checkAuth();
   }, [checkAuth]);
 
+  // Switch the session's active org, then refresh so user.orgId/orgRole update.
+  const switchOrg = useCallback(async (orgId: string) => {
+    await apiClient.switchOrg(orgId);
+    await checkAuth();
+  }, [checkAuth]);
+
 
   // Clear error
   const clearError = useCallback(() => {
@@ -326,6 +337,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout,
     refreshUser,
     clearError,
+    activeOrgId: user?.orgId,
+    activeOrgRole: user?.orgRole,
+    switchOrg,
     setIntendedUrl,
     getIntendedUrl,
     clearIntendedUrl,

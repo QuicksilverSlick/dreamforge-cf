@@ -35,8 +35,14 @@ export class AppViewController extends BaseController {
                 return AppViewController.createErrorResponse<AppDetailsData>('App not found', 404);
             }
 
-            // Check if user has permission to view
-            if (appResult.visibility === 'private' && appResult.userId !== userId) {
+            // Resolve the requesting user's relationship to the app's org once:
+            // org membership drives both private-view access AND edit/drive rights
+            // (any org member can open + drive — not creator-only).
+            const ownership = userId ? await appService.checkAppOwnership(appId, userId) : null;
+
+            // Private apps are visible only to members of the app's org. Public
+            // apps are visible to everyone.
+            if (appResult.visibility === 'private' && !ownership?.isOwner) {
                 return AppViewController.createErrorResponse<AppDetailsData>('App not found', 404);
             }
 
@@ -70,6 +76,8 @@ export class AppViewController extends BaseController {
                 ...appResult, // Spread all EnhancedAppData fields including stats
                 cloudflareUrl: cloudflareUrl,
                 previewUrl: previewUrl || cloudflareUrl,
+                canEdit: ownership?.isOwner ?? false,
+                viewerOrgRole: ownership?.orgRole ?? null,
                 user: {
                     id: appResult.userId!,
                     displayName: appResult.userName || 'Unknown',

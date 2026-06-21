@@ -335,3 +335,21 @@ export type {
 } from 'worker/database/types';
 export type { AuditLog } from 'worker/database/schema';
 export type { UserRole } from 'worker/types/auth-types';
+
+// Organization management API Types (Phase 2.2)
+export type {
+  MyOrgsData,
+  OrgData,
+  MembersData,
+  InvitesData,
+  CreateInviteData,
+  MemberData,
+  RemoveMemberData,
+  RevokeInviteData,
+  DeleteOrgData,
+} from 'worker/api/controllers/organizations/types';
+export type {
+  OrgMemberView,
+  OrgInvitationView,
+} from 'worker/database/services/organizationTypes';
+export type { Organization, OrgInvitation, OrgRole } from 'worker/database/schema';

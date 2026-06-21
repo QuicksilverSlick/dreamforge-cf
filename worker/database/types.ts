@@ -23,9 +23,22 @@ export interface PaginationInfo {
 }
 
 /**
+ * Org-scope display info stamped onto the viewer's OWN app lists so the client
+ * can show a "Private (personal org) vs Shared · {team}" indicator. Optional:
+ * present only on a viewer's own apps (resolved from their org membership), and
+ * absent on public/foreign-org apps where the indicator must not render.
+ */
+export interface OrgDisplayInfo {
+    /** Name of the org the app belongs to (the viewer's own org). */
+    orgName?: string;
+    /** True when the app's org is the viewer's personal org (vs a shared team). */
+    orgIsPersonal?: boolean;
+}
+
+/**
  * Enhanced app data with user and social statistics
  */
-export interface EnhancedAppData extends schema.App {
+export interface EnhancedAppData extends schema.App, OrgDisplayInfo {
     userName: string | null;
     userAvatar: string | null;
     starCount: number;
@@ -39,7 +52,7 @@ export interface EnhancedAppData extends schema.App {
 /**
  * App with favorite status for user-specific queries
  */
-export interface AppWithFavoriteStatus extends schema.App {
+export interface AppWithFavoriteStatus extends schema.App, OrgDisplayInfo {
     isFavorite: boolean;
     updatedAtFormatted: string;
 }
@@ -118,8 +131,11 @@ export interface PublicAppQueryOptions extends BaseAppQueryOptions {
  */
 export interface OwnershipResult {
     exists: boolean;
+    /** True if the user may access the app (org member, or legacy userId owner). */
     isOwner: boolean;
     visibility?: 'private' | 'public' | null;
+    /** The user's role in the app's org, or null (no membership / null orgId). */
+    orgRole?: 'owner' | 'admin' | 'member' | null;
 }
 
 /**
@@ -220,13 +236,15 @@ export interface AppStats {
 /**
  * Raw Secret data for storage (before encryption)  
  */
-export interface SecretData extends Omit<schema.UserSecret, 'encryptedValue' | 'id' | 'isActive' | 'createdAt' | 'updatedAt' | 'lastUsed' | 'userId' | 'usageCount' | 'keyPreview' > {
+export interface SecretData extends Omit<schema.UserSecret, 'encryptedValue' | 'id' | 'isActive' | 'createdAt' | 'updatedAt' | 'lastUsed' | 'userId' | 'usageCount' | 'keyPreview' | 'orgId' > {
     value: string;
 }
 /**
- * Encrypted secret response (without sensitive data)
+ * Encrypted secret response (without sensitive data). orgId is omitted: the
+ * column exists (Phase 2 forward-compat) but secrets remain user-owned, so it
+ * stays invisible to the secrets API until the org-secrets phase.
  */
-export type EncryptedSecret = Omit<schema.UserSecret, 'encryptedValue'>;
+export type EncryptedSecret = Omit<schema.UserSecret, 'encryptedValue' | 'orgId'>;
 
 // ========================================
 // ADMIN CONSOLE (Phase 1) — client-safe shapes

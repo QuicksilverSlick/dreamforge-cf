@@ -72,7 +72,13 @@ export const users = sqliteTable('users', {
 export const sessions = sqliteTable('sessions', {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    
+
+    // Active organization for this session (Phase 2.2). Per-session so an
+    // org-switch is scoped to one device and instantly effective. Nullable with
+    // ON DELETE SET NULL: a since-deleted org collapses to NULL and the user
+    // falls back to their personal org at auth-resolution time.
+    currentOrgId: text('current_org_id').references(() => organizations.id, { onDelete: 'set null' }),
+
     // Session Details
     deviceInfo: text('device_info'),
     userAgent: text('user_agent'),
@@ -98,6 +104,7 @@ export const sessions = sqliteTable('sessions', {
     refreshTokenHashIdx: index('sessions_refresh_token_hash_idx').on(table.refreshTokenHash),
     lastActivityIdx: index('sessions_last_activity_idx').on(table.lastActivity),
     isRevokedIdx: index('sessions_is_revoked_idx').on(table.isRevoked),
+    currentOrgIdIdx: index('sessions_current_org_id_idx').on(table.currentOrgId),
 }));
 
 /**
@@ -132,6 +139,83 @@ export const apiKeys = sqliteTable('api_keys', {
 }));
 
 // ========================================
+// ORGANIZATIONS AND MEMBERSHIP (Phase 2 — multi-tenancy)
+// ========================================
+
+/**
+ * Organizations table — the tenant boundary. Every user gets a personal org
+ * (isPersonal = true) on signup; teams are non-personal orgs with multiple
+ * members. Resource ownership migrates from userId to orgId over Phase 2; org
+ * roles live on organizationMembers, never on users.role (which stays the
+ * platform-role plane).
+ */
+export const organizations = sqliteTable('organizations', {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull().unique(),
+    plan: text('plan').notNull().default('free'),
+    isPersonal: integer('is_personal', { mode: 'boolean' }).notNull().default(true),
+    ownerUserId: text('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    ownerIdx: index('organizations_owner_idx').on(table.ownerUserId),
+    // Enforce exactly one personal org per owner at the DB level (partial
+    // unique, mirroring the user_secrets BYOK-slot pattern). Makes
+    // ensurePersonalOrg race-safe via ON CONFLICT.
+    ownerPersonalUnique: uniqueIndex('organizations_owner_personal_unique')
+        .on(table.ownerUserId)
+        .where(sql`is_personal = 1`),
+}));
+
+/**
+ * Organization members — the (user, org) membership carrying the org-scoped
+ * role. 'owner' = personal-org owner / team creator; 'admin' = org admin;
+ * 'member' = regular member. Distinct from the platform users.role plane.
+ */
+export const organizationMembers = sqliteTable('organization_members', {
+    id: text('id').primaryKey(),
+    orgId: text('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role', { enum: ['owner', 'admin', 'member'] }).notNull().default('member'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    orgUserIdx: uniqueIndex('organization_members_org_user_idx').on(table.orgId, table.userId),
+    orgIdx: index('organization_members_org_idx').on(table.orgId),
+    userIdx: index('organization_members_user_idx').on(table.userId),
+}));
+
+/**
+ * Organization invitations (Phase 2.2). A pending invite to join a TEAM org
+ * with a target org role. The raw token is surfaced ONCE to the inviter (for
+ * the email + copy-link); only its SHA-256 hash is stored, mirroring
+ * emailVerificationTokens — the token is a bearer capability, so it never lands
+ * in the DB in plaintext. At most one active pending invite per
+ * (orgId, inviteeEmail); 'accepted'/'revoked' are terminal. Personal orgs never
+ * carry invitations (enforced in OrganizationService).
+ */
+export const orgInvitations = sqliteTable('org_invitations', {
+    id: text('id').primaryKey(),
+    orgId: text('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+    inviteeEmail: text('invitee_email').notNull(),
+    role: text('role', { enum: ['owner', 'admin', 'member'] }).notNull().default('member'),
+    tokenHash: text('token_hash').notNull(),
+    inviterUserId: text('inviter_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['pending', 'accepted', 'revoked'] }).notNull().default('pending'),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    acceptedAt: integer('accepted_at', { mode: 'timestamp' }),
+    acceptedUserId: text('accepted_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    tokenHashIdx: uniqueIndex('org_invitations_token_hash_idx').on(table.tokenHash),
+    orgEmailIdx: index('org_invitations_org_email_idx').on(table.orgId, table.inviteeEmail),
+    expiresAtIdx: index('org_invitations_expires_at_idx').on(table.expiresAt),
+    orgIdx: index('org_invitations_org_idx').on(table.orgId),
+}));
+
+// ========================================
 // CORE APP AND GENERATION SYSTEM
 // ========================================
 
@@ -155,6 +239,11 @@ export const apps = sqliteTable('apps', {
     
     // Ownership and Context
     userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }), // Null for anonymous
+    // Tenant boundary (Phase 2). Enforced NOT NULL in the 2.3 contract step:
+    // every app belongs to exactly one org (the creator's active org, validated
+    // against membership in AppService.createApp), and access scopes purely by
+    // org membership (the transition userId fallback was dropped in 2.3).
+    orgId: text('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
     sessionToken: text('session_token'), // For anonymous users
     
     // Visibility and Sharing
@@ -188,6 +277,8 @@ export const apps = sqliteTable('apps', {
     lastDeployedAt: integer('last_deployed_at', { mode: 'timestamp' }),
 }, (table) => ({
     userIdx: index('apps_user_idx').on(table.userId),
+    orgIdx: index('apps_org_idx').on(table.orgId),
+    orgCreatedAtIdx: index('apps_org_created_at_idx').on(table.orgId, table.createdAt),
     statusIdx: index('apps_status_idx').on(table.status),
     visibilityIdx: index('apps_visibility_idx').on(table.visibility),
     sessionTokenIdx: index('apps_session_token_idx').on(table.sessionToken),
@@ -342,6 +433,9 @@ export const appViews = sqliteTable('app_views', {
 export const githubTokens = sqliteTable('github_tokens', {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Forward-compat tenant column (Phase 2, dark). Ownership/crypto stay
+    // per-user; org-sharing of tokens is a later phase.
+    orgId: text('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
 
     // Encrypted Token Data
     encryptedAccessToken: text('encrypted_access_token').notNull(),
@@ -366,6 +460,7 @@ export const githubTokens = sqliteTable('github_tokens', {
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
     userIdx: index('github_tokens_user_idx').on(table.userId),
+    orgIdx: index('github_tokens_org_idx').on(table.orgId),
     isActiveIdx: index('github_tokens_is_active_idx').on(table.isActive),
     lastUsedIdx: index('github_tokens_last_used_idx').on(table.lastUsed),
 }));
@@ -382,6 +477,8 @@ export const githubTokens = sqliteTable('github_tokens', {
 export const blueprintCache = sqliteTable('blueprint_cache', {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Tenant boundary (Phase 2, dark). Backfilled to the owner's personal org.
+    orgId: text('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
 
     // Repository Information
     repositoryUrl: text('repository_url').notNull(),
@@ -407,6 +504,7 @@ export const blueprintCache = sqliteTable('blueprint_cache', {
     lastAccessedAt: integer('last_accessed_at', { mode: 'timestamp' }),
 }, (table) => ({
     userIdx: index('blueprint_cache_user_idx').on(table.userId),
+    orgIdx: index('blueprint_cache_org_idx').on(table.orgId),
     repositoryIdx: index('blueprint_cache_repository_idx').on(table.repositoryUrl, table.branch),
     expiresAtIdx: index('blueprint_cache_expires_at_idx').on(table.expiresAt),
 }));
@@ -545,6 +643,9 @@ export const auditLogs = sqliteTable('audit_logs', {
 export const cloudflareAccounts = sqliteTable('cloudflare_accounts', {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Forward-compat tenant column (Phase 2, dark). Becomes the org's deploy
+    // target when "deploy to your own Cloudflare account" lands; per-user for now.
+    orgId: text('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
 
     // Account details mirrored from the Cloudflare API
     accountId: text('account_id').notNull(),
@@ -557,6 +658,7 @@ export const cloudflareAccounts = sqliteTable('cloudflare_accounts', {
     lastSyncedAt: integer('last_synced_at', { mode: 'timestamp' }),
 }, (table) => ({
     userIdx: index('cloudflare_accounts_user_idx').on(table.userId),
+    orgIdx: index('cloudflare_accounts_org_idx').on(table.orgId),
     accountIdIdx: index('cloudflare_accounts_account_id_idx').on(table.accountId),
     userAccountIdx: uniqueIndex('cloudflare_accounts_user_account_idx').on(table.userId, table.accountId),
 }));
@@ -568,6 +670,8 @@ export const cloudflareAccounts = sqliteTable('cloudflare_accounts', {
 export const aiGateways = sqliteTable('ai_gateways', {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Forward-compat tenant column (Phase 2, dark); per-user for now.
+    orgId: text('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
     cloudflareAccountId: text('cloudflare_account_id').notNull().references(() => cloudflareAccounts.id, { onDelete: 'cascade' }),
 
     // Gateway identifiers from the Cloudflare API
@@ -590,6 +694,7 @@ export const aiGateways = sqliteTable('ai_gateways', {
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
     userIdx: index('ai_gateways_user_idx').on(table.userId),
+    orgIdx: index('ai_gateways_org_idx').on(table.orgId),
     accountIdx: index('ai_gateways_account_idx').on(table.cloudflareAccountId),
     userAccountIdx: index('ai_gateways_user_account_idx').on(table.userId, table.cloudflareAccountId),
     gatewayIdIdx: uniqueIndex('ai_gateways_gateway_id_idx').on(table.cloudflareAccountId, table.gatewayId),
@@ -606,6 +711,10 @@ export const aiGateways = sqliteTable('ai_gateways', {
 export const userSecrets = sqliteTable('user_secrets', {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Forward-compat tenant column (Phase 2, dark). Ownership stays per-user
+    // and the encryption AAD remains userId-bound; org-sharing (which needs a
+    // re-encryption pipeline) is a later phase.
+    orgId: text('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
     
     // Secret identification
     name: text('name').notNull(), // User-friendly name (e.g., "My Stripe API Key")
@@ -632,6 +741,7 @@ export const userSecrets = sqliteTable('user_secrets', {
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
     userIdx: index('user_secrets_user_idx').on(table.userId),
+    orgIdx: index('user_secrets_org_idx').on(table.orgId),
     providerIdx: index('user_secrets_provider_idx').on(table.provider),
     userProviderIdx: index('user_secrets_user_provider_idx').on(table.userId, table.provider, table.secretType),
     activeIdx: index('user_secrets_active_idx').on(table.isActive),
@@ -745,6 +855,18 @@ export const systemSettings = sqliteTable('system_settings', {
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+
+export type Organization = typeof organizations.$inferSelect;
+export type NewOrganization = typeof organizations.$inferInsert;
+
+export type OrganizationMember = typeof organizationMembers.$inferSelect;
+export type NewOrganizationMember = typeof organizationMembers.$inferInsert;
+
+export type OrgInvitation = typeof orgInvitations.$inferSelect;
+export type NewOrgInvitation = typeof orgInvitations.$inferInsert;
+
+/** Org-scoped roles (organization_members.role / org_invitations.role). */
+export type OrgRole = OrganizationMember['role'];
 
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;

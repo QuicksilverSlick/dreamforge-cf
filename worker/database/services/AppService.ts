@@ -3,14 +3,17 @@
  */
 
 import { BaseService } from './BaseService';
+import { OrganizationService } from './OrganizationService';
 import * as schema from '../schema';
-import { eq, and, or, desc, asc, sql, isNull, inArray } from 'drizzle-orm';
+import { userAppAccessCondition, activeOrgAppCondition } from '../appAccess';
+import { eq, and, or, desc, asc, sql, isNull, isNotNull, inArray } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
 import { formatRelativeTime } from '../../utils/timeFormatter';
 import { ScreenshotSecurity } from '../../utils/screenshot-security';
 import type {
     EnhancedAppData,
     AppWithFavoriteStatus,
+    OrgDisplayInfo,
     FavoriteToggleResult,
     PaginatedResult,
     AppQueryOptions,
@@ -53,6 +56,30 @@ export class AppService extends BaseService {
         return new ScreenshotSecurity(this.env).enrichUrls(apps);
     }
 
+    /**
+     * Stamp each app with its org's display name and whether that org is the
+     * viewer's personal org, so the client can render a "Private (personal) vs
+     * Shared · {team}" indicator. The viewer's orgs are resolved once per call
+     * (membership-scoped, index-backed) — every orgId in a user's own list is by
+     * construction one of those orgs (userAppAccessCondition scopes both). Apps
+     * whose org isn't in the viewer's membership set (should not occur on the
+     * viewer's own lists) are left undecorated and render no indicator.
+     */
+    private async attachOrgDisplay<T extends schema.App & OrgDisplayInfo>(
+        apps: T[],
+        userId: string,
+    ): Promise<T[]> {
+        if (apps.length === 0) {
+            return apps;
+        }
+        const orgs = await new OrganizationService(this.env).getUserOrganizations(userId);
+        const byId = new Map(orgs.map(({ org }) => [org.id, org]));
+        return apps.map((app) => {
+            const org = byId.get(app.orgId);
+            return org ? { ...app, orgName: org.name, orgIsPersonal: org.isPersonal } : app;
+        });
+    }
+
 
 
     // ========================================
@@ -62,11 +89,62 @@ export class AppService extends BaseService {
     /**
      * Create a new app
      */
-    async createApp(appData:schema.NewApp): Promise<schema.App> {
+    async createApp(appData: Omit<schema.NewApp, 'orgId'> & { orgId?: string | null }): Promise<schema.App> {
+        // Phase 2.2.1: file the app under the creator's ACTIVE org (passed by the
+        // agent) so org members share it; fall back to the personal org. Anonymous
+        // apps (no userId) have no org.
+        //
+        // Defense in depth: only honor an explicitly-provided orgId the creator is
+        // actually a MEMBER of. The agent passes the per-request active org (already
+        // membership-validated in resolveActiveOrg), so this guards any future
+        // caller against filing an app into a foreign org. Best-effort — never block
+        // app creation on org plumbing (any error falls back to the personal org).
+        let orgId = appData.orgId ?? null;
+        const orgService = new OrganizationService(this.env);
+        if (orgId && appData.userId) {
+            try {
+                const membership = await orgService.getMembership(orgId, appData.userId);
+                if (!membership) {
+                    this.logger.warn('createApp: ignoring orgId the creator is not a member of; using personal org', {
+                        userId: appData.userId,
+                        orgId,
+                    });
+                    orgId = null;
+                }
+            } catch (error) {
+                this.logger.error('createApp: membership check failed; using personal org', {
+                    userId: appData.userId,
+                    orgId,
+                    error,
+                });
+                orgId = null;
+            }
+        }
+        if (!orgId && appData.userId) {
+            try {
+                orgId = await orgService.ensurePersonalOrg(appData.userId);
+            } catch (error) {
+                this.logger.error('Failed to resolve personal org for new app', {
+                    userId: appData.userId,
+                    error,
+                });
+            }
+        }
+
+        if (!orgId) {
+            // apps.orgId is NOT NULL (Phase 2.3 contract): every app belongs to an
+            // org. This is only reachable for an anonymous app (no userId — an
+            // unsupported, auth-gated-out path) or a failed personal-org
+            // resolution; fail with a clear error rather than a raw DB constraint
+            // violation.
+            throw new Error('Cannot create an app without an organization.');
+        }
+
         const [app] = await this.database
             .insert(schema.apps)
             .values({
                 ...appData,
+                orgId,
             })
             .returning();
         return app;
@@ -300,19 +378,21 @@ export class AppService extends BaseService {
      * Optimized to fetch favorites separately to avoid subquery memory issues
      */
     async getUserAppsWithFavorites(
-        userId: string, 
-        options: PaginationParams = {}
+        userId: string,
+        options: PaginationParams = {},
+        activeOrgId?: string,
     ): Promise<AppWithFavoriteStatus[]> {
         const { limit = 50, offset = 0 } = options;
-        
+
         // Use 'fresh' strategy for user's own data to ensure they see latest changes
         const readDb = this.getReadDb('fresh');
-        
-        // Fetch user's apps first
+
+        // List scopes to the ACTIVE org when one is given (switcher context), else
+        // to all the user's member orgs.
         const apps = await readDb
             .select()
             .from(schema.apps)
-            .where(eq(schema.apps.userId, userId))
+            .where(activeOrgId ? activeOrgAppCondition(activeOrgId) : userAppAccessCondition(readDb, userId))
             .orderBy(desc(schema.apps.updatedAt))
             .limit(limit)
             .offset(offset);
@@ -333,28 +413,33 @@ export class AppService extends BaseService {
 
         const favoriteSet = new Set(favorites.map(f => f.appId));
 
-        return this.enrichScreenshotUrls(apps.map(app => ({
-            ...app,
-            isFavorite: favoriteSet.has(app.id),
-            updatedAtFormatted: formatRelativeTime(app.updatedAt)
-        })));
+        return this.attachOrgDisplay(
+            await this.enrichScreenshotUrls(apps.map(app => ({
+                ...app,
+                isFavorite: favoriteSet.has(app.id),
+                updatedAtFormatted: formatRelativeTime(app.updatedAt)
+            }))),
+            userId,
+        );
     }
 
     /**
      * Get recent user apps with favorite status
      */
     async getRecentAppsWithFavorites(
-        userId: string, 
-        limit: number = 10
+        userId: string,
+        limit: number = 10,
+        activeOrgId?: string,
     ): Promise<AppWithFavoriteStatus[]> {
-        return this.getUserAppsWithFavorites(userId, { limit, offset: 0 });
+        return this.getUserAppsWithFavorites(userId, { limit, offset: 0 }, activeOrgId);
     }
 
     /**
      * Get only favorited apps for a user
      */
     async getFavoriteAppsOnly(
-        userId: string
+        userId: string,
+        activeOrgId?: string,
     ): Promise<AppWithFavoriteStatus[]> {
         const results = await this.database
             .select({
@@ -365,13 +450,41 @@ export class AppService extends BaseService {
                 eq(schema.favorites.appId, schema.apps.id),
                 eq(schema.favorites.userId, userId)
             ))
+            // Favorites carry no org predicate of their own; scope to the active org
+            // when given so favorited apps from other member orgs don't leak in.
+            .where(activeOrgId ? activeOrgAppCondition(activeOrgId) : undefined)
             .orderBy(desc(schema.apps.updatedAt));
 
-        return this.enrichScreenshotUrls(results.map(row => ({
-            ...row.app,
-            isFavorite: true as const,
-            updatedAtFormatted: formatRelativeTime(row.app.updatedAt)
-        })));
+        return this.attachOrgDisplay(
+            await this.enrichScreenshotUrls(results.map(row => ({
+                ...row.app,
+                isFavorite: true as const,
+                updatedAtFormatted: formatRelativeTime(row.app.updatedAt)
+            }))),
+            userId,
+        );
+    }
+
+    /**
+     * Apps that have a Cloudflare deployment URL — the operator screenshot
+     * backfill targets these (a publicly reachable URL is required to snapshot).
+     * deploymentId is the stored value (a full https URL, or a bare subdomain
+     * label from the legacy agent — callers normalize before use). With
+     * missingScreenshotOnly, only apps that currently lack a thumbnail are
+     * returned, so a backfill fills gaps without overwriting good previews.
+     */
+    async listDeployedApps(
+        opts: { missingScreenshotOnly?: boolean } = {},
+    ): Promise<Array<{ id: string; deploymentId: string }>> {
+        const conditions: WhereCondition[] = [isNotNull(schema.apps.deploymentId)];
+        if (opts.missingScreenshotOnly) {
+            conditions.push(or(isNull(schema.apps.screenshotUrl), eq(schema.apps.screenshotUrl, '')));
+        }
+        const rows = await this.getReadDb('fast')
+            .select({ id: schema.apps.id, deploymentId: schema.apps.deploymentId })
+            .from(schema.apps)
+            .where(and(...conditions));
+        return rows.flatMap((r) => (r.deploymentId ? [{ id: r.id, deploymentId: r.deploymentId }] : []));
     }
 
 
@@ -421,7 +534,8 @@ export class AppService extends BaseService {
         const app = await readDb
             .select({
                 id: schema.apps.id,
-                userId: schema.apps.userId
+                orgId: schema.apps.orgId,
+                visibility: schema.apps.visibility,
             })
             .from(schema.apps)
             .where(eq(schema.apps.id, appId))
@@ -431,9 +545,29 @@ export class AppService extends BaseService {
             return { exists: false, isOwner: false };
         }
 
+        // Access is purely org-membership (Phase 2.3 contract): a user "owns" the
+        // app iff they hold a role in the app's org. orgId is NOT NULL, so every
+        // app resolves through this branch; a non-member gets orgRole null →
+        // isOwner false (fail-closed, cross-tenant safe). The transition userId
+        // fallback was dropped now that no null-org / orphan apps exist.
+        let orgRole: 'owner' | 'admin' | 'member' | null = null;
+        if (app.orgId) {
+            const membership = await readDb
+                .select({ role: schema.organizationMembers.role })
+                .from(schema.organizationMembers)
+                .where(and(
+                    eq(schema.organizationMembers.orgId, app.orgId),
+                    eq(schema.organizationMembers.userId, userId),
+                ))
+                .get();
+            orgRole = membership?.role ?? null;
+        }
+
         return {
             exists: true,
-            isOwner: app.userId === userId
+            isOwner: orgRole !== null,
+            visibility: app.visibility,
+            orgRole,
         };
     }
 
@@ -485,24 +619,15 @@ export class AppService extends BaseService {
         userId: string,
         visibility: 'private' | 'public'
     ): Promise<AppVisibilityUpdateResult> {
-        // Check if app exists and user owns it
-        const existingApp = await this.database
-            .select({
-                id: schema.apps.id,
-                title: schema.apps.title,
-                userId: schema.apps.userId,
-                visibility: schema.apps.visibility
-            })
-            .from(schema.apps)
-            .where(eq(schema.apps.id, appId))
-            .limit(1);
+        // Verify the user can access this app (org member, or legacy owner).
+        const ownership = await this.checkAppOwnership(appId, userId);
 
-        if (existingApp.length === 0) {
+        if (!ownership.exists) {
             return { success: false, error: 'App not found' };
         }
 
-        if (existingApp[0].userId !== userId) {
-            return { success: false, error: 'You can only change visibility of your own apps' };
+        if (!ownership.isOwner) {
+            return { success: false, error: 'You can only change visibility of apps in your organization' };
         }
 
         // Update the app visibility
@@ -679,21 +804,21 @@ export class AppService extends BaseService {
     /**
      * Get user apps with analytics data
      */
-    async getUserAppsWithAnalytics(userId: string, options: Partial<AppQueryOptions> = {}): Promise<EnhancedAppData[]> {
-        const { 
-            limit = 50, 
-            offset = 0, 
-            status, 
-            visibility, 
+    async getUserAppsWithAnalytics(userId: string, options: Partial<AppQueryOptions> = {}, activeOrgId?: string): Promise<EnhancedAppData[]> {
+        const {
+            limit = 50,
+            offset = 0,
+            status,
+            visibility,
             framework,
             search,
-            sort = 'recent', 
+            sort = 'recent',
             order = 'desc',
             period = 'all'
         } = options;
 
         const whereConditions: WhereCondition[] = [
-            eq(schema.apps.userId, userId),
+            activeOrgId ? activeOrgAppCondition(activeOrgId) : userAppAccessCondition(this.database, userId),
             status ? eq(schema.apps.status, status) : undefined,
             visibility ? eq(schema.apps.visibility, visibility) : undefined,
             ...this.buildCommonAppFilters(framework, search),
@@ -718,17 +843,20 @@ export class AppService extends BaseService {
                 .limit(limit)
                 .offset(offset);
                 
-            return this.enrichScreenshotUrls(results.map(r => ({
-                ...r.app,
-                userName: r.userName,
-                userAvatar: r.userAvatar,
-                viewCount: r.viewCount || 0,
-                starCount: r.starCount || 0,
-                forkCount: r.forkCount || 0,
-                likeCount: 0,
-                userStarred: false,
-                userFavorited: true // These are favorited apps
-            })));
+            return this.attachOrgDisplay(
+                await this.enrichScreenshotUrls(results.map(r => ({
+                    ...r.app,
+                    userName: r.userName,
+                    userAvatar: r.userAvatar,
+                    viewCount: r.viewCount || 0,
+                    starCount: r.starCount || 0,
+                    forkCount: r.forkCount || 0,
+                    likeCount: 0,
+                    userStarred: false,
+                    userFavorited: true // These are favorited apps
+                }))),
+                userId,
+            );
         }
 
         const basicApps = await this.executeRankedQuery(
@@ -748,35 +876,38 @@ export class AppService extends BaseService {
         const appIds = basicApps.map((row: RankedAppQueryResult) => row.app.id);
         const { userStars, userFavorites } = await this.addUserSpecificAppData(appIds, userId);
         
-        return this.enrichScreenshotUrls(basicApps.map((row: RankedAppQueryResult) => ({
-            ...row.app,
-            userName: row.userName,
-            userAvatar: row.userAvatar,
-            viewCount: row.viewCount || 0,
-            starCount: row.starCount || 0,
-            forkCount: row.forkCount || 0,
-            likeCount: 0,
-            userStarred: userStars.has(row.app.id),
-            userFavorited: userFavorites.has(row.app.id)
-        })));
+        return this.attachOrgDisplay(
+            await this.enrichScreenshotUrls(basicApps.map((row: RankedAppQueryResult) => ({
+                ...row.app,
+                userName: row.userName,
+                userAvatar: row.userAvatar,
+                viewCount: row.viewCount || 0,
+                starCount: row.starCount || 0,
+                forkCount: row.forkCount || 0,
+                likeCount: 0,
+                userStarred: userStars.has(row.app.id),
+                userFavorited: userFavorites.has(row.app.id)
+            }))),
+            userId,
+        );
     }
 
     /**
      * Get total count of user apps with filters (for pagination)
      */
-    async getUserAppsCount(userId: string, options: Partial<AppQueryOptions> = {}): Promise<number> {
+    async getUserAppsCount(userId: string, options: Partial<AppQueryOptions> = {}, activeOrgId?: string): Promise<number> {
         const { status, visibility, framework, search, sort = 'recent' } = options;
 
+        const readDb = this.getReadDb('fast');
+
         const whereConditions: WhereCondition[] = [
-            eq(schema.apps.userId, userId),
+            activeOrgId ? activeOrgAppCondition(activeOrgId) : userAppAccessCondition(readDb, userId),
             status ? eq(schema.apps.status, status) : undefined,
             visibility ? eq(schema.apps.visibility, visibility) : undefined,
             ...this.buildCommonAppFilters(framework, search),
         ];
 
         const whereClause = this.buildWhereConditions(whereConditions);
-
-        const readDb = this.getReadDb('fast');
         const countQuery = readDb
             .select({ count: sql<number>`COUNT(*)` })
             .from(schema.apps);
@@ -1024,7 +1155,7 @@ export class AppService extends BaseService {
                 .delete(schema.apps)
                 .where(and(
                     eq(schema.apps.id, appId),
-                    eq(schema.apps.userId, userId)
+                    userAppAccessCondition(this.database, userId)
                 ))
                 .returning({ id: schema.apps.id });
 

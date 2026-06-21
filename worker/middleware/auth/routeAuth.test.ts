@@ -6,12 +6,16 @@
 
 import { describe, expect, it } from 'vitest';
 import { routeAuthChecks, AuthConfig } from './routeAuth';
-import type { AuthUser, UserRole } from '../../types/auth-types';
+import type { AuthUser, UserRole, OrgRole } from '../../types/auth-types';
 
 const env = {} as Env;
 
 function user(role?: UserRole): AuthUser {
     return { id: 'u1', email: 'u1@example.com', role };
+}
+
+function orgUser(orgRole?: OrgRole, orgId: string | undefined = 'org1'): AuthUser {
+    return { id: 'u1', email: 'u1@example.com', orgId, orgRole };
 }
 
 describe('routeAuthChecks — superadminOnly', () => {
@@ -60,5 +64,49 @@ describe('routeAuthChecks — platformStaff', () => {
     ])('role %s → allowed=%s', async (role, allowed) => {
         const r = await routeAuthChecks(user(role), env, AuthConfig.platformStaff, {});
         expect(r.success).toBe(allowed);
+    });
+});
+
+describe('routeAuthChecks — orgAdminOnly', () => {
+    it('rejects anonymous with 401', async () => {
+        const r = await routeAuthChecks(null, env, AuthConfig.orgAdminOnly, { id: 'org1' });
+        expect(r.success).toBe(false);
+        expect(r.response?.status).toBe(401);
+    });
+
+    it('rejects a member of the target org with 403', async () => {
+        const r = await routeAuthChecks(orgUser('member', 'org1'), env, AuthConfig.orgAdminOnly, { id: 'org1' });
+        expect(r.success).toBe(false);
+        expect(r.response?.status).toBe(403);
+    });
+
+    it('rejects an owner whose ACTIVE org differs from the route target (cross-tenant)', async () => {
+        // Owner of org1, but acting on org2 → fail closed (structural isolation).
+        const r = await routeAuthChecks(orgUser('owner', 'org1'), env, AuthConfig.orgAdminOnly, { id: 'org2' });
+        expect(r.success).toBe(false);
+        expect(r.response?.status).toBe(403);
+    });
+
+    it('rejects when the actor has no active org resolved', async () => {
+        // An org role but no resolved active org → fail closed.
+        const noActiveOrg: AuthUser = { id: 'u1', email: 'u1@example.com', orgRole: 'owner' };
+        const r = await routeAuthChecks(noActiveOrg, env, AuthConfig.orgAdminOnly, { id: 'org1' });
+        expect(r.success).toBe(false);
+        expect(r.response?.status).toBe(403);
+    });
+
+    it('rejects when the route has no :id param (fail closed)', async () => {
+        const r = await routeAuthChecks(orgUser('owner', 'org1'), env, AuthConfig.orgAdminOnly, {});
+        expect(r.success).toBe(false);
+    });
+
+    it('admits an owner of the target org', async () => {
+        const r = await routeAuthChecks(orgUser('owner', 'org1'), env, AuthConfig.orgAdminOnly, { id: 'org1' });
+        expect(r.success).toBe(true);
+    });
+
+    it('admits an admin of the target org', async () => {
+        const r = await routeAuthChecks(orgUser('admin', 'org1'), env, AuthConfig.orgAdminOnly, { id: 'org1' });
+        expect(r.success).toBe(true);
     });
 });

@@ -7,7 +7,6 @@ import type { RouteContext } from '../../types/route-context';
 import { 
     AppsListData,
     PublicAppsData,
-    SingleAppData,
     FavoriteToggleData,
     UpdateAppVisibilityData,
     AppDeleteData
@@ -24,7 +23,8 @@ export class AppController extends BaseController {
             const user = context.user!;
             
             const appService = new AppService(env);
-            const userApps = await appService.getUserAppsWithFavorites(user.id);
+            // Scope the list to the user's ACTIVE org (the switcher context).
+            const userApps = await appService.getUserAppsWithFavorites(user.id, {}, user.orgId);
 
             const responseData: AppsListData = {
                 apps: userApps
@@ -43,7 +43,7 @@ export class AppController extends BaseController {
             const user = context.user!;
 
             const appService = new AppService(env);
-            const recentApps = await appService.getRecentAppsWithFavorites(user.id, 10);
+            const recentApps = await appService.getRecentAppsWithFavorites(user.id, 10, user.orgId);
 
             const responseData: AppsListData = {
                 apps: recentApps
@@ -62,7 +62,7 @@ export class AppController extends BaseController {
             const user = context.user!;
 
             const appService = new AppService(env);
-            const favoriteApps = await appService.getFavoriteAppsOnly(user.id);
+            const favoriteApps = await appService.getFavoriteAppsOnly(user.id, user.orgId);
 
             const responseData: AppsListData = {
                 apps: favoriteApps
@@ -156,31 +156,6 @@ export class AppController extends BaseController {
         } catch (error) {
             AppController.logger.error('Error fetching public apps:', error);
             return AppController.createErrorResponse<PublicAppsData>('Failed to fetch public apps', 500);
-        }
-    }
-
-    // Get single app
-    static async getApp(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<SingleAppData>>> {
-        try {
-            const user = context.user!;
-
-            const appId = context.pathParams.id;
-            if (!appId) {
-                return AppController.createErrorResponse<SingleAppData>('App ID is required', 400);
-            }
-            
-            const appService = new AppService(env);
-            const app = await appService.getSingleAppWithFavoriteStatus(appId, user.id);
-
-            if (!app) {
-                return AppController.createErrorResponse<SingleAppData>('App not found', 404);
-            }
-
-            const responseData: SingleAppData = { app };
-            return AppController.createSuccessResponse(responseData);
-        } catch (error) {
-            this.logger.error('Error fetching app:', error);
-            return AppController.createErrorResponse<SingleAppData>('Failed to fetch app', 500);
         }
     }
 

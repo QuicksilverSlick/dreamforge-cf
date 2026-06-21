@@ -80,8 +80,12 @@ export default function Home() {
 		// Encode images as JSON if present
 		const imageParam = images.length > 0 ? `&images=${encodeURIComponent(JSON.stringify(images))}` : '';
 		// Interview-first by default: the idea seeds the interview, which hands
-		// an enriched build brief to /chat/new when it finishes.
-		const intendedUrl = interviewEnabled
+		// an enriched build brief to /chat/new when it finishes. Read the pref
+		// from localStorage (written synchronously by toggleInterview) instead of
+		// the React state, so flipping the toggle and submitting in the same tick
+		// can't route to the stale flow before the state flushes.
+		const interviewOn = localStorage.getItem(INTERVIEW_PREF_KEY) !== 'off';
+		const intendedUrl = interviewOn
 			? `/interview?query=${encodedQuery}&agentMode=${encodedMode}${imageParam}`
 			: `/chat/new?query=${encodedQuery}&agentMode=${encodedMode}${imageParam}`;
 

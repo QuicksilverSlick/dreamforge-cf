@@ -66,15 +66,34 @@ export class DeploymentManager implements IDeploymentManager {
         let sessionId = getSessionId();
 
         if (!sessionId || opts.redeploy) {
-            const bootstrap = await sandboxClient.createInstance(
+            // Cold-start resilience: the first createInstance after a deploy can
+            // hit a container that is still booting. Retry once so a just-warmed
+            // container succeeds on the second attempt.
+            let bootstrap = await sandboxClient.createInstance(
                 templateName,
                 projectName,
                 webhookUrl,
                 localEnvVars,
             );
             if (!bootstrap.success || !bootstrap.runId) {
-                logger?.error(`createInstance failed: ${bootstrap.error ?? 'unknown error'}`);
-                return {};
+                logger?.warn(
+                    `createInstance failed (cold start?), retrying once: ${bootstrap.error ?? 'unknown error'}`,
+                );
+                bootstrap = await sandboxClient.createInstance(
+                    templateName,
+                    projectName,
+                    webhookUrl,
+                    localEnvVars,
+                );
+            }
+            if (!bootstrap.success || !bootstrap.runId) {
+                // Throw (don't return {}). Returning empty made the behavior
+                // broadcast DEPLOYMENT_COMPLETED with an empty previewURL, which
+                // the UI loops on forever ("Bootstrapping" never resolves). A
+                // throw surfaces DEPLOYMENT_FAILED — a clear, retryable error.
+                const reason = bootstrap.error ?? 'unknown error';
+                logger?.error(`createInstance failed after retry: ${reason}`);
+                throw new Error(`Failed to start the build environment: ${reason}`);
             }
             sessionId = bootstrap.runId;
             onSessionIdChange?.(sessionId);

@@ -85,7 +85,16 @@
                 "memory_mib": 8192,
                 "disk_mb": 16000
             },
-            "rollout_step_percentage": 100,
+            // Gradual rollout (CF default) instead of all-at-once: on a deploy,
+            // only 10% of running sandbox instances roll first, so warm instances
+            // keep serving and the FIRST build after a deploy is far less likely
+            // to hit a cold container (the prior `100` replaced every instance at
+            // once — the root cause of the post-deploy "Bootstrapping" stall).
+            "rollout_step_percentage": [10, 100],
+            // Don't SIGTERM an ACTIVELY-building container the instant a deploy
+            // lands — give it 10 min of grace so an in-flight build survives a
+            // merge/deploy instead of being killed mid-bootstrap.
+            "rollout_active_grace_period": 600,
             "ssh": {
                 "enabled": true
             }
@@ -142,6 +151,17 @@
     "browser": {
         "binding": "BROWSER"
     },
+    // Cloudflare Email Service — Email Sending (public beta, 2026). Outbound
+    // transactional email (org invitations) via env.EMAIL.send(EmailMessage).
+    // Unrestricted binding: once the sending domain (getdreamforge.com) is
+    // onboarded in the dashboard, it can deliver to any recipient. Invite
+    // delivery degrades gracefully (copy-link fallback) if the binding/DNS
+    // isn't live yet — see worker/services/email/EmailService.ts.
+    "send_email": [
+        {
+            "name": "EMAIL"
+        }
+    ],
     // "placement": {
     //   "mode": "smart"
     // },
@@ -242,6 +262,10 @@
         },
         "CUSTOM_DOMAIN": "app.getdreamforge.com",
         "CUSTOM_PREVIEW_DOMAIN": "app.getdreamforge.com",
+        // Sender identity for transactional email (org invitations). The
+        // address local-part must be on the onboarded Email Sending domain.
+        "EMAIL_FROM_ADDRESS": "noreply@getdreamforge.com",
+        "EMAIL_FROM_NAME": "Dreamforge",
         "MAX_SANDBOX_INSTANCES": "10",
         "SANDBOX_INSTANCE_TYPE": "standard-3",
         "USE_CLOUDFLARE_IMAGES": false,

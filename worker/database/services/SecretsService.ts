@@ -502,7 +502,7 @@ export class SecretsService extends BaseService {
     /**
      * Format secret response (remove sensitive data)
      */
-    private formatSecretResponse(secret: schema.UserSecret): EncryptedSecret {
+    private formatSecretResponse(secret: Omit<schema.UserSecret, 'orgId'>): EncryptedSecret {
         return {
             id: secret.id,
             userId: secret.userId,

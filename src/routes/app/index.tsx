@@ -437,7 +437,7 @@ export default function AppView() {
 	};
 
 	const handleToggleVisibility = async () => {
-		if (!app || !user || !isOwner) {
+		if (!app || !user || !canEdit) {
 			toast.error('You can only change visibility of your own apps');
 			return;
 		}
@@ -546,7 +546,9 @@ export default function AppView() {
 		);
 	}
 
-	const isOwner = app.userId === user?.id;
+	// Any member of the app's org can open + drive it (build/iterate/deploy) —
+	// not just the creator. The server computes this from org membership.
+	const canEdit = app.canEdit ?? false;
 	const appUrl = getAppUrl();
 	const createdDate = app.createdAt ? new Date(app.createdAt) : new Date();
 
@@ -576,7 +578,7 @@ export default function AppView() {
 										<Globe />
 										{capitalizeFirstLetter(app.visibility)}
 									</Badge>
-									{isOwner && (
+									{canEdit && (
 										<Button
 											variant="ghost"
 											size="sm"
@@ -655,7 +657,7 @@ export default function AppView() {
 									</Button>
 								)}
 
-								{isOwner ? (
+								{canEdit ? (
 									<>
 										<Button
 											size="sm"
@@ -827,58 +829,72 @@ export default function AppView() {
 											title={`${app.title} Preview`}
 										/>
 									) : (
-										<div className="relative w-full h-[400px] bg-gray-50 flex items-center justify-center">
-											{/* Frosted glass overlay */}
-											<div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10">
-												<div className="text-center p-8">
-													<h3 className="text-xl font-semibold mb-2 text-gray-700">
-														Run App
-													</h3>
-													<p className="text-gray-500 mb-6 max-w-md">
-														Run the app to see a
-														live preview.
-													</p>
-													{deploymentProgress && (
-														<p className="text-sm text-gray-800 mb-4">
-															{deploymentProgress}
-														</p>
-													)}
-													<div className="flex gap-3 justify-center">
-														<Button
-															onClick={
-																handlePreviewDeploy
-															}
-															disabled={
-																isDeploying
-															}
-															className="gap-2"
+										<div className="relative w-full h-[400px] bg-bg-3 flex items-center justify-center overflow-hidden">
+											{/* Dotted accent backdrop */}
+											<div className="absolute inset-0 text-accent opacity-[0.12] pointer-events-none">
+												<svg width="100%" height="100%">
+													<defs>
+														<pattern
+															id="app-preview-dots"
+															viewBox="-6 -6 12 12"
+															patternUnits="userSpaceOnUse"
+															width="14"
+															height="14"
 														>
-															{isDeploying ? (
-																<>
-																	<Loader2 className="h-4 w-4 animate-spin" />
-																	Deploying...
-																</>
-															) : (
-																<>
-																	<Play className="h-4 w-4" />
-																	Deploy for
-																	Preview
-																</>
-															)}
-														</Button>
-													</div>
-												</div>
+															<circle
+																cx="0"
+																cy="0"
+																r="1"
+																fill="currentColor"
+															/>
+														</pattern>
+													</defs>
+													<rect
+														width="100%"
+														height="100%"
+														fill="url(#app-preview-dots)"
+													/>
+												</svg>
 											</div>
-											{/* Background pattern */}
-											<div className="absolute inset-0 opacity-10">
-												<div
-													className="w-full h-full"
-													style={{
-														backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23000' fill-opacity='0.1'%3E%3Cpath d='M20 20c0 11.046-8.954 20-20 20V0c11.046 0 20 8.954 20 20z'/%3E%3C/g%3E%3C/svg%3E")`,
-														backgroundSize:
-															'40px 40px',
-													}}
-												/>
+											{/* Content */}
+											<div className="relative z-10 text-center p-8">
+												<div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 border border-accent/20">
+													<Play className="h-5 w-5 text-accent" />
+												</div>
+												<h3 className="text-xl font-semibold mb-2 text-text-primary">
+													Run App
+												</h3>
+												<p className="text-text-primary/70 mb-6 max-w-md">
+													Run the app to see a live
+													preview.
+												</p>
+												{deploymentProgress && (
+													<p className="text-sm text-accent mb-4">
+														{deploymentProgress}
+													</p>
+												)}
+												<div className="flex gap-3 justify-center">
+													<Button
+														onClick={
+															handlePreviewDeploy
+														}
+														disabled={isDeploying}
+														className="gap-2 bg-accent text-text-inverted hover:bg-accent/90"
+													>
+														{isDeploying ? (
+															<>
+																<Loader2 className="h-4 w-4 animate-spin" />
+																Deploying...
+															</>
+														) : (
+															<>
+																<Play className="h-4 w-4" />
+																Deploy for
+																Preview
+															</>
+														)}
+													</Button>
+												</div>
 											</div>
 										</div>
 									)}

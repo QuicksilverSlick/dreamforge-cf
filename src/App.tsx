@@ -4,7 +4,6 @@ import { AuthModalProvider } from './components/auth/AuthModalProvider';
 import { ThemeProvider } from './contexts/theme-context';
 import { LimitsProvider } from './contexts/limits-context';
 import { Toaster } from './components/ui/sonner';
-import { AppLayout } from './components/layout/app-layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FeatureProvider } from './features';
 
@@ -22,9 +21,11 @@ export default function App() {
           <AuthProvider>
             <LimitsProvider>
               <AuthModalProvider>
-                <AppLayout>
-                  <Outlet />
-                </AppLayout>
+                {/* Providers wrap the Outlet directly; the AppLayout chrome is a
+                    nested layout route (AppShell), so chrome-less routes like
+                    /invite/:token can render inside auth context but without the
+                    sidebar/header. */}
+                <Outlet />
                 <Toaster richColors position="top-right" />
               </AuthModalProvider>
             </LimitsProvider>

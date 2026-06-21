@@ -39,3 +39,20 @@ export interface AdminUserSecretsData {
 export type AdminAppDetailData = EnhancedAppData;
 
 export type AdminAuditListData = PaginatedResult<AuditLog>;
+
+export interface AdminScreenshotCaptureData {
+    appId: string;
+    /** The public URL that was snapshotted. */
+    url: string;
+    /** The stored screenshot URL now on apps.screenshot_url. */
+    screenshotUrl: string;
+}
+
+export interface AdminScreenshotBackfillData {
+    /** Deployed apps considered for capture. */
+    total: number;
+    /** Apps whose screenshot was (re)captured successfully. */
+    succeeded: number;
+    /** Per-app failures (best-effort — one bad URL never aborts the batch). */
+    failed: Array<{ appId: string; error: string }>;
+}

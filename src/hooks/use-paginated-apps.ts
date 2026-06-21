@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient, ApiError } from '@/lib/api-client';
 import type { EnhancedAppData, AppWithUserAndStats, PaginationInfo, TimePeriod, AppSortOption } from '@/api-types';
 import { appEvents } from '@/lib/app-events';
+import { useAuth } from '@/contexts/auth-context';
 
 export type AppType = 'user' | 'public';
 export type AppListData = EnhancedAppData | AppWithUserAndStats;
@@ -56,7 +57,9 @@ export function usePaginatedApps(options: UsePaginatedAppsOptions): UsePaginated
   const hasInitialized = useRef(false);
   const currentPageRef = useRef(1);
   const isLoadingMoreRef = useRef(false);
-  
+  // The server scopes 'user' lists to the active org; refetch when it changes.
+  const { activeOrgId } = useAuth();
+
   const [filterState, setFilterState] = useState<FilterState>({
     searchQuery: '',
     filterFramework: options.defaultFramework || 'all',
@@ -244,12 +247,13 @@ export function usePaginatedApps(options: UsePaginatedAppsOptions): UsePaginated
     performFetch();
     hasInitialized.current = true;
   }, [
-    // Only re-fetch when actual filter values change
+    // Re-fetch when filter values OR the active org change
     filterState.sortBy,
     filterState.period,
     filterState.filterFramework,
     filterState.filterVisibility,
     debouncedSearchQuery,
+    activeOrgId,
     fetchAppsInternal,
     options.autoFetch
   ]);

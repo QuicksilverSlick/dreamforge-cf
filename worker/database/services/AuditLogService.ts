@@ -45,6 +45,27 @@ export const AdminAuditAction = {
 export type AdminAuditActionType = (typeof AdminAuditAction)[keyof typeof AdminAuditAction];
 
 /**
+ * Org-management action verbs (Phase 2.2). Namespaced under `org.*` and
+ * distinct from the operator `admin.*` plane — these are tenant-internal
+ * mutations by an org owner/admin, not platform-operator actions.
+ */
+export const OrgAuditAction = {
+    TEAM_CREATE: 'org.team.create',
+    ORG_RENAME: 'org.renamed',
+    MEMBER_INVITE: 'org.member.invite',
+    MEMBER_INVITE_ACCEPT: 'org.member.invite_accept',
+    MEMBER_ROLE_CHANGE: 'org.member.role_change',
+    MEMBER_REMOVE: 'org.member.remove',
+    INVITE_REVOKE: 'org.invite.revoke',
+    TEAM_DELETE: 'org.team.delete',
+} as const;
+
+export type OrgAuditActionType = (typeof OrgAuditAction)[keyof typeof OrgAuditAction];
+
+/** Any audited action verb (operator `admin.*` or tenant `org.*`). */
+export type AuditActionType = AdminAuditActionType | OrgAuditActionType;
+
+/**
  * A single audit event. `actorId` is the operator; `entityType`/`entityId`
  * identify the target resource. `oldValues`/`newValues` capture before/after
  * for mutations; `context` carries non-sensitive read context (search terms,
@@ -56,7 +77,7 @@ export interface AuditEntry {
     actorRole?: UserRole;
     entityType: string;
     entityId: string;
-    action: AdminAuditActionType;
+    action: AuditActionType;
     oldValues?: Record<string, unknown> | null;
     newValues?: Record<string, unknown> | null;
     reason?: string | null;
