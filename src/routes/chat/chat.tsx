@@ -9,6 +9,8 @@ import {
 import { ArrowRight, Image as ImageIcon } from 'react-feather';
 import { useParams, useSearchParams, useNavigate } from 'react-router';
 import { MonacoEditor } from '../../components/monaco-editor/monaco-editor';
+import { useAuth } from '@/contexts/auth-context';
+import { CollaborationBar } from './components/collaboration-bar';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Expand, Github, LoaderCircle, RefreshCw } from 'lucide-react';
 import { Blueprint } from './components/blueprint';
@@ -130,6 +132,13 @@ export default function Chat() {
 		isPreviewDeploying,
 		// Image generation progress
 		imageGeneration,
+		// Org collaboration: presence + single-driver seat
+		presenceMembers,
+		currentDriverId,
+		drivingBlockedBy,
+		setDrivingBlockedBy,
+		claimDriving,
+		releaseDriving,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
@@ -138,6 +147,13 @@ export default function Chat() {
 		interviewSessionId: searchParams.get('interviewSession'),
 		onDebugMessage: addDebugMessage,
 	});
+
+	// Org collaboration: who am I, and the single-driver state for this session.
+	const { user } = useAuth();
+	const isViewerDriving = !!currentDriverId && currentDriverId === user?.id;
+	const isReadOnlyViewer = !!currentDriverId && currentDriverId !== user?.id;
+	const currentDriverName =
+		presenceMembers.find((m) => m.isDriver)?.displayName ?? 'Another member';
 
 	// GitHub export functionality - use urlChatId directly from URL params
 	const githubExport = useGitHubExport(websocket, urlChatId);
@@ -449,6 +465,13 @@ export default function Chat() {
 				return;
 			}
 
+			// Single-driver (soft): if another member is driving, surface the take-over
+			// prompt instead of sending — the server would soft-block it anyway.
+			if (isReadOnlyViewer) {
+				setDrivingBlockedBy(currentDriverName);
+				return;
+			}
+
 			// When generation is active, send as conversational AI suggestion
 			websocket?.send(
 				JSON.stringify({
@@ -466,7 +489,7 @@ export default function Chat() {
 			// Ensure we scroll after sending our own message
 			requestAnimationFrame(() => scrollToBottom());
 		},
-		[newMessage, websocket, sendUserMessage, isChatDisabled, scrollToBottom, images, clearImages],
+		[newMessage, websocket, sendUserMessage, isChatDisabled, scrollToBottom, images, clearImages, isReadOnlyViewer, currentDriverName, setDrivingBlockedBy],
 	);
 
 	const [progress, total] = useMemo((): [number, number] => {
@@ -632,6 +655,19 @@ export default function Chat() {
 								);
 							})}
 						</div>
+					</div>
+
+					<div className="shrink-0 px-4">
+						<CollaborationBar
+							members={presenceMembers}
+							currentUserId={user?.id}
+							isViewerDriving={isViewerDriving}
+							isReadOnlyViewer={isReadOnlyViewer}
+							drivingBlockedBy={drivingBlockedBy}
+							onTakeOver={claimDriving}
+							onRelease={releaseDriving}
+							onDismissBlocked={() => setDrivingBlockedBy(null)}
+						/>
 					</div>
 
 					<form

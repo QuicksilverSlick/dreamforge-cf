@@ -28,7 +28,8 @@ import {
 	type BlueprintType,
 	type WebSocketMessage,
 	type CodeFixEdits,
-	type ImageAttachment
+	type ImageAttachment,
+	type PresenceMember
 } from '@/api-types';
 import {
 	createRepairingJSONParser,
@@ -153,6 +154,12 @@ export function useChat({
 	// Track whether we've completed initial state restoration to avoid disrupting active sessions
 	const [isInitialStateRestored, setIsInitialStateRestored] = useState(false);
 
+	// Org collaboration: live presence roster, the current single-driver, and the
+	// name of whoever a non-driver was just soft-blocked behind (for "take over").
+	const [presenceMembers, setPresenceMembers] = useState<PresenceMember[]>([]);
+	const [currentDriverId, setCurrentDriverId] = useState<string | null>(null);
+	const [drivingBlockedBy, setDrivingBlockedBy] = useState<string | null>(null);
+
 	const updateStage = useCallback(
 		(stageId: ProjectStage['id'], data: Partial<Omit<ProjectStage, 'id'>>) => {
 			logger.debug('updateStage', { stageId, ...data });
@@ -214,6 +221,9 @@ export function useChat({
 			setIsGenerationPaused,
 			setIsGenerating,
 			setIsPhaseProgressActive,
+			setPresenceMembers,
+			setCurrentDriverId,
+			setDrivingBlockedBy,
 			// Current state
 			isInitialStateRestored,
 			blueprint,
@@ -638,6 +648,16 @@ export function useChat({
 		}
 	}, [websocket, sendMessage, isDeploying, onDebugMessage]);
 
+	// Org collaboration: claim (take over) / release the single driver seat.
+	const claimDriving = useCallback(() => {
+		setDrivingBlockedBy(null);
+		sendWebSocketMessage(websocket, 'claim_driver');
+	}, [websocket]);
+
+	const releaseDriving = useCallback(() => {
+		sendWebSocketMessage(websocket, 'release_driver');
+	}, [websocket]);
+
 	return {
 		messages,
 		edit,
@@ -676,5 +696,12 @@ export function useChat({
 		imageGeneration,
 		// Phase progress visual indicator
 		isPhaseProgressActive,
+		// Org collaboration: presence + single-driver seat
+		presenceMembers,
+		currentDriverId,
+		drivingBlockedBy,
+		setDrivingBlockedBy,
+		claimDriving,
+		releaseDriving,
 	};
 }

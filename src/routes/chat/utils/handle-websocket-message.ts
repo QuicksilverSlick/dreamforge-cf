@@ -1,5 +1,5 @@
 import type { WebSocket } from 'partysocket';
-import type { WebSocketMessage, BlueprintType, ConversationMessage } from '@/api-types';
+import type { WebSocketMessage, BlueprintType, ConversationMessage, PresenceMember } from '@/api-types';
 import { logger } from '@/utils/logger';
 import { getFileType } from '@/utils/string';
 import { getPreviewUrl } from '@/lib/utils';
@@ -50,7 +50,12 @@ export interface HandleMessageDeps {
     setIsGenerationPaused: React.Dispatch<React.SetStateAction<boolean>>;
     setIsGenerating: React.Dispatch<React.SetStateAction<boolean>>;
     setIsPhaseProgressActive: React.Dispatch<React.SetStateAction<boolean>>;
-    
+    // Org collaboration: live presence roster, the current driver, and the name of
+    // whoever a non-driver was just soft-blocked behind (for the "take over" prompt).
+    setPresenceMembers: React.Dispatch<React.SetStateAction<PresenceMember[]>>;
+    setCurrentDriverId: React.Dispatch<React.SetStateAction<string | null>>;
+    setDrivingBlockedBy: React.Dispatch<React.SetStateAction<string | null>>;
+
     // Current state
     isInitialStateRestored: boolean;
     blueprint: BlueprintType | undefined;
@@ -118,6 +123,9 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setIsGenerationPaused,
             setIsGenerating,
             setIsPhaseProgressActive,
+            setPresenceMembers,
+            setCurrentDriverId,
+            setDrivingBlockedBy,
             isInitialStateRestored,
             blueprint,
             query,
@@ -769,6 +777,16 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             // work for the full Dreamforge push — see worker/api/websocketTypes.ts
             // (M3 commit-2b note). They are acknowledged explicitly here so the
             // `default` branch's warning stays reserved for genuinely unexpected types.
+            case 'presence_update':
+                setPresenceMembers(message.members);
+                setCurrentDriverId(message.currentDriverUserId);
+                break;
+            case 'driving_blocked':
+                // Soft single-driver block: surface who's driving so the UI can
+                // offer "take over".
+                setDrivingBlockedBy(message.currentDriverName);
+                break;
+
             case 'agent_connected':
             case 'template_updated':
             case 'blueprint_updated':
