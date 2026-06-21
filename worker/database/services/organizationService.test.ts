@@ -275,6 +275,68 @@ describe('OrganizationService Phase 2.2 — teams, invitations, members', () => 
     });
 });
 
+describe('OrganizationService.deleteOrg (Phase 2.4 — team deletion)', () => {
+    const ctx = (actorUserId: string) => ({ actorUserId });
+
+    it('deletes a team, reassigns its apps to the owner’s personal workspace, removes members, and audits', async () => {
+        await insertUser('owner1');
+        await insertUser('member2');
+        const orgSvc = new OrganizationService(env);
+        const appSvc = new AppService(env);
+
+        const ownerPersonal = await orgSvc.ensurePersonalOrg('owner1');
+        const org = await orgSvc.createTeamOrg('Acme', ctx('owner1'));
+        const { token } = await orgSvc.createInvitation(org.id, 'member2@example.com', 'member', ctx('owner1'));
+        await orgSvc.acceptInvitation(token, 'member2');
+
+        // An app built in the team, with an analytics row, to prove they survive deletion.
+        await appSvc.createApp({ id: 'app1', title: 'T', originalPrompt: 'p', userId: 'owner1', orgId: org.id } as NewApp);
+        expect((await env.DB.prepare("SELECT org_id FROM apps WHERE id='app1'").first<{ org_id: string }>())!.org_id).toBe(org.id);
+        await env.DB.prepare("INSERT INTO app_views (id, app_id) VALUES ('v1','app1')").run();
+
+        const result = await orgSvc.deleteOrg(org.id, ctx('owner1'));
+        expect(result).toMatchObject({ deletedOrgId: org.id, reassignedToOrgId: ownerPersonal });
+
+        // Org + its memberships are gone.
+        expect(await orgSvc.getOrgById(org.id)).toBeNull();
+        expect(await orgSvc.getMembership(org.id, 'owner1')).toBeNull();
+        expect(await orgSvc.getMembership(org.id, 'member2')).toBeNull();
+
+        // App PRESERVED and reassigned to the owner's personal org (NOT cascade-deleted)...
+        expect((await env.DB.prepare("SELECT org_id FROM apps WHERE id='app1'").first<{ org_id: string }>())!.org_id).toBe(ownerPersonal);
+        // ...and its analytics survive (attached to the surviving app).
+        expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM app_views WHERE app_id='app1'").first<{ n: number }>())!.n).toBe(1);
+
+        // Audited.
+        const audit = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_logs WHERE action='org.team.delete' AND entity_id=?")
+            .bind(org.id)
+            .first<{ n: number }>();
+        expect(audit!.n).toBe(1);
+    });
+
+    it('refuses to delete a personal org', async () => {
+        await insertUser('solo');
+        const svc = new OrganizationService(env);
+        const personalOrgId = await svc.ensurePersonalOrg('solo');
+        await expect(svc.deleteOrg(personalOrgId, ctx('solo'))).rejects.toMatchObject({ statusCode: 400 });
+        expect(await svc.getOrgById(personalOrgId)).not.toBeNull();
+    });
+
+    it('only the owner can delete (admins and non-members cannot)', async () => {
+        await insertUser('owner1');
+        await insertUser('admin2');
+        await insertUser('outsider');
+        const svc = new OrganizationService(env);
+        const org = await svc.createTeamOrg('Acme', ctx('owner1'));
+        const { token } = await svc.createInvitation(org.id, 'admin2@example.com', 'admin', ctx('owner1'));
+        await svc.acceptInvitation(token, 'admin2');
+
+        await expect(svc.deleteOrg(org.id, ctx('admin2'))).rejects.toMatchObject({ statusCode: 403 });
+        await expect(svc.deleteOrg(org.id, ctx('outsider'))).rejects.toMatchObject({ statusCode: 403 });
+        expect(await svc.getOrgById(org.id)).not.toBeNull(); // survived both attempts
+    });
+});
+
 describe('OrganizationService.resolveActiveOrg', () => {
     async function insertSession(id: string, userId: string, currentOrgId: string | null): Promise<void> {
         await env.DB.prepare(

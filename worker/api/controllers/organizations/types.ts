@@ -42,3 +42,9 @@ export interface RemoveMemberData {
 export interface RevokeInviteData {
     invitationId: string;
 }
+
+export interface DeleteOrgData {
+    deletedOrgId: string;
+    /** The personal workspace the org's apps were reassigned to. */
+    reassignedToOrgId: string;
+}

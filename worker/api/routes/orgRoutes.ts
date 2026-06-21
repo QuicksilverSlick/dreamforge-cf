@@ -48,6 +48,12 @@ export function setupOrgRoutes(app: Hono<AppEnv>): void {
         setAuthLevel(AuthConfig.orgAdminOnly),
         adaptController(OrgController, OrgController.renameOrg),
     );
+    // Owner-only delete (route binds :id to the active org; owner-role enforced in the service).
+    app.delete(
+        '/api/orgs/:id',
+        setAuthLevel(AuthConfig.orgAdminOnly),
+        adaptController(OrgController, OrgController.deleteOrg),
+    );
     app.get(
         '/api/orgs/:id/members',
         setAuthLevel(AuthConfig.orgAdminOnly),

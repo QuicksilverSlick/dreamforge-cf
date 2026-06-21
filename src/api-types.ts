@@ -346,6 +346,7 @@ export type {
   MemberData,
   RemoveMemberData,
   RevokeInviteData,
+  DeleteOrgData,
 } from 'worker/api/controllers/organizations/types';
 export type {
   OrgMemberView,

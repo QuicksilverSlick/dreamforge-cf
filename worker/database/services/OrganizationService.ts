@@ -599,6 +599,64 @@ export class OrganizationService extends BaseService {
         return { removedUserId: targetUserId };
     }
 
+    /**
+     * Permanently delete a TEAM org. Reassigns the org's apps to the deleting
+     * owner's personal workspace FIRST, so the apps.org_id ON DELETE cascade
+     * never destroys apps + their analytics (and never orphans R2 objects,
+     * deployed workers, or cross-org forks the way a raw cascade would). The
+     * org's own delete then cleanly cascade-removes only its memberships +
+     * invitations and SET-NULLs any session pointed at it (members fall back to
+     * their personal org via resolveActiveOrg). Owner-only; personal orgs are
+     * structurally undeletable (requireTeamOrg). Atomic + audited in one batch.
+     */
+    async deleteOrg(
+        orgId: string,
+        ctx: OrgMutationContext,
+    ): Promise<{ deletedOrgId: string; reassignedToOrgId: string }> {
+        const org = await this.requireTeamOrg(orgId); // rejects personal orgs (load-bearing guard)
+        await this.requireActorRole(orgId, ctx.actorUserId, ['owner']); // owner-only, stricter than orgAdminOnly
+
+        // Reassignment target: the actor always owns a personal org (created if missing).
+        const personalOrgId = await this.ensurePersonalOrg(ctx.actorUserId);
+        if (personalOrgId === orgId) {
+            // Unreachable (a team org is never personal), but never delete into self.
+            throw new OrgActionError('This organization cannot be deleted.', 400);
+        }
+
+        const auditRow = AuditLogService.buildRow({
+            actorId: ctx.actorUserId,
+            actorRole: ctx.actorRole,
+            entityType: 'organization',
+            entityId: orgId,
+            action: OrgAuditAction.TEAM_DELETE,
+            oldValues: { name: org.name, slug: org.slug, reassignedToOrgId: personalOrgId },
+            metadata: ctx.metadata,
+        });
+
+        // One atomic batch:
+        //  1. Move the org's apps to the owner's personal workspace — apps.org_id is
+        //     NOT NULL and ON DELETE cascade, so a raw delete would wipe apps +
+        //     app_views/likes/etc. and orphan their R2 objects / deployed workers /
+        //     cross-org forks. Moving (not deleting) the app rows preserves all of it.
+        //  2. Delete the org — its ON DELETE cascade then removes only its memberships
+        //     + invitations (and the currently-empty forward-compat org-scoped columns)
+        //     and SET-NULLs sessions.current_org_id. is_personal=false in the WHERE is
+        //     belt-and-suspenders against ever deleting a personal org.
+        //  3. Record the audit row (fail-closed: an unrecorded delete rolls back).
+        await this.database.batch([
+            this.database
+                .update(schema.apps)
+                .set({ orgId: personalOrgId })
+                .where(eq(schema.apps.orgId, orgId)),
+            this.database
+                .delete(schema.organizations)
+                .where(and(eq(schema.organizations.id, orgId), eq(schema.organizations.isPersonal, false))),
+            this.database.insert(schema.auditLogs).values(auditRow),
+        ]);
+
+        return { deletedOrgId: orgId, reassignedToOrgId: personalOrgId };
+    }
+
     /** Revoke a pending invitation. */
     async revokeInvitation(
         orgId: string,

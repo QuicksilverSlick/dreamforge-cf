@@ -76,6 +76,7 @@ import type{
     MemberData,
     RemoveMemberData,
     RevokeInviteData,
+    DeleteOrgData,
     OrgRole,
 } from '@/api-types';
 import {
@@ -1464,6 +1465,12 @@ class ApiClient {
 		return this.request<OrgData>(`/api/orgs/${encodeURIComponent(orgId)}`, {
 			method: 'PATCH',
 			body: { name },
+		});
+	}
+
+	async deleteOrg(orgId: string): Promise<ApiResponse<DeleteOrgData>> {
+		return this.request<DeleteOrgData>(`/api/orgs/${encodeURIComponent(orgId)}`, {
+			method: 'DELETE',
 		});
 	}
 
