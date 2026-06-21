@@ -6,7 +6,7 @@ import { BaseService } from './BaseService';
 import { OrganizationService } from './OrganizationService';
 import * as schema from '../schema';
 import { userAppAccessCondition } from '../appAccess';
-import { eq, and, or, desc, asc, sql, isNull, inArray } from 'drizzle-orm';
+import { eq, and, or, desc, asc, sql, isNull, isNotNull, inArray } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
 import { formatRelativeTime } from '../../utils/timeFormatter';
 import { ScreenshotSecurity } from '../../utils/screenshot-security';
@@ -456,6 +456,28 @@ export class AppService extends BaseService {
             }))),
             userId,
         );
+    }
+
+    /**
+     * Apps that have a Cloudflare deployment URL — the operator screenshot
+     * backfill targets these (a publicly reachable URL is required to snapshot).
+     * deploymentId is the stored value (a full https URL, or a bare subdomain
+     * label from the legacy agent — callers normalize before use). With
+     * missingScreenshotOnly, only apps that currently lack a thumbnail are
+     * returned, so a backfill fills gaps without overwriting good previews.
+     */
+    async listDeployedApps(
+        opts: { missingScreenshotOnly?: boolean } = {},
+    ): Promise<Array<{ id: string; deploymentId: string }>> {
+        const conditions: WhereCondition[] = [isNotNull(schema.apps.deploymentId)];
+        if (opts.missingScreenshotOnly) {
+            conditions.push(or(isNull(schema.apps.screenshotUrl), eq(schema.apps.screenshotUrl, '')));
+        }
+        const rows = await this.getReadDb('fast')
+            .select({ id: schema.apps.id, deploymentId: schema.apps.deploymentId })
+            .from(schema.apps)
+            .where(and(...conditions));
+        return rows.flatMap((r) => (r.deploymentId ? [{ id: r.id, deploymentId: r.deploymentId }] : []));
     }
 
 

@@ -9,6 +9,7 @@ import type {
 import { AgentComponent } from '../AgentComponent';
 import { WebSocketMessageResponses } from '../../constants';
 import { AppService } from '../../../database/services/AppService';
+import { captureAndStoreScreenshot } from '../../../services/screenshots/screenshotCapture';
 import { GitHubService } from '../../../services/github';
 import {
     getAdditionalExportStrategy,
@@ -137,6 +138,15 @@ export class ProjectObjective<
             } catch (dbErr) {
                 this.logger.warn('Failed to persist deployment URL', dbErr);
             }
+
+            // Best-effort: snapshot the freshly deployed (publicly reachable) app so it
+            // gets a preview thumbnail without anyone opening the chat preview. Fire-and-
+            // forget — a capture failure must never fail or block a successful deploy.
+            void captureAndStoreScreenshot(this.env, this.getAgentId(), result.deployedUrl).catch((err) => {
+                this.logger.warn('Post-deploy screenshot capture failed (non-fatal)', {
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            });
 
             return {
                 success: true,
