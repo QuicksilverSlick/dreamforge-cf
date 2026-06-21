@@ -23,7 +23,8 @@ export class AppController extends BaseController {
             const user = context.user!;
             
             const appService = new AppService(env);
-            const userApps = await appService.getUserAppsWithFavorites(user.id);
+            // Scope the list to the user's ACTIVE org (the switcher context).
+            const userApps = await appService.getUserAppsWithFavorites(user.id, {}, user.orgId);
 
             const responseData: AppsListData = {
                 apps: userApps
@@ -42,7 +43,7 @@ export class AppController extends BaseController {
             const user = context.user!;
 
             const appService = new AppService(env);
-            const recentApps = await appService.getRecentAppsWithFavorites(user.id, 10);
+            const recentApps = await appService.getRecentAppsWithFavorites(user.id, 10, user.orgId);
 
             const responseData: AppsListData = {
                 apps: recentApps
@@ -61,7 +62,7 @@ export class AppController extends BaseController {
             const user = context.user!;
 
             const appService = new AppService(env);
-            const favoriteApps = await appService.getFavoriteAppsOnly(user.id);
+            const favoriteApps = await appService.getFavoriteAppsOnly(user.id, user.orgId);
 
             const responseData: AppsListData = {
                 apps: favoriteApps

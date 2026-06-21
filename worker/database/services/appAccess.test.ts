@@ -13,6 +13,7 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import type { D1Migration } from 'cloudflare:test';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppService } from './AppService';
+import { OrganizationService } from './OrganizationService';
 import type { NewApp } from '../schema';
 
 declare module 'cloudflare:test' {
@@ -179,5 +180,37 @@ describe('org-scope display decoration (Private vs Shared indicator)', () => {
         const analyticsApp = (await svc.getUserAppsWithAnalytics('A')).find((a) => a.id === 'team-app');
         expect(analyticsApp?.orgIsPersonal).toBe(false);
         expect(analyticsApp?.orgName).toBe('Acme');
+    });
+});
+
+describe('active-org list scoping (Phase 3b)', () => {
+    const ctx = (actorUserId: string) => ({ actorUserId });
+
+    it('scopes lists to the active org when given, but keeps ownership org-wide', async () => {
+        const svc = new AppService(env);
+        const orgSvc = new OrganizationService(env);
+        await insertUser('A');
+        const personalOrg = await orgSvc.ensurePersonalOrg('A');
+        const team = await orgSvc.createTeamOrg('Acme', ctx('A'));
+        await svc.createApp({ id: 'app-personal', title: 'P', originalPrompt: 'p', userId: 'A', orgId: personalOrg } as NewApp);
+        await svc.createApp({ id: 'app-team', title: 'T', originalPrompt: 'p', userId: 'A', orgId: team.id } as NewApp);
+        await env.DB.prepare("INSERT INTO favorites (id, user_id, app_id) VALUES ('f1','A','app-personal'),('f2','A','app-team')").run();
+
+        // No active org → every member org's apps.
+        expect((await svc.getUserAppsWithFavorites('A')).map((a) => a.id).sort()).toEqual(['app-personal', 'app-team']);
+        // Active = team → only the team's apps; active = personal → only personal.
+        expect((await svc.getUserAppsWithFavorites('A', {}, team.id)).map((a) => a.id)).toEqual(['app-team']);
+        expect((await svc.getUserAppsWithFavorites('A', {}, personalOrg)).map((a) => a.id)).toEqual(['app-personal']);
+        // Analytics list + count mirror the scoping (they must agree for pagination).
+        expect((await svc.getUserAppsWithAnalytics('A', {}, team.id)).map((a) => a.id)).toEqual(['app-team']);
+        expect(await svc.getUserAppsCount('A', {}, team.id)).toBe(1);
+        // Favorites list scopes too (it has no org predicate of its own).
+        expect((await svc.getFavoriteAppsOnly('A', team.id)).map((a) => a.id)).toEqual(['app-team']);
+        expect((await svc.getFavoriteAppsOnly('A')).map((a) => a.id).sort()).toEqual(['app-personal', 'app-team']);
+
+        // Ownership stays org-wide regardless of the active org — a member can still
+        // open/drive/delete any of their org apps even while a different org is active.
+        expect((await svc.checkAppOwnership('app-personal', 'A')).isOwner).toBe(true);
+        expect((await svc.checkAppOwnership('app-team', 'A')).isOwner).toBe(true);
     });
 });
