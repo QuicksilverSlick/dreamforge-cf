@@ -40,6 +40,12 @@ export const AdminAuditAction = {
     AUDIT_VIEW: 'admin.audit.view',
     USER_SUSPEND: 'admin.user.suspend',
     USER_REACTIVATE: 'admin.user.reactivate',
+    // Impersonation lifecycle (Phase 1). actorId = the real operator, entityId =
+    // the impersonated target. START/EXTEND are fail-closed (batched with the
+    // grant row); STOP is recorded when a grant is torn down.
+    IMPERSONATION_START: 'admin.user.impersonate.start',
+    IMPERSONATION_EXTEND: 'admin.user.impersonate.extend',
+    IMPERSONATION_STOP: 'admin.user.impersonate.stop',
 } as const;
 
 export type AdminAuditActionType = (typeof AdminAuditAction)[keyof typeof AdminAuditAction];

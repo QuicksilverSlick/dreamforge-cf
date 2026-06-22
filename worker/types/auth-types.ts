@@ -47,6 +47,21 @@ export interface AuthUser {
     orgId?: string;
     /** The user's role IN the active org (orgId). Absent => not resolved. */
     orgRole?: OrgRole;
+
+    /**
+     * Impersonation context. When set, THIS request is an impersonation: the
+     * effective identity (id/email/role/org above) is the TARGET user, while the
+     * real actor is named here. Resolved per-request from a D1 grant at the auth
+     * chokepoint (never from the JWT). Absent => a normal, non-impersonated
+     * session. Audit, rate-limit attribution, Sentry, and the UI banner read
+     * these — accountability follows the actor, data visibility follows the
+     * effective (target) user.
+     */
+    impersonatedBy?: string;
+    /** The actor's platform role (for re-gating the stop/extend controls + banner). */
+    impersonatorRole?: UserRole;
+    /** true => mutations are structurally blocked for this request (read-only mode). */
+    impersonationReadOnly?: boolean;
 }
 
 /**

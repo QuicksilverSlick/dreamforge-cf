@@ -138,6 +138,56 @@ export const apiKeys = sqliteTable('api_keys', {
     expiresAtIdx: index('api_keys_expires_at_idx').on(table.expiresAt),
 }));
 
+/**
+ * Impersonation sessions — the server-side grant that lets a platform operator
+ * (or, in Phase 2, an AI support agent) act AS another user. Keyed to the
+ * actor's `sessions` row so it is per-device and ends when that session ends;
+ * resolved per-request at the auth chokepoint (NEVER trusted from the JWT) so a
+ * stop/revoke takes effect on the very next request — mirroring the
+ * `sessions.current_org_id` + resolveActiveOrg discipline.
+ *
+ * Dual-clock time-box: `expiresAt` is the idle window end (pushed forward on an
+ * explicit, re-validated extend); `absoluteExpiresAt` is written ONCE at issue
+ * and NEVER moves. A grant is active iff !isRevoked AND now < min(expiresAt,
+ * absoluteExpiresAt). `actorRole` is snapshotted so the row stands alone in
+ * audit after a later role change. Carries identifiers/justification only.
+ */
+export const impersonationSessions = sqliteTable('impersonation_sessions', {
+    id: text('id').primaryKey(),
+    // The real actor performing the impersonation (operator/agent). Audit + UI
+    // banner + rate-limit/Sentry attribution all key off this, never the target.
+    actorUserId: text('actor_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Snapshot of the actor's platform role at grant time (audit-standalone).
+    actorRole: text('actor_role', { enum: ['superadmin', 'admin', 'user', 'support', 'ai_support', 'ai_admin'] }).notNull(),
+    // The user being impersonated.
+    targetUserId: text('target_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // The actor's session this grant is bound to. The chokepoint matches on this.
+    sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+    // Required justification (audited).
+    reason: text('reason').notNull(),
+    // false => full-write (human superadmin, minus the hard block-list);
+    // true => read-only (mutations structurally 403'd — the agent path default).
+    readOnly: integer('read_only', { mode: 'boolean' }).notNull().default(false),
+    // Time-box (see table doc). issuedAt + absoluteExpiresAt are immutable.
+    issuedAt: integer('issued_at', { mode: 'timestamp' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    absoluteExpiresAt: integer('absolute_expires_at', { mode: 'timestamp' }).notNull(),
+    extendCount: integer('extend_count').notNull().default(0),
+    // Termination (stop / kill-switch / expiry cleanup).
+    isRevoked: integer('is_revoked', { mode: 'boolean' }).notNull().default(false),
+    revokedAt: integer('revoked_at', { mode: 'timestamp' }),
+    endedReason: text('ended_reason'),
+    // Request metadata for the audit trail (attributed to the actor's request).
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    // The chokepoint lookup: active grant for a given actor session.
+    sessionActiveIdx: index('impersonation_sessions_session_active_idx').on(table.sessionId, table.isRevoked),
+    actorIdx: index('impersonation_sessions_actor_idx').on(table.actorUserId),
+    targetIdx: index('impersonation_sessions_target_idx').on(table.targetUserId),
+}));
+
 // ========================================
 // ORGANIZATIONS AND MEMBERSHIP (Phase 2 — multi-tenancy)
 // ========================================
@@ -909,6 +959,9 @@ export type NewEmailVerificationToken = typeof emailVerificationTokens.$inferIns
 
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
+
+export type ImpersonationSession = typeof impersonationSessions.$inferSelect;
+export type NewImpersonationSession = typeof impersonationSessions.$inferInsert;
 
 export type UserSecret = typeof userSecrets.$inferSelect;
 export type NewUserSecret = typeof userSecrets.$inferInsert;
