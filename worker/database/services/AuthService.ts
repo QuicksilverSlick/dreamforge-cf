@@ -9,6 +9,7 @@ import { JWTUtils } from '../../utils/jwtUtils';
 import { generateSecureToken } from '../../utils/cryptoUtils';
 import { SessionService } from './SessionService';
 import { OrganizationService } from './OrganizationService';
+import { ImpersonationService, actorRoleMayImpersonate, targetRoleMayBeImpersonated } from './ImpersonationService';
 import { PasswordService } from '../../utils/passwordService';
 import { GoogleOAuthProvider } from '../../services/oauth/google';
 import { GitHubOAuthProvider } from '../../services/oauth/github';
@@ -56,6 +57,7 @@ export class AuthService extends BaseService {
     private readonly sessionService: SessionService;
     private readonly passwordService: PasswordService;
     private readonly organizationService: OrganizationService;
+    private readonly impersonationService: ImpersonationService;
 
     constructor(
         env: Env,
@@ -64,6 +66,7 @@ export class AuthService extends BaseService {
         this.sessionService = new SessionService(env);
         this.passwordService = new PasswordService();
         this.organizationService = new OrganizationService(env);
+        this.impersonationService = new ImpersonationService(env);
     }
     
     /**
@@ -820,6 +823,17 @@ export class AuthService extends BaseService {
                 return null;
             }
 
+            // Impersonation indirection (Phase 1). If this actor holds an active
+            // grant on this session, resolve the EFFECTIVE identity as the target
+            // user (so every downstream consumer transparently acts as them),
+            // while preserving the real actor for audit/attribution/the banner.
+            // Re-checked from D1 every request, so a stop/revoke is instant; the
+            // grant lookup is skipped entirely for non-impersonator roles.
+            const impersonated = await this.tryResolveImpersonation(user, payload.sessionId);
+            if (impersonated) {
+                return { user: impersonated, sessionId: payload.sessionId };
+            }
+
             // Resolve the active org per-request (NEVER from the JWT) from the
             // session's currentOrgId, re-validating membership so an org-switch
             // or revocation is effective on the very next request. Falls back to
@@ -835,7 +849,49 @@ export class AuthService extends BaseService {
             return null;
         }
     }
-    
+
+    /**
+     * Resolve the effective (target) identity for an impersonated request, or
+     * null for a normal session. The grant lookup is gated on the actor's role
+     * FIRST, so the extra D1 read is incurred only for impersonator-capable
+     * accounts — every normal user request short-circuits before touching the
+     * grant table.
+     *
+     * Privilege is re-validated SYMMETRICALLY here every request: a demoted
+     * actor's grant stops working immediately, a target since suspended/deleted
+     * (so getUserForAuth returns null) collapses back to acting as the actor,
+     * and a target PROMOTED into a staff/operator role mid-grant likewise stops
+     * being impersonable (no impersonating up/laterally into staff). The
+     * target's OWN current working org is resolved (resolveUserDefaultOrg —
+     * NOT the actor's session, which could never match the target), and the real
+     * actor is stamped onto the returned AuthUser for audit/attribution/banner.
+     */
+    private async tryResolveImpersonation(
+        actor: AuthUser,
+        sessionId: string,
+    ): Promise<AuthUser | null> {
+        if (!actorRoleMayImpersonate(actor.role)) {
+            return null;
+        }
+        const grant = await this.impersonationService.resolveActiveGrant(sessionId);
+        if (!grant || grant.actorUserId !== actor.id) {
+            return null;
+        }
+        const target = await this.getUserForAuth(grant.targetUserId);
+        if (!target || !targetRoleMayBeImpersonated(target.role)) {
+            return null;
+        }
+        const activeOrg = await this.organizationService.resolveUserDefaultOrg(target.id);
+        return {
+            ...target,
+            orgId: activeOrg.orgId,
+            orgRole: activeOrg.orgRole,
+            impersonatedBy: actor.id,
+            impersonatorRole: actor.role,
+            impersonationReadOnly: grant.readOnly,
+        };
+    }
+
     /**
      * Resend verification OTP
      */

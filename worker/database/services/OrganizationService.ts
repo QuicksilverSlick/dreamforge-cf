@@ -21,7 +21,7 @@
 
 import { BaseService } from './BaseService';
 import * as schema from '../schema';
-import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
 import { generateSecureToken, sha256Hash } from '../../utils/cryptoUtils';
 import { AuditLogService, OrgAuditAction } from './AuditLogService';
@@ -160,6 +160,29 @@ export class OrganizationService extends BaseService {
             return { orgId: personalOrgId, orgRole: 'owner' };
         }
         return {};
+    }
+
+    /**
+     * Resolve a user's CURRENT working org WITHOUT a caller session of their
+     * own — their most recently active, non-revoked session's active org
+     * (membership re-validated), else their personal org. Used to give an
+     * impersonated session the org context the target themselves would see,
+     * rather than always collapsing to the target's personal org (the actor's
+     * session can never satisfy resolveActiveOrg's userId guard for the target).
+     */
+    async resolveUserDefaultOrg(userId: string): Promise<ActiveOrg> {
+        const latest = await this.database
+            .select({ id: schema.sessions.id })
+            .from(schema.sessions)
+            .where(
+                and(
+                    eq(schema.sessions.userId, userId),
+                    or(isNull(schema.sessions.isRevoked), eq(schema.sessions.isRevoked, false)),
+                ),
+            )
+            .orderBy(desc(schema.sessions.lastActivity), desc(schema.sessions.createdAt))
+            .get();
+        return this.resolveActiveOrg(userId, latest?.id ?? null);
     }
 
     /**
