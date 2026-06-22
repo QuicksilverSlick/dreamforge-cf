@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from './app-sidebar';
 import { GlobalHeader } from './global-header';
+import { ImpersonationBanner } from '@/components/impersonation/impersonation-banner';
 import { AppsDataProvider } from '@/contexts/apps-data-context';
 import clsx from 'clsx';
 
@@ -25,6 +26,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         <AppSidebar />
         <SidebarInset className={clsx("bg-bg-3 flex flex-col h-screen relative", pathname !== "/" && "overflow-hidden")}>
           <GlobalHeader />
+          <ImpersonationBanner />
           <div className={clsx("flex-1 bg-bg-3", pathname !== "/" && "min-h-0 overflow-auto")}>
             {children || <Outlet />}
           </div>

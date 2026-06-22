@@ -78,6 +78,8 @@ import type{
     RevokeInviteData,
     DeleteOrgData,
     OrgRole,
+    ImpersonationGrantData,
+    ImpersonationStatusData,
 } from '@/api-types';
 import {
 
@@ -1445,6 +1447,28 @@ class ApiClient {
 			`/api/admin/users/${encodeURIComponent(userId)}/reactivate`,
 			{ method: 'POST', body: reason ? { reason } : {} },
 		);
+	}
+
+	// ---- Impersonation (Phase 1.4). start is superadmin-only; stop/extend/status
+	// run while impersonating and authorize off the actor (impersonatedBy). ----
+
+	async impersonateUser(userId: string, reason: string): Promise<ApiResponse<ImpersonationGrantData>> {
+		return this.request<ImpersonationGrantData>(
+			`/api/admin/users/${encodeURIComponent(userId)}/impersonate`,
+			{ method: 'POST', body: { reason } },
+		);
+	}
+
+	async stopImpersonation(): Promise<ApiResponse<{ stopped: boolean }>> {
+		return this.request<{ stopped: boolean }>('/api/impersonation/stop', { method: 'POST', body: {} });
+	}
+
+	async extendImpersonation(): Promise<ApiResponse<ImpersonationGrantData>> {
+		return this.request<ImpersonationGrantData>('/api/impersonation/extend', { method: 'POST', body: {} });
+	}
+
+	async getImpersonationStatus(): Promise<ApiResponse<ImpersonationStatusData>> {
+		return this.request<ImpersonationStatusData>('/api/impersonation/status', { method: 'GET' }, true);
 	}
 
 	// ---- Organizations (Phase 2.2) ----

@@ -22,30 +22,13 @@ import {
     ImpersonationError,
 } from '../../../database/services/ImpersonationService';
 import type { ImpersonationSession } from '../../../database/schema';
+import type { ImpersonationGrantData, ImpersonationStatusData } from './types';
+
+export type { ImpersonationGrantData, ImpersonationStatusData } from './types';
 
 const startBodySchema = z.object({
     reason: z.string().trim().min(1, 'A reason is required to impersonate.').max(500, 'Reason is too long.'),
 });
-
-/** A grant as the SPA needs it — drives the banner + the extend countdown. */
-export interface ImpersonationGrantData {
-    targetUserId: string;
-    readOnly: boolean;
-    expiresAt: string;
-    absoluteExpiresAt: string;
-    extendCount: number;
-}
-
-/** Current impersonation state for the SPA (null-ish when not impersonating). */
-export interface ImpersonationStatusData {
-    impersonating: boolean;
-    target?: { id: string; displayName?: string; email: string };
-    reason?: string;
-    readOnly?: boolean;
-    expiresAt?: string;
-    absoluteExpiresAt?: string;
-    extendCount?: number;
-}
 
 export class ImpersonationController extends BaseController {
     static logger = createLogger('ImpersonationController');
