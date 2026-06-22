@@ -21,7 +21,11 @@ interface DeploymentControlsProps {
 	// Generation state (kept for compatibility but pause button will not be rendered)
 	isGenerating: boolean;
 	isPaused: boolean;
-	
+
+	// Org collaboration: false for a read-only viewer (another member holds the
+	// single-driver seat) — deploy/redeploy are disabled until they take over.
+	canDeploy?: boolean;
+
 	// Actions
 	onDeploy: (instanceId: string) => void;
 	onStopGeneration: () => void;
@@ -48,6 +52,7 @@ export function DeploymentControls({
 	deploymentError,
 	appId,
 	appVisibility = 'private',
+	canDeploy = true,
 	onDeploy,
 	onVisibilityUpdate,
 }: DeploymentControlsProps) {
@@ -265,7 +270,8 @@ export function DeploymentControls({
 						{/* Enhanced Deploy Button - Always visible, state-aware */}
 						<Button
 							onClick={handleDeploy}
-							disabled={stateConfig.buttonDisabled || isCurrentlyDeploying || isDeployButtonClicked}
+							disabled={stateConfig.buttonDisabled || isCurrentlyDeploying || isDeployButtonClicked || !canDeploy}
+							title={!canDeploy ? 'Another member is driving — take over to deploy' : undefined}
 							className={clsx(
 								"h-8 px-4 text-sm font-medium transition-all duration-300 transform",
 								stateConfig.buttonClass
@@ -411,7 +417,8 @@ export function DeploymentControls({
 						{isRedeployReady && (
 							<Button
 								onClick={handleDeploy}
-								disabled={isDeploying || isDeployButtonClicked}
+								disabled={isDeploying || isDeployButtonClicked || !canDeploy}
+								title={!canDeploy ? 'Another member is driving — take over to deploy' : undefined}
 								variant="secondary"
 								className={clsx(
 									"h-10 text-sm font-medium transition-all duration-200 shadow-sm",

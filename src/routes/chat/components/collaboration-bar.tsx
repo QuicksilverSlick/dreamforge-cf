@@ -54,7 +54,11 @@ export function CollaborationBar({
 			: 'Open — start typing to drive';
 
 	return (
-		<div className="mb-2 rounded-lg border border-accent/30 bg-bg-3 px-3 py-2 text-sm">
+		<div
+			role="status"
+			aria-live="polite"
+			className="mb-2 rounded-lg border border-accent/30 bg-bg-3 px-3 py-2 text-sm"
+		>
 			<div className="flex items-center gap-3">
 				<TooltipProvider>
 					<div className="flex -space-x-2">

@@ -621,6 +621,7 @@ export default function Chat() {
 											isGeneratingBlueprint
 										}
 										isPaused={isGenerationPaused}
+										canDeploy={!isReadOnlyViewer}
 										onDeploy={handleDeployToCloudflare}
 										onStopGeneration={handleStopGeneration}
 										onResumeGeneration={

@@ -92,7 +92,7 @@ import {
     handleWebSocketMessage,
     handleWebSocketClose,
 } from './codingAgentWebsocket';
-import { readConnectionIdentity, broadcastPresence } from './presence';
+import { readConnectionIdentity, broadcastPresence, handlePresenceOnClose, connectionForErrorOrRethrow } from './presence';
 import {
     WebSocketMessageData,
     WebSocketMessageType,
@@ -340,7 +340,10 @@ export class CodeGeneratorAgent
             const isCreator = identity?.userId === this.state.metadata.userId;
             const blob = isCreator ? readTokenCookie(ctx.request, this.env) : null;
             const nextToken = blob || this.state.cloudflareToken;
-            const nextOrigin = origin || this.state.wsOrigin;
+            // wsOrigin is replayed alongside the creator's CF token on usage/billing
+            // checks, so only the creator's connection may set it — a member's origin
+            // must never overwrite the creator's.
+            const nextOrigin = isCreator ? (origin || this.state.wsOrigin) : this.state.wsOrigin;
             if (nextToken !== this.state.cloudflareToken || nextOrigin !== this.state.wsOrigin) {
                 this.setState({ ...this.state, cloudflareToken: nextToken, wsOrigin: nextOrigin });
             }
@@ -725,6 +728,35 @@ export class CodeGeneratorAgent
 
     async onClose(connection: Connection): Promise<void> {
         handleWebSocketClose(this, connection);
+    }
+
+    /**
+     * SDK error hook (overloaded: `onError(connection, error)` for a socket
+     * failure, `onError(error)` for a server-level one).
+     *
+     * MUST stay SYNCHRONOUS and re-throw server-level errors: the `agents` SDK
+     * calls `throw this.onError(e)` in `sql()` and `_tryCatch` (which wraps
+     * onStart/onConnect/onMessage/onRequest/RPC), so an async hook — or one that
+     * swallows — would surface a *Promise* instead of the real error and starve
+     * Sentry of the stack. For a socket failure we instead free the driver seat
+     * (an abnormal drop can skip `onClose`; `handlePresenceOnClose` is
+     * idempotent, so an error-then-close sequence is harmless) and DON'T throw,
+     * so a dead connection can't crash the DO.
+     */
+    onError(connectionOrError: unknown, error?: unknown): void {
+        let connection: Connection;
+        try {
+            connection = connectionForErrorOrRethrow(connectionOrError);
+        } catch (serverError) {
+            this.logger().error('Agent server error', { error: serverError });
+            throw serverError;
+        }
+        this.logger().warn('WebSocket connection error', { error });
+        try {
+            handlePresenceOnClose(this, connection);
+        } catch (presenceError) {
+            this.logger().warn('Failed to free driver seat on WS error', { presenceError });
+        }
     }
 
     /**
