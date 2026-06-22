@@ -174,37 +174,12 @@ export interface BaseProjectState {
      */
     templateDetails?: TemplateDetails;
 
-    // -------------------------------------------------------------------
-    // Deprecated transitional fields. The canonical replacement for each
-    // lives in the parent block above, and `stateMigration.ts` translates
-    // legacy persisted payloads to the canonical names on hydration. They
-    // are still declared here because the live agent mirrors `agentMode`
-    // (`codingAgent.ts`) and `stateMigration.ts` rewrites it by type — so a
-    // straight removal also has to rebase those writers. Dropping the
-    // fields and the mirroring together is deferred to a follow-up.
-    // -------------------------------------------------------------------
-
-    /**
-     * @deprecated Use `metadata` (canonical). Required (not optional)
-     * because the live agent mirrors it from `metadata` on every state
-     * write; a future cleanup drops it once no reader depends on the mirror.
-     */
-    inferenceContext: import('../inferutils/config.types').InferenceContext;
-
-    /**
-     * @deprecated Use `behaviorType` (canonical). Required because the live
-     * agent mirrors it from `behaviorType` on every state write and
-     * `stateMigration.ts` rewrites it by type; dropped in the same future
-     * cleanup as the other deprecated fields.
-     */
-    agentMode: 'deterministic' | 'smart';
-
-    /**
-     * @deprecated Transient generation handle, never persisted. The
-     * single-agent topology tracks in-flight generation via
-     * behavior-internal state, leaving this state field vestigial.
-     */
-    generationPromise?: Promise<void>;
+    // The retired transitional fields `inferenceContext` (→ `metadata`),
+    // `agentMode` (→ `behaviorType`), and `generationPromise` are
+    // intentionally absent from the canonical shape. Legacy persisted
+    // payloads may still carry the first two; `stateMigration.ts` reads them
+    // from the raw record and translates them to their canonical names on
+    // hydration.
 }
 
 /** Phasic-behavior state. */

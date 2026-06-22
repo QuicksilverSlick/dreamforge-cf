@@ -186,12 +186,6 @@ export class CodeGeneratorAgent
         currentDevState: CurrentDevState.IDLE,
         phasesCounter: MAX_PHASES,
         clientReportedErrors: [],
-        inferenceContext: {
-            agentId: '',
-            userId: '',
-            enableRealtimeCodeFix: false,
-        } as unknown as PhasicState['inferenceContext'],
-        agentMode: 'deterministic',
     } as AgentState;
 
     constructor(ctx: AgentContext, env: Env) {

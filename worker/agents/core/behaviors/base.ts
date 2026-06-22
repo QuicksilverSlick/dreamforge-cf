@@ -111,6 +111,7 @@ import type {
     InferenceRuntimeOverrides,
     ModelConfig,
 } from '../../inferutils/config.types';
+import { buildInferenceContext } from './inferenceContext';
 import { FastCodeFixerOperation } from '../../operations/FastCodeFixer';
 import { SimpleCodeGenerationOperation } from '../../operations/SimpleCodeGeneration';
 import { ImageGenerationOperation, type GeneratedImageResult } from '../../operations/ImageGeneration';
@@ -2221,16 +2222,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         // through yet.
         this.getOrCreateAbortController();
 
-        return {
-            ...this.state.metadata,
-            userModelConfigs: this.userModelConfigs,
-            // Honor the toggles the controller persisted into state rather
-            // than hardcoding policy here — otherwise the behavior path
-            // ignores `enableFastSmartCodeFix` / `enableRealtimeCodeFix`
-            // chosen at agent creation.
-            enableRealtimeCodeFix: this.state.inferenceContext?.enableRealtimeCodeFix ?? false,
-            enableFastSmartCodeFix: this.state.inferenceContext?.enableFastSmartCodeFix ?? false,
-        };
+        // Toggles are forced off in `buildInferenceContext` — see its doc
+        // comment for why we do not honor `metadata.enable*CodeFix` yet.
+        return buildInferenceContext(this.state.metadata, this.userModelConfigs);
     }
 
     // ==========================================

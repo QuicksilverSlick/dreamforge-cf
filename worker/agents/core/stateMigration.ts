@@ -278,13 +278,10 @@ export class StateMigration {
                 delete stateWithDeprecated.templateDetails;
             }
             if (isStateWithAgentMode(state)) {
-                // `agentMode` is a required (mirrored) field on
-                // BaseProjectState rather than legacy-only, so we rewrite it
-                // to match the new `behaviorType` rather than deleting it.
-                // Once a follow-up removes `agentMode` from the type, this
-                // branch becomes a delete again.
-                stateWithDeprecated.agentMode =
-                    migratedBehaviorType === 'agentic' ? 'smart' : 'deterministic';
+                // `agentMode` is gone from the canonical type — its value was
+                // already mapped into `behaviorType` above, so strip the
+                // legacy key from hydrated state.
+                delete stateWithDeprecated.agentMode;
             }
 
             return newState;
