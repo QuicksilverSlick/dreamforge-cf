@@ -865,6 +865,12 @@ export class AuthService extends BaseService {
      * target's OWN current working org is resolved (resolveUserDefaultOrg —
      * NOT the actor's session, which could never match the target), and the real
      * actor is stamped onto the returned AuthUser for audit/attribution/banner.
+     *
+     * FAIL-SAFE: the impersonation subsystem must NEVER be able to break base
+     * auth. Any error in the grant/target/org resolution degrades to null (act as
+     * the actor themselves, non-impersonated) rather than failing the whole
+     * token validation — otherwise a transient grant-table issue would 401 the
+     * operator out entirely (it once did, when migration 0012 lagged the deploy).
      */
     private async tryResolveImpersonation(
         actor: AuthUser,
@@ -873,23 +879,31 @@ export class AuthService extends BaseService {
         if (!actorRoleMayImpersonate(actor.role)) {
             return null;
         }
-        const grant = await this.impersonationService.resolveActiveGrant(sessionId);
-        if (!grant || grant.actorUserId !== actor.id) {
+        try {
+            const grant = await this.impersonationService.resolveActiveGrant(sessionId);
+            if (!grant || grant.actorUserId !== actor.id) {
+                return null;
+            }
+            const target = await this.getUserForAuth(grant.targetUserId);
+            if (!target || !targetRoleMayBeImpersonated(target.role)) {
+                return null;
+            }
+            const activeOrg = await this.organizationService.resolveUserDefaultOrg(target.id);
+            return {
+                ...target,
+                orgId: activeOrg.orgId,
+                orgRole: activeOrg.orgRole,
+                impersonatedBy: actor.id,
+                impersonatorRole: actor.role,
+                impersonationReadOnly: grant.readOnly,
+            };
+        } catch (error) {
+            logger.error('Impersonation resolution failed; continuing as the actor', {
+                actorId: actor.id,
+                error,
+            });
             return null;
         }
-        const target = await this.getUserForAuth(grant.targetUserId);
-        if (!target || !targetRoleMayBeImpersonated(target.role)) {
-            return null;
-        }
-        const activeOrg = await this.organizationService.resolveUserDefaultOrg(target.id);
-        return {
-            ...target,
-            orgId: activeOrg.orgId,
-            orgRole: activeOrg.orgRole,
-            impersonatedBy: actor.id,
-            impersonatorRole: actor.role,
-            impersonationReadOnly: grant.readOnly,
-        };
     }
 
     /**
