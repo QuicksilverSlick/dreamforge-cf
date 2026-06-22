@@ -23,19 +23,16 @@
  *     `syncPackageJsonFromSandbox`, `runStaticAnalysisCode`,
  *     `applyDeterministicCodeFixes`, screenshot, deep-debug).
  *
- * **Wiring state.** This class is NOT yet referenced by the new
- * `CodeGeneratorAgent` (`worker/agents/core/codingAgent.ts:onStart`
- * throws before constructing a behavior). `SimpleCodeGeneratorAgent`
- * remains the live runtime path until M3 commit 4. Atomic-green
- * compile is the only gate this slice has to clear.
+ * **Wiring state.** `CodeGeneratorAgent` (`codingAgent.ts`) constructs a
+ * concrete subclass of this base — `PhasicCodingBehavior` or
+ * `AgenticCodingBehavior` — in its `onStart` factory; this is the live
+ * generation surface.
  *
  * **Adaptations vs upstream** (documented inline at each call site):
  *   - Drops `implements ICodingAgent`: fork's `ICodingAgent` (the tool-
  *     wrapper abstract class in `worker/agents/services/interfaces/`)
  *     has narrower signatures than `ICodingBehavior` (3-arg
  *     `deployToSandbox` vs 4, 0-arg `deployToCloudflare` vs 1).
- *     `CodingAgentInterface` continues to wrap `SimpleCodeGeneratorAgent`
- *     until commit 4 cuts over.
  *   - `BaseSandboxService.getTemplateDetails(name)` is an instance
  *     method on the fork (upstream is static); `ensureTemplateDetails`
  *     fetches a client via `getSandboxService(...)` to call it.
@@ -1008,7 +1005,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
     /**
      * Run static analysis (lint + typecheck) against the generated
-     * files via the sandbox service. Lifted from
+     * files via the sandbox service. Lifted from the fork's retired
      * `SimpleCodeGeneratorAgent` (the fork-proven, sandbox-backed path)
      * rather than upstream `behaviors/base.ts`, which routes through an
      * `InMemoryAnalyzer` the fork does not have. Returns an empty
@@ -1088,7 +1085,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     /**
      * Apply deterministic code fixes for common TypeScript errors via
      * the fork's `fixProjectIssues` (3-arg, async, with a sandbox file
-     * fetcher). Lifted from `SimpleCodeGeneratorAgent`; upstream's
+     * fetcher). Lifted from the fork's retired `SimpleCodeGeneratorAgent`; upstream's
      * `behaviors/base.ts` calls a 2-arg synchronous `fixProjectIssues`
      * shape that does not exist in the fork. Unfixable `TS2307` issues
      * are translated into `bun install` commands so missing external
@@ -1262,8 +1259,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
     /**
      * Aggregate the runtime errors, static-analysis findings, and
-     * client-reported errors that drive phase generation. Lifted from
-     * `SimpleCodeGeneratorAgent`. The fork's `AllIssues` carries
+     * client-reported errors that drive phase generation. Lifted from the
+     * fork's retired `SimpleCodeGeneratorAgent`. The fork's `AllIssues`
+     * carries
      * `clientErrors`, sourced from `state.clientReportedErrors`.
      */
     async fetchAllIssues(resetIssues: boolean = false): Promise<AllIssues> {
@@ -1288,7 +1286,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     /**
      * Execute a batch of sandbox commands in chunks, retrying failed
      * install commands via the project-setup assistant when
-     * `shouldRetry` is set. Lifted from `SimpleCodeGeneratorAgent`;
+     * `shouldRetry` is set. Lifted from the fork's retired `SimpleCodeGeneratorAgent`;
      * successful commands are appended to `state.commandsHistory`.
      */
     protected async executeCommands(
@@ -1431,7 +1429,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
     /**
      * Delete files from the file manager and remove them from the
-     * sandbox via `rm -rf`. Lifted from `SimpleCodeGeneratorAgent`.
+     * sandbox via `rm -rf`. Lifted from the fork's retired `SimpleCodeGeneratorAgent`.
      */
     async deleteFiles(filePaths: string[]): Promise<void> {
         const deleteCommands: string[] = [];
@@ -1538,8 +1536,8 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
     /**
      * Build the model-configuration info surfaced to the frontend
-     * (defaults merged with per-user overrides). Lifted from
-     * `SimpleCodeGeneratorAgent` and properly typed against
+     * (defaults merged with per-user overrides). Lifted from the fork's
+     * retired `SimpleCodeGeneratorAgent` and properly typed against
      * `ModelConfigsInfo` — the fork's `ModelConfigService` has no
      * `getModelConfigsInfo` method (upstream `behaviors/base.ts`
      * delegates to one that doesn't exist here), and simpleGen's

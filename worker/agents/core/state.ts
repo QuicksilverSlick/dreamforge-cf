@@ -164,50 +164,45 @@ export interface BaseProjectState {
     conversationMessages: ConversationMessage[];
 
     /**
-     * **Transitional, removed in commit 5.** Upstream replaces this whole-
-     * object field with `templateName: string` and fetches `TemplateDetails`
-     * on-demand from the sandbox. The fork's `FileManager` and
-     * `GenerationContext` currently read the embedded object directly; once
-     * commit 5 rebases those operations against upstream's pattern, this
-     * field disappears. Until then it's optional so legacy persisted state
-     * still satisfies the type, and the migration in `stateMigration.ts`
-     * strips it from canonical state on hydration.
+     * **Transitional.** Upstream replaces this whole-object field with
+     * `templateName: string` and fetches `TemplateDetails` on-demand from
+     * the sandbox. The fork's `FileManager` and `GenerationContext` still
+     * read the embedded object directly; a future rebase onto upstream's
+     * pattern drops this field. Until then it's optional so legacy persisted
+     * state still satisfies the type, and the migration in
+     * `stateMigration.ts` strips it from canonical state on hydration.
      */
     templateDetails?: TemplateDetails;
 
     // -------------------------------------------------------------------
-    // Deprecated fields — kept optional only while the legacy
-    // `simpleGeneratorAgent.ts` + `smartGeneratorAgent.ts` files still
-    // exist. Commit 4 of the M3 sequence deletes those files; this block
-    // is removed in the same commit. They exist here so every commit in
-    // the M3 sequence is typecheck-clean (atomic-green-commits is best
-    // practice for multi-commit PRs — bisectability, meaningful CI
-    // signal, partial-revert safety). The runtime canonical field for
-    // each is in the parent block above; the migration in
-    // `stateMigration.ts` translates legacy persisted payloads to the
-    // canonical names.
+    // Deprecated transitional fields. The canonical replacement for each
+    // lives in the parent block above, and `stateMigration.ts` translates
+    // legacy persisted payloads to the canonical names on hydration. They
+    // are still declared here because the live agent mirrors `agentMode`
+    // (`codingAgent.ts`) and `stateMigration.ts` rewrites it by type — so a
+    // straight removal also has to rebase those writers. Dropping the
+    // fields and the mirroring together is deferred to a follow-up.
     // -------------------------------------------------------------------
 
     /**
-     * @deprecated Use `metadata` (canonical) — removed in M3 commit 4.
-     * Required (not optional) during the transition so legacy callsites
-     * in `simpleGeneratorAgent.ts` can read `.agentId` / `.userId`
-     * without null-guards. New code (commits 2+) mirrors this from
-     * `metadata` on every state write.
+     * @deprecated Use `metadata` (canonical). Required (not optional)
+     * because the live agent mirrors it from `metadata` on every state
+     * write; a future cleanup drops it once no reader depends on the mirror.
      */
     inferenceContext: import('../inferutils/config.types').InferenceContext;
 
     /**
-     * @deprecated Use `behaviorType` (canonical) — removed in M3 commit 4.
-     * Required during the transition; mirrored from `behaviorType` on
-     * every state write by new code.
+     * @deprecated Use `behaviorType` (canonical). Required because the live
+     * agent mirrors it from `behaviorType` on every state write and
+     * `stateMigration.ts` rewrites it by type; dropped in the same future
+     * cleanup as the other deprecated fields.
      */
     agentMode: 'deterministic' | 'smart';
 
     /**
-     * @deprecated Transient generation handle, never persisted. The new
-     * agent topology tracks in-flight generation via behavior-internal
-     * state. Removed in M3 commit 4.
+     * @deprecated Transient generation handle, never persisted. The
+     * single-agent topology tracks in-flight generation via
+     * behavior-internal state, leaving this state field vestigial.
      */
     generationPromise?: Promise<void>;
 }

@@ -104,17 +104,15 @@ export interface GitVersionControl {
 
 /**
  * Behavior surface that `CodeGeneratorAgent` (`codingAgent.ts`) calls
- * into. Concrete implementations land as `PhasicCodingBehavior` and
- * `AgenticCodingBehavior` in items 10–12 of `M3_COMMIT2_DEPMAP.md` §8.
+ * into. Concrete implementations are `PhasicCodingBehavior` and
+ * `AgenticCodingBehavior` (`behaviors/phasic.ts` / `agentic.ts`).
  * Behaviors extend `AgentComponent<TState>` and own all generation-
  * orchestration logic so the DO class stays thin (lifecycle wiring +
  * websocket / persistence only).
  *
  * The 15 methods below are everything `codingAgent.ts` touches on
  * `this.behavior`. Signatures match upstream `behaviors/base.ts`
- * verbatim; divergences from the fork's existing `simpleGeneratorAgent`
- * are intentional — the behavior contract reflects the NEW agent
- * topology, not the legacy live runtime path. See
+ * verbatim; the contract reflects the single-agent topology. See
  * `docs/m3/ICodingBehavior-design.md` for the per-method call-site
  * mapping and the rationale for each signature.
  */

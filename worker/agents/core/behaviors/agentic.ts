@@ -32,13 +32,10 @@
  *     can construct this class, but generation routes through
  *     `PhasicCodingBehavior` until M4.
  *
- * **Wiring state.** Slice 2b.16 wires the behavior factory in
- * `codingAgent.onStart` to construct this class for `behaviorType ===
- * 'agentic'`. Until M4 ports the real `AgenticProjectBuilderOperation`,
- * the factory only ever routes to `PhasicCodingBehavior` (the live
- * agentic path post-commit-4), so the `build()` throw is never hit in
- * practice; the live runtime path remains `SimpleCodeGeneratorAgent`
- * until M3 commit 4.
+ * **Wiring state.** The behavior factory in `codingAgent.onStart`
+ * constructs this class for `behaviorType === 'agentic'`. Until the real
+ * `AgenticProjectBuilderOperation` is ported, generation routes through
+ * `PhasicCodingBehavior`, so the `build()` throw is never hit in practice.
  *
  * **Adaptations vs upstream:**
  *   - Fork's `Blueprint` schema is strict and has many required
