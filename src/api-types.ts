@@ -117,7 +117,8 @@ export type {
   CodeFixEdits,
   ModelConfigsInfo,
   ModelConfigsInfoMessage,
-  AgentDisplayConfig
+  AgentDisplayConfig,
+  PresenceMember
 } from 'worker/api/websocketTypes';
 
 // Database/Schema Types commonly used in frontend
