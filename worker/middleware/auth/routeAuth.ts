@@ -14,6 +14,9 @@ import { AppEnv } from '../../types/appenv';
 import { RateLimitExceededError } from 'shared/types/errors';
 import * as Sentry from '@sentry/cloudflare';
 import { getUserConfigurableSettings } from 'worker/config';
+import { evaluateImpersonationPolicy } from './impersonationPolicy';
+import { AuditLogService, AdminAuditAction } from '../../database/services/AuditLogService';
+import { extractRequestMetadata } from '../../utils/authUtils';
 
 const logger = createLogger('RouteAuth');
 
@@ -222,7 +225,14 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
         user = userSession.user;
         c.set('user', user);
 		c.set('sessionId', userSession.sessionId);
-		Sentry.setUser({ id: user.id, email: user.email });
+		if (user.impersonatedBy) {
+			// Attribute errors to the REAL operator, not the impersonated user,
+			// and tag the impersonated target for forensics.
+			Sentry.setUser({ id: user.impersonatedBy });
+			Sentry.setTag('impersonating', user.id);
+		} else {
+			Sentry.setUser({ id: user.id, email: user.email });
+		}
 
         const config = await getUserConfigurableSettings(c.env, user.id);
         c.set('config', config);
@@ -238,12 +248,54 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
         }
     }
     
+    // Impersonation policy: deny block-listed routes (and, for a read-only
+    // session, any mutation) whenever the resolved identity is an impersonation —
+    // independent of the route's own auth level, enforced in the server not the UI.
+    if (user?.impersonatedBy) {
+        const denial = evaluateImpersonationPolicy(user, c.req.method, c.req.path);
+        if (denial) {
+            await auditImpersonationDenial(c, user, denial.reason);
+            return createForbiddenResponse(`Action not permitted while impersonating: ${denial.reason}.`);
+        }
+    }
+
     const params = c.req.param();
     const env = c.env;
     const result = await routeAuthChecks(user, env, requirement, params);
     if (!result.success) {
         logger.warn('Authentication check failed', result.response, requirement, user);
         return result.response;
+    }
+}
+
+/**
+ * Best-effort audit of a denied impersonated action (fail-open — a denial must
+ * never be blocked by audit-write health). actorId = the real operator.
+ */
+async function auditImpersonationDenial(
+    c: Context<AppEnv>,
+    user: AuthUser,
+    reason: string,
+): Promise<void> {
+    logger.warn('Impersonation policy denied a request', {
+        actorId: user.impersonatedBy,
+        targetId: user.id,
+        method: c.req.method,
+        path: c.req.path,
+        reason,
+    });
+    try {
+        await new AuditLogService(c.env).record({
+            actorId: user.impersonatedBy ?? user.id,
+            actorRole: user.impersonatorRole,
+            entityType: 'user',
+            entityId: user.id,
+            action: AdminAuditAction.IMPERSONATION_DENIED,
+            newValues: { method: c.req.method, path: c.req.path, reason },
+            metadata: extractRequestMetadata(c.req.raw),
+        });
+    } catch (error) {
+        logger.error('Failed to audit impersonation denial', error);
     }
 }
 

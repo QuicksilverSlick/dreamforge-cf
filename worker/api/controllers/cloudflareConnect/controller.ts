@@ -58,6 +58,23 @@ export class CloudflareConnectController extends BaseController {
 				);
 			}
 
+			// Impersonation: binding a Cloudflare account is a "money / deploy
+			// identity" action on the BLOCK-LIST. The OAuth state binds to user.id
+			// (the impersonated TARGET) and the /auth/callback that consumes it is
+			// public — so the impersonation policy (method+path gated) can't catch
+			// this GET. Refuse to mint the state here, so no valid callback can
+			// ever exist. (See worker/middleware/auth/impersonationPolicy.ts.)
+			if (user.impersonatedBy) {
+				this.logger.warn('Refusing Cloudflare connect during impersonation', {
+					actorId: user.impersonatedBy,
+					targetId: user.id,
+				});
+				return CloudflareConnectController.createErrorResponse(
+					'Connecting a Cloudflare account is not permitted while impersonating.',
+					403,
+				);
+			}
+
 			// CSRF: reject cross-site initiators. `Sec-Fetch-Site` is sent by all modern browsers;
 			// absent values (e.g. curl) are treated as trusted so server-to-server tests still work.
 			const fetchSite = request.headers.get('Sec-Fetch-Site');

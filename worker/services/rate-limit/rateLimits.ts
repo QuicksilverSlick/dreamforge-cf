@@ -18,8 +18,18 @@ export class RateLimitService {
 		return `platform:${rateLimitType}:${identifier}`;
 	}
 
+	/**
+	 * The accountable principal for rate-limiting + exemption. When a request is
+	 * an impersonation, this is the REAL actor (so an operator's exemption
+	 * follows them into the session and the impersonated user's quota is never
+	 * drained by the operator's activity); otherwise the user themselves.
+	 */
+	static principalId(user: AuthUser): string {
+		return user.impersonatedBy ?? user.id;
+	}
+
 	static async getUserIdentifier(user: AuthUser): Promise<string> {
-		return `user:${user.id}`;
+		return `user:${this.principalId(user)}`;
 	}
 
     static async getRequestIdentifier(request: Request): Promise<string> {
@@ -215,7 +225,7 @@ export class RateLimitService {
 		if (!config[RateLimitType.APP_CREATION].enabled) {
 			return;
 		}
-		if (this.isExemptUser(env, user.id)) {
+		if (this.isExemptUser(env, this.principalId(user))) {
 			return;
 		}
 		const identifier = await this.getUserIdentifier(user);
