@@ -14,12 +14,12 @@ It is a React 19 + Vite frontend backed by a Cloudflare Workers + Hono API and D
 
 **Important context:**
 - Core functionality: AI-powered webapp generation via Durable Objects (`CodeGeneratorAgent`, `UserAppSandboxService`)
-- Two parallel agent implementations live under `worker/agents/core/`:
-  - `simpleGeneratorAgent.ts` — the **live** path used by the exported `CodeGeneratorAgent` Durable Object (post-Phase-E-recovery)
-  - `smartGeneratorAgent.ts` — a TODO stub that is currently re-exported through `worker/index.ts` as the public DO class. The full smart-agent rewrite (Phase E mega-bundle, PRs 5/6/7/8 unified) is deferred behind the `agents@0.1.6` pin.
+- The **live** `CodeGenObject` Durable Object is `CodeGeneratorAgent` in `worker/agents/core/codingAgent.ts` — the single-agent topology from the M3 rewrite (a pluggable `ICodingBehavior`: `behaviors/phasic.ts` / `behaviors/agentic.ts`, plus a `ProjectObjective`). It is exported Sentry-wrapped from `worker/index.ts`; its WebSocket routing lives in `worker/agents/core/codingAgentWebsocket.ts`. The Phase E mega-bundle (smart-agent rewrite + the `agents` upgrade) has **landed** — `agents` is on `^0.2.32` (0.2.35 installed), not the old `0.1.6` pin.
+  - `simpleGeneratorAgent.ts` (`SimpleCodeGeneratorAgent`) + its handler `worker/agents/core/websocket.ts` are the **legacy** pre-rewrite path — still in-tree but no longer the exported DO. Many inline comments in these and adjacent files still claim `simpleGeneratorAgent.ts` "remains the live runtime path"; that is **stale** (cleanup debt).
+  - `smartGeneratorAgent.ts` is a vestigial stub (it just re-exports `SimpleCodeGeneratorAgent`) and is wired nowhere.
 - **BYOP (Bring Your Own Project)** is a first-class feature: a user can import an existing GitHub repository and the `CodebaseAnalyzer` Durable Object (`worker/agents/analyzer/codebaseAnalyzer.ts`) ingests it for AI iteration. See `docs/byop/README.md`.
 - Auth, secrets, and rate-limit subsystems are production-hardened (CSRF defense-in-depth, OAuth state HMAC, per-record salts, `__Host-` cookies, JWT secret validator, AI Gateway origin allowlist + JWT verify + D1 ownership check). The original "AI-generated, needs rewrite" caveat in the upstream README no longer applies to those areas.
-- Full Cloudflare stack: Workers, D1 (Drizzle ORM, migrations v1–v6), Durable Objects (SQLite), R2, KV, AI Gateway, Containers, Dispatch Namespaces.
+- Full Cloudflare stack: Workers, D1 (Drizzle ORM, migrations `0000`–`0011`, incl. the Phase 2 org tables), Durable Objects (SQLite, DO-migration tags v1–v6 in `wrangler.jsonc`), R2, KV, AI Gateway, Containers, Dispatch Namespaces.
 
 ## Development Commands
 
@@ -80,12 +80,12 @@ The heart of the system is a Durable Object that implements phased code generati
 5. **Diff Support**: Efficient file updates via unified-diff format
 
 ### Key Components
-- **Durable Object class** (live): `worker/agents/core/simpleGeneratorAgent.ts`
-- **Durable Object class** (stub, currently exported as `CodeGeneratorAgent`): `worker/agents/core/smartGeneratorAgent.ts` — pending mega-bundle land
+- **Durable Object class** (live `CodeGenObject`): `worker/agents/core/codingAgent.ts` (`CodeGeneratorAgent`) — exported Sentry-wrapped from `worker/index.ts`
+- **Legacy (dormant, not exported)**: `worker/agents/core/simpleGeneratorAgent.ts` (`SimpleCodeGeneratorAgent`) + the vestigial `worker/agents/core/smartGeneratorAgent.ts` stub
 - **Worker entrypoint**: `worker/index.ts` — wires Sentry, the three DOs (`CodeGeneratorAgent`, `DORateLimitStore`, `CodebaseAnalyzer`), and three routes (marketing, app/API, user-app subdomains)
 - **Hono app**: `worker/app.ts` — middleware stack + route mounting
 - **State management**: `worker/agents/core/state.ts`, `worker/agents/core/types.ts`
-- **WebSocket protocol**: `worker/agents/core/websocket.ts` (server) ↔ `src/routes/chat/utils/handle-websocket-message.ts` (client)
+- **WebSocket protocol**: `worker/agents/core/codingAgentWebsocket.ts` (live server message routing; reuses the send helpers in `worker/agents/core/websocket.ts`) ↔ `src/routes/chat/utils/handle-websocket-message.ts` (client). Message-type constants live in `worker/agents/core/constants.ts`; payload shapes in `worker/api/websocketTypes.ts`.
 - **Sandbox container**: `worker/services/sandbox/sandboxSdkClient.ts` (preview / build execution)
 - **Codebase analyzer (BYOP)**: `worker/agents/analyzer/codebaseAnalyzer.ts` — Durable Object that ingests imported repositories
 
@@ -107,8 +107,8 @@ IP-host requests are 403'd. The Sentry wrapper (`Sentry.withSentry`) instruments
 
 ## Areas Still Evolving
 
-### Smart agent rewrite (Phase E mega-bundle)
-`SmartCodeGeneratorAgent` is a TODO stub. The full agent rewrite, the corresponding `agents@0.1.6 → 0.2.32` upgrade, the new MCP-SDK calls in the BYOP tests, and the unified PRs 5/6/7/8 are blocked on this deferred work.
+### Smart agent rewrite (Phase E mega-bundle) — LANDED
+The single-agent rewrite has shipped: `CodeGeneratorAgent` (`codingAgent.ts`) is the live DO, behaviors (`phasic` / `agentic`) are wired through `ICodingBehavior`, and `agents` is on `^0.2.32` (0.2.35 installed). Remaining debt is cosmetic: the dormant `simpleGeneratorAgent.ts` / `smartGeneratorAgent.ts` files and their stale "remains the live path" comments are still in-tree and can be removed. **SDK gotcha:** the base `Agent.onError(connOrErr, error)` (agents 0.2.x) *synchronously* `throw`s, and `Agent.sql()` / `Agent._tryCatch` do `throw this.onError(e)` — so any `onError` override must be **synchronous** and must re-throw server-level errors (only the socket-level branch may swallow).
 
 ### Sandbox modernization
 The sandbox container (`@cloudflare/sandbox 0.5.6`, `@cloudflare/containers 0.0.28`) is pinned. Upstream has progressed; bumps land separately from the mega-bundle.
@@ -116,9 +116,9 @@ The sandbox container (`@cloudflare/sandbox 0.5.6`, `@cloudflare/containers 0.0.
 ## Working with the Codebase
 
 ### Adding features to code generation
-1. Modify agent logic in `worker/agents/core/simpleGeneratorAgent.ts` (live) or `worker/agents/core/smartGeneratorAgent.ts` (post-bundle).
+1. Modify agent logic in `worker/agents/core/codingAgent.ts` (the live DO) and its behaviors (`worker/agents/core/behaviors/phasic.ts` / `agentic.ts`).
 2. Update state shapes in `worker/agents/core/state.ts` / `types.ts`.
-3. Add new message types in `worker/agents/core/websocket.ts`.
+3. Add new message-type constants in `worker/agents/core/constants.ts` (+ payload shapes in `worker/api/websocketTypes.ts`) and route them in `worker/agents/core/codingAgentWebsocket.ts`.
 4. Update the frontend handler in `src/routes/chat/utils/handle-websocket-message.ts` and `src/routes/chat/hooks/use-chat.ts`.
 
 ### Cloudflare-specific patterns
@@ -160,7 +160,7 @@ Required in `.dev.vars` for local development (and `.prod.vars` for deploys):
 4. Review DO state via Cloudflare dashboard → Durable Objects → `CodeGenObject`.
 
 ### Working with Durable Objects
-- `CodeGenObject` → class `CodeGeneratorAgent` (Sentry-wrapped export of `SmartCodeGeneratorAgent` from `worker/index.ts`)
+- `CodeGenObject` → class `CodeGeneratorAgent` from `worker/agents/core/codingAgent.ts` (Sentry-wrapped export in `worker/index.ts`)
 - `Sandbox` → class `UserAppSandboxService` (from `@cloudflare/sandbox`)
 - `DORateLimitStore` → class `DORateLimitStore` (from `worker/services/rate-limit/DORateLimitStore.ts`)
 - `CodebaseAnalyzerObject` → class `CodebaseAnalyzer` (from `worker/agents/analyzer/codebaseAnalyzer.ts`)
