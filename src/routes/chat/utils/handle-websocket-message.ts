@@ -780,6 +780,11 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             case 'presence_update':
                 setPresenceMembers(message.members);
                 setCurrentDriverId(message.currentDriverUserId);
+                // The seat is now open (driver left / released) — drop any stale
+                // "someone is driving — take over" banner so it can't get stuck.
+                if (message.currentDriverUserId === null) {
+                    setDrivingBlockedBy(null);
+                }
                 break;
             case 'driving_blocked':
                 // Soft single-driver block: surface who's driving so the UI can

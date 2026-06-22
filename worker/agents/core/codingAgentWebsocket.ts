@@ -35,13 +35,17 @@ import { ensureCanDrive, claimDriver, releaseDriver, handlePresenceOnClose } fro
  * credits). Gated by the single-driver seat: only the current driver runs them;
  * a non-driver is soft-blocked with a take-over affordance. Read-only commands
  * (model configs, conversation state) and the driver claim/release are NOT here.
+ *
+ * STOP_GENERATION is deliberately NOT gated: halting a runaway generation only
+ * CANCELS inference (it stops spend, it doesn't drive new work), so any member
+ * watching a shared session must be able to pull the brake even when another
+ * member holds the seat.
  */
 const DRIVING_COMMANDS = new Set<string>([
     WebSocketMessageRequests.GENERATE_ALL,
     WebSocketMessageRequests.DEPLOY,
     WebSocketMessageRequests.PREVIEW,
     WebSocketMessageRequests.CAPTURE_SCREENSHOT,
-    WebSocketMessageRequests.STOP_GENERATION,
     WebSocketMessageRequests.RESUME_GENERATION,
     WebSocketMessageRequests.USER_SUGGESTION,
     WebSocketMessageRequests.CLEAR_CONVERSATION,

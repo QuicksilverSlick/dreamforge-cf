@@ -289,16 +289,20 @@ export class CodingAgentController extends BaseController {
 
                 // Stamp the resolved user's identity onto the upgrade request so the
                 // DO can attach it to this connection (presence + driver coordination).
-                // WS frames carry no auth, so the handshake is the one chance. Fail-safe:
-                // if reconstruction fails, forward the original request so the editor
-                // still connects (presence simply won't have this viewer's identity).
-                let upgradeRequest = request;
+                // WS frames carry no auth, so the handshake is the one chance.
+                // setIdentityHeaders OVERWRITES/strips any client-supplied x-df-* so a
+                // forged identity can't ride in (header ops can't throw, so they run
+                // unguarded). If the request itself can't be reconstructed we REJECT
+                // rather than forward the original — forwarding would leak the
+                // un-sanitized client headers; the client simply retries the upgrade.
+                const upgradeHeaders = new Headers(request.headers);
+                setIdentityHeaders(upgradeHeaders, user);
+                let upgradeRequest: Request;
                 try {
-                    const upgradeHeaders = new Headers(request.headers);
-                    setIdentityHeaders(upgradeHeaders, user);
                     upgradeRequest = new Request(request, { headers: upgradeHeaders });
                 } catch (identityError) {
-                    this.logger.warn('Failed to stamp identity on WS upgrade; forwarding original', identityError);
+                    this.logger.warn('Failed to reconstruct WS upgrade request with identity', identityError);
+                    return CodingAgentController.createErrorResponse('WebSocket upgrade failed', 500);
                 }
 
                 // Let the agent handle the WebSocket connection directly

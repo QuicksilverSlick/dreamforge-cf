@@ -44,8 +44,13 @@ export function setIdentityHeaders(
 ): void {
     headers.set(USER_ID_HEADER, user.id);
     headers.set(USER_NAME_HEADER, user.displayName || user.email || 'Member');
+    // Overwrite the avatar with the resolved value, or DELETE it when the user has
+    // none — otherwise a client-forged x-df-user-avatar header would survive the
+    // handshake and show a spoofed avatar for this viewer in everyone's roster.
     if (user.avatarUrl) {
         headers.set(USER_AVATAR_HEADER, user.avatarUrl);
+    } else {
+        headers.delete(USER_AVATAR_HEADER);
     }
 }
 
@@ -60,6 +65,42 @@ export function readConnectionIdentity(request: Request): ConnectionIdentity | n
         displayName: request.headers.get(USER_NAME_HEADER) || 'Member',
         avatar: request.headers.get(USER_AVATAR_HEADER) || null,
     };
+}
+
+/**
+ * Structural guard for the SDK's overloaded error hook: `onError(connection,
+ * error)` for a socket-level failure vs `onError(error)` for a server-level one.
+ * Lets the agent tell whether it was handed a connection (whose seat to free).
+ */
+export function isConnection(value: unknown): value is Connection {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'id' in value &&
+        'send' in value &&
+        typeof value.send === 'function'
+    );
+}
+
+/**
+ * Discriminate an SDK error-hook invocation (see `CodeGeneratorAgent.onError`).
+ * Returns the Connection for a socket-level error (whose driver seat the caller
+ * should free WITHOUT throwing — an abnormal drop can skip onClose, and a dead
+ * socket must not crash the DO), or RE-THROWS a server-level error unchanged.
+ *
+ * The re-throw is load-bearing and MUST stay synchronous: the `agents` SDK
+ * (v0.2.x, `Agent.sql()` and `Agent._tryCatch`, the latter wrapping onStart/
+ * onConnect/onMessage/onRequest/RPC) does `throw this.onError(e)`, relying on the
+ * hook to throw the real error synchronously. An async hook would make that
+ * surface a Promise instead of the error and starve observability of the stack.
+ */
+export function connectionForErrorOrRethrow(connectionOrError: unknown): Connection {
+    if (isConnection(connectionOrError)) {
+        return connectionOrError;
+    }
+    throw connectionOrError instanceof Error
+        ? connectionOrError
+        : new Error(String(connectionOrError));
 }
 
 function isIdentity(value: unknown): value is ConnectionIdentity {

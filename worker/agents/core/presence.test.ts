@@ -6,6 +6,9 @@
 import { describe, it, expect } from 'vitest';
 import {
     readConnectionIdentity,
+    setIdentityHeaders,
+    isConnection,
+    connectionForErrorOrRethrow,
     buildPresenceRoster,
     ensureCanDrive,
     claimDriver,
@@ -124,5 +127,74 @@ describe('presence + single-driver coordination', () => {
         const one = makeAgent([c1], 'u1');
         handlePresenceOnClose(one.agent, asConn(c1)); // last connection
         expect(one.agent.state.currentDriverUserId).toBeNull();
+    });
+});
+
+describe('identity header stamping', () => {
+    it('overwrites any client-supplied identity headers with the resolved user', () => {
+        const headers = new Headers({
+            'x-df-user-id': 'attacker',
+            'x-df-user-name': 'Attacker',
+            'x-df-user-avatar': 'evil.png',
+        });
+        setIdentityHeaders(headers, {
+            id: 'u1',
+            displayName: 'Alice',
+            email: 'a@x.com',
+            avatarUrl: 'alice.png',
+        });
+        expect(headers.get('x-df-user-id')).toBe('u1');
+        expect(headers.get('x-df-user-name')).toBe('Alice');
+        expect(headers.get('x-df-user-avatar')).toBe('alice.png');
+    });
+
+    it('strips a client-forged avatar header when the user has none', () => {
+        const headers = new Headers({ 'x-df-user-avatar': 'forged.png' });
+        setIdentityHeaders(headers, { id: 'u1', displayName: 'Alice', avatarUrl: null });
+        expect(headers.get('x-df-user-avatar')).toBeNull();
+    });
+
+    it('round-trips stamped identity back through readConnectionIdentity (email fallback)', () => {
+        const headers = new Headers();
+        setIdentityHeaders(headers, { id: 'u1', email: 'a@x.com', avatarUrl: null });
+        expect(readConnectionIdentity(new Request('https://x', { headers }))).toEqual({
+            userId: 'u1',
+            displayName: 'a@x.com',
+            avatar: null,
+        });
+    });
+});
+
+describe('isConnection guard (onError discrimination)', () => {
+    it('accepts a connection-shaped value and rejects bare errors', () => {
+        expect(isConnection(conn('c1', null))).toBe(true);
+        expect(isConnection(new Error('boom'))).toBe(false);
+        expect(isConnection(null)).toBe(false);
+        expect(isConnection('socket error')).toBe(false);
+        expect(isConnection({ id: 'x' })).toBe(false); // no send()
+    });
+});
+
+describe('connectionForErrorOrRethrow (onError SDK contract)', () => {
+    it('returns the connection for a socket-level error (caller frees the seat, no throw)', () => {
+        const c = conn('c1', ident('u1'));
+        expect(connectionForErrorOrRethrow(asConn(c))).toBe(c);
+    });
+
+    it('re-throws the SAME server-level Error synchronously (SDK does `throw this.onError(e)`)', () => {
+        const boom = new Error('boom');
+        let caught: unknown;
+        try {
+            connectionForErrorOrRethrow(boom);
+        } catch (e) {
+            caught = e;
+        }
+        // Must be the real Error — not a Promise — or the SDK's rethrow loses it.
+        expect(caught).toBe(boom);
+        expect(caught).toBeInstanceOf(Error);
+    });
+
+    it('wraps and throws a non-Error server-level value', () => {
+        expect(() => connectionForErrorOrRethrow('socket gone')).toThrow('socket gone');
     });
 });
