@@ -61,7 +61,6 @@ export async function cloneAgent(env: Env, agentId: string, logger: StructuredLo
         sandboxInstanceId: undefined,
         pendingUserInputs: [],
         currentDevState: 0,
-        generationPromise: undefined,
         shouldBeGenerating: false,
         // latestScreenshot: undefined,
         clientReportedErrors: [],

@@ -110,7 +110,11 @@ export class CodingAgentController extends BaseController {
                 // Undefined => createApp falls back to the user's personal org.
                 orgId: user.orgId,
                 enableRealtimeCodeFix: false, // This costs us too much, so disabled it for now
-                enableFastSmartCodeFix: true, // Post-phase AI fixer: catches semantic model slips the deterministic TS fixer cannot
+                // Post-phase AI fixer: catches semantic model slips the deterministic TS fixer cannot.
+                // NOTE: not honored yet — `behaviors/base.ts#getInferenceContext` forces both
+                // fixer toggles off regardless of this value. Honoring it (and the per-build AI
+                // cost it implies) is a deliberate, measured decision tracked as a follow-up.
+                enableFastSmartCodeFix: true,
             }
                                 
             this.logger.info(`Initialized inference context for user ${user.id}`, {
