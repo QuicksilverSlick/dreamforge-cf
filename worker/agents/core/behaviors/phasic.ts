@@ -13,8 +13,7 @@
  * execution helpers from slice 2b.17a (`fetchAllIssues`,
  * `executeCommands`, `deleteFiles`, `runStaticAnalysisCode`,
  * `applyDeterministicCodeFixes`) and the pre-deploy safety gate from
- * slice 2b.18. `simpleGeneratorAgent.ts` remains the live runtime path
- * until M3 commit 4.
+ * slice 2b.18.
  *
  * **What this slice delivers:**
  *   - `initialize()` — generate blueprint via `generateBlueprint`,
@@ -41,11 +40,10 @@
  *     deterministic/fast-smart fixes), and surfaces a deep-debug prompt
  *     if issues remain.
  *
- * **Wiring state.** Slice 2b.16 wires the behavior factory in
- * `codingAgent.onStart` to construct this class for `behaviorType ===
- * 'phasic'`. `build()` is now functional, but the live runtime path
- * remains `SimpleCodeGeneratorAgent` until M3 commit 4 flips the
- * `CodeGenObject` binding.
+ * **Wiring state.** The behavior factory in `codingAgent.onStart`
+ * constructs this class for `behaviorType === 'phasic'`, and `build()`
+ * drives the live phasic generation path — `CodeGeneratorAgent`
+ * (`codingAgent.ts`) is the exported `CodeGenObject` Durable Object.
  *
  * **Adaptations vs upstream:**
  *   - `generateBlueprint` does NOT accept `projectType` (fork's
@@ -482,8 +480,7 @@ export class PhasicCodingBehavior
      * `BaseCodingBehavior` execution helpers landed in slice 2b.17a
      * (`fetchAllIssues`, `executeCommands`, `deleteFiles`,
      * `runStaticAnalysisCode`, `applyDeterministicCodeFixes`) and the
-     * pre-deploy safety gate from slice 2b.18. `simpleGeneratorAgent.ts`
-     * remains the live runtime path until M3 commit 4.
+     * pre-deploy safety gate from slice 2b.18.
      */
     async build(): Promise<void> {
         // Warm the per-instance template-details cache before the state

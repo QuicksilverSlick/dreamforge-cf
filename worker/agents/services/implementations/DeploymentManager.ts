@@ -7,9 +7,8 @@ import type { StructuredLogger } from '../../../logger';
  *
  * The manager is intentionally stateless about which sandbox instance is
  * "current" — it pulls the id through {@link getSessionId} on every call
- * and reports new ids via {@link onSessionIdChange}. This keeps the live
- * `simpleGeneratorAgent` state authoritative while behaviors transition
- * to the new infrastructure contract.
+ * and reports new ids via {@link onSessionIdChange}. This keeps the
+ * owning agent's state authoritative for the active sandbox instance.
  */
 export interface DeploymentManagerOptions {
     sandboxClient: BaseSandboxService;
@@ -34,10 +33,9 @@ export interface DeploymentManagerOptions {
  * `worker/agents/core/AgentCore.ts`.
  *
  * Deliberately omits in-flight dedupe, 60s deploy timeout + session reset,
- * health-check polling, preview-url caching, and broadcast plumbing. Those
- * live in `simpleGeneratorAgent` until the behavior ports (M3 commit 2b
- * items 10–12) reveal which subset they actually need; this adapter exists
- * to satisfy the interface for the behavior compile.
+ * health-check polling, preview-url caching, and broadcast plumbing — the
+ * behavior layer handles broadcasts inline, and the remaining features are
+ * added back if a concrete behavior proves it needs them.
  */
 export class DeploymentManager implements IDeploymentManager {
     constructor(private readonly options: DeploymentManagerOptions) {}

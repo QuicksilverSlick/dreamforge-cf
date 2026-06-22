@@ -19,7 +19,7 @@
 
 import type { Connection } from 'agents';
 import { WebSocketMessageResponses } from '../constants';
-import { sendToConnection } from './websocket';
+import { sendToConnection } from './websocketHelpers';
 import type { CodeGeneratorAgent } from './codingAgent';
 import type { PresenceMember } from '../../api/websocketTypes';
 

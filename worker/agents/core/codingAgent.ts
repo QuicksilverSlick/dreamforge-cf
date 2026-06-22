@@ -1,23 +1,16 @@
 /**
- * `CodeGeneratorAgent` — the new single-agent DO topology landed by M3.
+ * `CodeGeneratorAgent` — the single-agent DO topology landed by M3 and the
+ * live `CodeGenObject` Durable Object, exported (Sentry-wrapped) from
+ * `worker/index.ts`.
  *
  * Ported from upstream `cloudflare/vibesdk` `worker/agents/core/codingAgent.ts`.
- * This file is the keystone of M3 commit 2b: it consumes the
- * `ICodingBehavior` interface (added to `AgentCore.ts` in the same slice
- * — see `docs/m3/ICodingBehavior-design.md`) so the agent class compiles
- * before the concrete `PhasicCodingBehavior` / `AgenticCodingBehavior`
- * implementations land (items 11 / 12 of `M3_COMMIT2_DEPMAP.md` §8).
- *
- * **Wiring state.** The class is NOT yet exported from `worker/index.ts`
- * — `simpleGeneratorAgent.ts` remains the live `CodeGenObject` Durable
- * Object class until M3 commit 4. This port establishes the new shape
- * for downstream slices to fill in; it must `typecheck + lint + test +
- * build` cleanly but does not have to RUN end-to-end yet.
+ * It consumes the `ICodingBehavior` interface (`AgentCore.ts` — see
+ * `docs/m3/ICodingBehavior-design.md`) and delegates all generation
+ * orchestration to the concrete behavior the `onStart` factory selects
+ * (`PhasicCodingBehavior` / `AgenticCodingBehavior`), keeping the DO class
+ * thin: lifecycle wiring, persistence, and websocket routing only.
  *
  * **Adaptations vs upstream** (each documented inline where it bites):
- *   - Behavior factory in `onStart` throws — the `PhasicCodingBehavior`
- *     and `AgenticCodingBehavior` classes don't exist in the fork yet.
- *     This is the explicit blocker that items 11 / 12 unblock.
  *   - `git`: fork ships `GitVersionControlStub` (informative no-op) —
  *     upstream's `getHead()` / `.fs.exportGitObjects()` accessors don't
  *     exist on the stub interface, so `gitInit` and `exportGitObjects`
@@ -26,19 +19,14 @@
  *     `projectName` (strings, not lambdas) — constructed lazily via
  *     getter after state has been initialized.
  *   - `FileManager`: fork takes a single `IStateManager` arg; the state
- *     manager is built from `() => this.state as PhasicState` —
- *     transitional narrowing through the discriminated union, valid
- *     because behaviors that need `AgenticState` aren't ported yet.
+ *     manager is built from `() => this.state as PhasicState` — narrowing
+ *     through the discriminated union, valid because phasic is the default
+ *     state shape.
  *   - `WsTicketManager` / `SecretsClient.notifyUnlocked` patterns are
  *     out of scope: the fork tombstoned `UserSecretsStore` (DO migration
  *     v5) and doesn't ship a ticket-manager class. The vault, ticket-
  *     storage, and `getDecryptedSecret` methods are omitted; the
  *     controller layer handles secret access via D1.
- *   - `onMessage` is a stub that logs + broadcasts a "not yet wired"
- *     error: the existing `handleWebSocketMessage` (websocket.ts:10) is
- *     typed against `SimpleCodeGeneratorAgent`; widening it to accept
- *     this class is out of scope for the keystone slice and lands when
- *     behaviors take over the WS message types.
  */
 
 import {
@@ -87,7 +75,7 @@ import {
 import {
     broadcastToConnections,
     sendToConnection,
-} from './websocket';
+} from './websocketHelpers';
 import {
     handleWebSocketMessage,
     handleWebSocketClose,
@@ -292,14 +280,11 @@ export class CodeGeneratorAgent
         // behavior — wire it up first so behaviors can call into it.
         this.objective = this.createObjective(projectType);
 
-        // Behavior factory — wired in slice 2b.16 (sub-slice C).
-        // PhasicCodingBehavior and AgenticCodingBehavior structurally
-        // satisfy `ICodingBehavior<TState>`; their `build()` is still
-        // a "not yet ported" stub pending the follow-on slice that
-        // lands the phase state machine + the agentic loop. This DO
-        // class is not yet exported as the `CodeGenObject` Durable
-        // Object — `SimpleCodeGeneratorAgent` remains the live
-        // runtime path until M3 commit 4.
+        // Behavior factory. PhasicCodingBehavior and AgenticCodingBehavior
+        // structurally satisfy `ICodingBehavior<TState>`. The phasic
+        // behavior drives the live phase state machine; the agentic
+        // behavior's `build()` is a documented stub that routes through
+        // phasic until the agentic loop is ported (see agentic.ts).
         if (behaviorType === 'phasic') {
             this.behavior = new PhasicCodingBehavior(
                 this as AgentInfrastructure<PhasicState>,
@@ -485,8 +470,8 @@ export class CodeGeneratorAgent
      * `GitHubPushRequest`/`GitHubExportResult` shapes onto the objective's
      * generic `export({ kind: 'github', github })` flow. Kept as a
      * dedicated method (rather than changing the controller to call
-     * `exportProject`) so the live `SimpleCodeGeneratorAgent` — which
-     * exposes its own `pushToGitHub` — keeps working until commit 4.
+     * `exportProject`) so the `agentStub.pushToGitHub(...)` RPC surface the
+     * controller depends on stays stable.
      */
     async pushToGitHub(options: GitHubPushRequest): Promise<GitHubExportResult> {
         const result = await this.exportProject({ kind: 'github', github: options });
@@ -719,8 +704,6 @@ export class CodeGeneratorAgent
      * WebSocket message handler. Delegates to the centralized handler in
      * `codingAgentWebsocket.ts` (ported from upstream `websocket.ts`),
      * which routes each message type to the behavior + agent surface.
-     * Coexists with the legacy `SimpleCodeGeneratorAgent` handler
-     * (`./websocket.ts`) until M3 commit 4 retires simpleGen.
      */
     async onMessage(connection: Connection, message: string): Promise<void> {
         await handleWebSocketMessage(this, connection, message);

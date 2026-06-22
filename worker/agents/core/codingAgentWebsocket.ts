@@ -1,13 +1,10 @@
 /**
- * WebSocket message routing for the new `CodeGeneratorAgent`
- * (codingAgent.ts). Ported from upstream `cloudflare/vibesdk`
- * `worker/agents/core/websocket.ts` (M3 commit 3).
+ * WebSocket message routing for the live `CodeGeneratorAgent`
+ * (codingAgent.ts), the exported `CodeGenObject` Durable Object. Ported
+ * from upstream `cloudflare/vibesdk` `worker/agents/core/websocket.ts`.
  *
- * Coexists with the legacy `./websocket.ts` handler (typed against the
- * live `SimpleCodeGeneratorAgent`); the two are kept separate so the
- * live runtime path is untouched until M3 commit 4 deletes simpleGen +
- * the legacy handler. The send helpers (`sendToConnection`, `sendError`)
- * are reused from `./websocket.ts` rather than duplicated.
+ * The send helpers (`sendToConnection`, `sendError`) come from
+ * `./websocketHelpers.ts` rather than being duplicated here.
  *
  * **Adaptations vs upstream:**
  *   - `SESSION_INIT`, `VAULT_LOCKED`, `VAULT_UNLOCKED` cases are dropped —
@@ -27,7 +24,7 @@ import { WebSocketMessageRequests, WebSocketMessageResponses } from '../constant
 import { MAX_IMAGES_PER_MESSAGE, MAX_IMAGE_SIZE_BYTES, type ImageAttachment } from '../../types/image-attachment';
 import { checkUsageAndBalance } from '../../services/rate-limit';
 import type { CodeGeneratorAgent } from './codingAgent';
-import { sendToConnection, sendError } from './websocket';
+import { sendToConnection, sendError } from './websocketHelpers';
 import { ensureCanDrive, claimDriver, releaseDriver, handlePresenceOnClose } from './presence';
 
 /**
