@@ -36,6 +36,13 @@ describe('evaluateImpersonationPolicy', () => {
         expect(evaluateImpersonationPolicy(readOnly, 'PUT', '/api/anything')?.reason).toBe('read-only impersonation session');
     });
 
+    it('ALWAYS allows the exit/extend control endpoints (even read-only) so a session can never trap itself', () => {
+        for (const u of [impersonated, readOnly]) {
+            expect(evaluateImpersonationPolicy(u, 'POST', '/api/impersonation/stop')).toBeNull();
+            expect(evaluateImpersonationPolicy(u, 'POST', '/api/impersonation/extend')).toBeNull();
+        }
+    });
+
     it('full-write session denies exactly the block-list', () => {
         const blocked: Array<[string, string]> = [
             ['PUT', '/api/auth/profile'],

@@ -17,6 +17,7 @@ import { AppEnv } from '../../types/appenv';
 import { AuthConfig, setAuthLevel } from '../../middleware/auth/routeAuth';
 import { adaptController } from '../honoAdapter';
 import { AdminController } from '../controllers/admin/controller';
+import { ImpersonationController } from '../controllers/impersonation/controller';
 
 /** Read/mutation gate for the admin console. superadmin-only in Phase 1. */
 const ADMIN_AUTH = AuthConfig.superadminOnly;
@@ -101,6 +102,16 @@ export function setupAdminRoutes(app: Hono<AppEnv>): void {
         requireAdminConsole,
         setAuthLevel(AuthConfig.superadminOnly),
         adaptController(AdminController, AdminController.reactivateUser),
+    );
+
+    // Start impersonating a user (reason-gated). Superadmin-only; the operator is
+    // NOT yet impersonating here. stop/extend/status live under /api/impersonation
+    // (actor-gated) since by then the effective user is the target, not an admin.
+    app.post(
+        '/api/admin/users/:id/impersonate',
+        requireAdminConsole,
+        setAuthLevel(AuthConfig.superadminOnly),
+        adaptController(ImpersonationController, ImpersonationController.start),
     );
 
     // ---- Preview screenshots (operator-triggered capture/backfill) ----

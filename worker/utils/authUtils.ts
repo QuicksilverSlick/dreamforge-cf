@@ -281,6 +281,12 @@ export function mapUserResponse(
 		// surfaces it to the SPA.
 		orgId: 'orgId' in user ? user.orgId : undefined,
 		orgRole: 'orgRole' in user ? user.orgRole : undefined,
+		// Impersonation context (also per-request, not a DB column) — carried
+		// through so /api/auth/profile tells the SPA it is impersonating and the
+		// banner can render. The effective identity above is the TARGET.
+		impersonatedBy: 'impersonatedBy' in user ? user.impersonatedBy : undefined,
+		impersonatorRole: 'impersonatorRole' in user ? user.impersonatorRole : undefined,
+		impersonationReadOnly: 'impersonationReadOnly' in user ? user.impersonationReadOnly : undefined,
 	};
 }
 

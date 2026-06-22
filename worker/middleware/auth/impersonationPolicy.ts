@@ -67,6 +67,18 @@ const BLOCK_RULES: readonly BlockRule[] = [
     { label: 'platform-admin action (incl. nested impersonation)', matches: underPrefix('/api/admin') },
 ];
 
+/**
+ * Impersonation-control endpoints that must ALWAYS be reachable while
+ * impersonating — so an operator can always EXIT or extend — even for a
+ * read-only session and even though they are mutations. Evaluated before any
+ * deny logic. (The /api/admin block-list would otherwise trap a stop/extend, and
+ * read-only would deny it as a mutation; hence these live OUTSIDE /api/admin.)
+ */
+const ALWAYS_ALLOWED: ReadonlySet<string> = new Set([
+    '/api/impersonation/stop',
+    '/api/impersonation/extend',
+]);
+
 export interface ImpersonationDenial {
     /** The block category, surfaced to the client + the audit row. */
     reason: string;
@@ -84,6 +96,9 @@ export function evaluateImpersonationPolicy(
 ): ImpersonationDenial | null {
     if (!user.impersonatedBy || !isMutatingMethod(method)) {
         return null;
+    }
+    if (ALWAYS_ALLOWED.has(path)) {
+        return null; // exit / extend are always permitted, so a session can never trap itself
     }
     if (user.impersonationReadOnly) {
         return { reason: 'read-only impersonation session' };

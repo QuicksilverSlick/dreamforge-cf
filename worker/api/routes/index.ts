@@ -17,6 +17,7 @@ import { setupLimitsRoutes } from './limitsRoutes';
 import { setupCapabilitiesRoutes } from './capabilitiesRoutes';
 import { setupInterviewRoutes } from './interviewRoutes';
 import { setupAdminRoutes } from './adminRoutes';
+import { setupImpersonationRoutes } from './impersonationRoutes';
 import { setupOrgRoutes } from './orgRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
@@ -87,6 +88,9 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Operator admin console (Phase 1) — superadmin-only, kill-switchable
     setupAdminRoutes(app);
+
+    // Impersonation control (stop/extend/status; start is in setupAdminRoutes)
+    setupImpersonationRoutes(app);
 
     // Organization management & teams (Phase 2.2) — active-org context,
     // invitations, member management (orgAdminOnly), org-switcher backend.

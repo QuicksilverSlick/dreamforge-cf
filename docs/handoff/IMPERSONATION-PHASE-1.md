@@ -80,9 +80,13 @@ Reuses `AuditLogService.buildRow` + the fail-closed `batch()` discipline. Verbs:
   Ships **inert** (no endpoint yet creates a grant).
 - **1.2** — block-list / read-only middleware in `routeAuth` + actor attribution for
   rate-limit / Sentry / audit.
-- **1.3** — admin endpoints `POST /api/admin/users/:id/impersonate` (start),
-  `POST /api/admin/impersonation/extend`, `DELETE /api/admin/impersonation` (stop),
-  superadmin-gated (start) / actor-gated (stop+extend, since the effective user is the
-  target), behind the `ADMIN_CONSOLE_ENABLED` kill-switch + CSRF.
+- **1.3** — endpoints (makes it live). `POST /api/admin/users/:id/impersonate`
+  (start) is **superadmin-gated** + behind the `ADMIN_CONSOLE_ENABLED` kill-switch.
+  `GET /api/impersonation/status` · `POST /api/impersonation/extend` ·
+  `POST /api/impersonation/stop` are **actor-gated** (the effective user is the
+  target by then, so they authorize off `impersonatedBy`, not a role) and live
+  OUTSIDE `/api/admin` + are carved out of the block-list so an operator can
+  always exit/extend. All mutations are CSRF-protected (global). `/api/auth/profile`
+  now surfaces `impersonatedBy` so the SPA can render the banner.
 - **1.4** — frontend: Impersonate button in the `/admin` user detail, a persistent
   "Viewing as <user> — Exit" banner, and the pre-expiry extend prompt.
