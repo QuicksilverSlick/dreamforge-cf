@@ -19,7 +19,8 @@ import { SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
 import { Switch } from '@/components/ui/switch';
 import { Sparkles } from 'lucide-react';
 
-const INTERVIEW_PREF_KEY = 'dreamforge:interview-enabled';
+// Per-user so different accounts on the same browser keep separate settings.
+const interviewPrefKey = (userId?: string) => `dreamforge:interview-enabled:${userId ?? 'guest'}`;
 
 export default function Home() {
 	const navigate = useNavigate();
@@ -29,13 +30,18 @@ export default function Home() {
 	const [query, setQuery] = useState('');
 	const { user, isLoading: isAuthLoading } = useAuth();
 	const loginDeepLinkHandled = useRef(false);
-	// The intake interview is on by default; the preference sticks per browser.
+	// The intake interview is on by default; the preference is per user account.
 	const [interviewEnabled, setInterviewEnabled] = useState(
-		() => localStorage.getItem(INTERVIEW_PREF_KEY) !== 'off',
+		() => localStorage.getItem(interviewPrefKey(user?.id)) !== 'off',
 	);
+	// Re-read when the signed-in user changes so each account sees its own setting
+	// (the user may not be resolved yet on the first render).
+	useEffect(() => {
+		setInterviewEnabled(localStorage.getItem(interviewPrefKey(user?.id)) !== 'off');
+	}, [user?.id]);
 	const toggleInterview = (enabled: boolean) => {
 		setInterviewEnabled(enabled);
-		localStorage.setItem(INTERVIEW_PREF_KEY, enabled ? 'on' : 'off');
+		localStorage.setItem(interviewPrefKey(user?.id), enabled ? 'on' : 'off');
 	};
 
 	const { images, addImages, removeImage, clearImages, isProcessing } = useImageUpload({
@@ -84,7 +90,7 @@ export default function Home() {
 		// from localStorage (written synchronously by toggleInterview) instead of
 		// the React state, so flipping the toggle and submitting in the same tick
 		// can't route to the stale flow before the state flushes.
-		const interviewOn = localStorage.getItem(INTERVIEW_PREF_KEY) !== 'off';
+		const interviewOn = localStorage.getItem(interviewPrefKey(user?.id)) !== 'off';
 		const intendedUrl = interviewOn
 			? `/interview?query=${encodedQuery}&agentMode=${encodedMode}${imageParam}`
 			: `/chat/new?query=${encodedQuery}&agentMode=${encodedMode}${imageParam}`;
