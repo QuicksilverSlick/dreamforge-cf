@@ -46,6 +46,9 @@ export const AdminAuditAction = {
     IMPERSONATION_START: 'admin.user.impersonate.start',
     IMPERSONATION_EXTEND: 'admin.user.impersonate.extend',
     IMPERSONATION_STOP: 'admin.user.impersonate.stop',
+    // A blocked-action attempt during impersonation (read-only violation or a
+    // block-listed route) — attempted misuse is itself a security signal.
+    IMPERSONATION_DENIED: 'admin.user.impersonate.denied',
 } as const;
 
 export type AdminAuditActionType = (typeof AdminAuditAction)[keyof typeof AdminAuditAction];

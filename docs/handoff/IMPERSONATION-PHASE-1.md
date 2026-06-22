@@ -44,8 +44,9 @@ moves**). Active iff `!isRevoked AND now < min(expiresAt, absoluteExpiresAt)`.
   cap the session ends; a fresh start is required.
 
 ## Block-list — actions ALWAYS denied while impersonating (decision 3)
-Enforced in the auth/route middleware (PR 1.2), **not** the UI, and applied even in
-full-write mode. **Adjustable in one config file** — revisit as the product changes.
+Enforced in the auth/route middleware (`worker/middleware/auth/impersonationPolicy.ts`,
+the authoritative + **adjustable** source), **not** the UI, and applied even in
+full-write mode. A denied attempt is logged + audited (`admin.user.impersonate.denied`).
 
 - **Credentials/identity:** password / email / MFA change; OAuth link/unlink;
   API-key create/rotate; BYOK secret reveal or rotate.
