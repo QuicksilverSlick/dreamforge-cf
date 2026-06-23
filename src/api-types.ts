@@ -206,16 +206,28 @@ export {
 } from 'worker/types/image-attachment';
 
 // Auth types imported from worker
-export type { 
-  AuthSession, 
-  ApiKeyInfo, 
-  AuthResult, 
+export type {
+  AuthSession,
+  ApiKeyInfo,
+  AuthResult,
   AuthUser,
-  OAuthProvider 
+  OAuthProvider,
 } from 'worker/types/auth-types';
-export type { 
-  SessionResponse 
+// Runtime const (auth-types is a leaf module — safe for the SPA; mirrors the
+// image-attachment value re-export below). The single source of truth for which
+// roles are platform staff, shared with the server's impersonation guard.
+export { PLATFORM_STAFF_ROLES } from 'worker/types/auth-types';
+export type {
+  SessionResponse
 } from 'worker/utils/authUtils';
+
+// Impersonation controller response types (Phase 1.4). Imported from the leaf
+// types module (no runtime/worker-ambient imports) so the SPA tsconfig doesn't
+// pull the worker module graph.
+export type {
+  ImpersonationGrantData,
+  ImpersonationStatusData,
+} from 'worker/api/controllers/impersonation/types';
 
 // Auth API Response Types (using existing worker types)
 export type LoginResponseData = SessionResponse;

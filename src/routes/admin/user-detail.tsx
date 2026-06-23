@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Ban, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Ban, ShieldCheck, UserCog } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/auth-context';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,6 +27,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { apiClient } from '@/lib/api-client';
+import { PLATFORM_STAFF_ROLES } from '@/api-types';
 import {
     useAdminUser,
     useAdminUserApps,
@@ -171,6 +173,7 @@ function SecretsTab({ userId }: { userId: string }) {
 export default function AdminUserDetail() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const { user: currentUser, refreshUser } = useAuth();
     const userId = id ?? '';
     const { data, loading, error, refetch } = useAdminUser(userId);
 
@@ -178,8 +181,50 @@ export default function AdminUserDetail() {
     const [reason, setReason] = React.useState('');
     const [submitting, setSubmitting] = React.useState(false);
 
+    const [impersonateOpen, setImpersonateOpen] = React.useState(false);
+    const [impersonateReason, setImpersonateReason] = React.useState('');
+    const [impersonating, setImpersonating] = React.useState(false);
+
     const user = data?.user;
     const isSuspended = !!user?.isSuspended;
+
+    // Mirror the backend guard: no impersonating self, a suspended account, or a
+    // platform-staff/operator account. The server enforces this regardless (the
+    // button is just hidden when it would obviously be refused); reuse the
+    // canonical staff-role list so the two can never drift.
+    const canImpersonate =
+        !!user &&
+        user.id !== currentUser?.id &&
+        !isSuspended &&
+        !PLATFORM_STAFF_ROLES.includes(user.role ?? 'user');
+
+    const handleImpersonate = async () => {
+        if (!user) return;
+        if (impersonateReason.trim().length < 3) {
+            toast.error('A reason (at least 3 characters) is required to impersonate.');
+            return;
+        }
+        setImpersonating(true);
+        try {
+            const res = await apiClient.impersonateUser(user.id, impersonateReason.trim());
+            if (res.success) {
+                setImpersonateOpen(false);
+                setImpersonateReason('');
+                toast.success(`Now viewing as ${user.displayName || user.email}`);
+                // The next request resolves as the target; refresh the profile and
+                // land on home (the /admin guard would bounce us anyway, since we
+                // now appear as a non-admin user).
+                await refreshUser();
+                navigate('/');
+            } else {
+                toast.error('Could not start impersonation');
+            }
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Could not start impersonation');
+        } finally {
+            setImpersonating(false);
+        }
+    };
 
     const handleAction = async () => {
         if (!user) return;
@@ -237,23 +282,36 @@ export default function AdminUserDetail() {
                                     </span>
                                 </div>
                             </div>
-                            <Button
-                                variant={isSuspended ? 'outline' : 'destructive'}
-                                onClick={() => {
-                                    setReason('');
-                                    setDialogOpen(true);
-                                }}
-                            >
-                                {isSuspended ? (
-                                    <>
-                                        <ShieldCheck className="h-4 w-4 mr-2" /> Reactivate
-                                    </>
-                                ) : (
-                                    <>
-                                        <Ban className="h-4 w-4 mr-2" /> Suspend
-                                    </>
+                            <div className="flex items-center gap-2">
+                                {canImpersonate && (
+                                    <Button
+                                        variant="secondary"
+                                        onClick={() => {
+                                            setImpersonateReason('');
+                                            setImpersonateOpen(true);
+                                        }}
+                                    >
+                                        <UserCog className="h-4 w-4 mr-2" /> Impersonate
+                                    </Button>
                                 )}
-                            </Button>
+                                <Button
+                                    variant={isSuspended ? 'outline' : 'destructive'}
+                                    onClick={() => {
+                                        setReason('');
+                                        setDialogOpen(true);
+                                    }}
+                                >
+                                    {isSuspended ? (
+                                        <>
+                                            <ShieldCheck className="h-4 w-4 mr-2" /> Reactivate
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Ban className="h-4 w-4 mr-2" /> Suspend
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
                         </CardHeader>
                     </Card>
 
@@ -317,6 +375,38 @@ export default function AdminUserDetail() {
                                     disabled={submitting}
                                 >
                                     {isSuspended ? 'Reactivate' : 'Suspend'}
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+
+                    <Dialog open={impersonateOpen} onOpenChange={setImpersonateOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Impersonate {user.displayName || user.email}</DialogTitle>
+                                <DialogDescription>
+                                    You’ll act as this user (full access, minus a protected set). Everything you do
+                                    is audit-logged to your operator account. The session is time-boxed; exit any
+                                    time from the banner.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-2">
+                                <Textarea
+                                    placeholder="Reason (required, for the audit log)"
+                                    value={impersonateReason}
+                                    onChange={(e) => setImpersonateReason(e.target.value)}
+                                />
+                            </div>
+                            <DialogFooter>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setImpersonateOpen(false)}
+                                    disabled={impersonating}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button onClick={handleImpersonate} disabled={impersonating}>
+                                    {impersonating ? 'Starting…' : 'Impersonate'}
                                 </Button>
                             </DialogFooter>
                         </DialogContent>
