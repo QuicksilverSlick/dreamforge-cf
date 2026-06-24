@@ -213,12 +213,27 @@ export function ensureCanDrive(
     if (current === me) {
         return true;
     }
+    // The seat is held by a DIFFERENT user — but if that holder has no live
+    // connection, the seat is STALE ("ghost"): a session that dropped without
+    // releasing it. handlePresenceOnClose frees the seat on a clean close, but
+    // an abnormal drop (e.g. a 1006 close) can skip it, leaving the seat locked
+    // behind someone who isn't here. Reclaim it rather than soft-blocking
+    // everyone behind a ghost driver.
+    if (!hasLiveConnection(agent, current)) {
+        setDriver(agent, me);
+        return true;
+    }
     const driver = buildPresenceRoster(agent).find((m) => m.userId === current);
     sendToConnection(connection, WebSocketMessageResponses.DRIVING_BLOCKED, {
         currentDriverUserId: current,
         currentDriverName: driver?.displayName ?? 'Another member',
     });
     return false;
+}
+
+/** True when at least one live connection is authenticated as `userId`. */
+function hasLiveConnection(agent: CodeGeneratorAgent, userId: string): boolean {
+    return [...agent.getConnections()].some((c) => identityOf(c)?.userId === userId);
 }
 
 /** Explicit claim / take-over of the driver seat. */
