@@ -318,13 +318,13 @@ export class CodeGeneratorAgent
             projectType,
         });
 
-        // Baseline git commit on every wake-up (idempotent — gitInit only commits
-        // when HEAD is absent). For an app created before the git subsystem
-        // landed (or any cold resume with no repo yet), this backfills the FULL
-        // current generated-file set as the "Initial commit" so the first revert
-        // target is a complete project, not just the next phase's files. A no-op
-        // once a baseline exists; gitInit swallows its own errors.
-        await this.gitInit();
+        // Ensure the per-app git repo exists on every wake-up — idempotent and
+        // CHEAP (just writes the initial refs; NO baseline commit), so it never
+        // delays the WS connect. The complete baseline is established lazily on
+        // the first commit (FileManager.commitToGit commits the full file set
+        // when HEAD is absent), so that one-time cost lands inside generation
+        // rather than on the connect path. git.init() swallows its own errors.
+        await this.git.init();
     }
 
     async onConnect(connection: Connection, ctx: ConnectionContext) {
