@@ -28,11 +28,21 @@ export interface ConnectionIdentity {
     userId: string;
     displayName: string;
     avatar: string | null;
+    /**
+     * Impersonation context carried onto the socket (WS frames don't re-enter the
+     * REST impersonation policy). When set, this connection is an operator acting
+     * AS userId: impersonatedBy is the real actor (for attribution/audit), and
+     * impersonationReadOnly gates mutating/driving frames.
+     */
+    impersonatedBy?: string | null;
+    impersonationReadOnly?: boolean;
 }
 
 const USER_ID_HEADER = 'x-df-user-id';
 const USER_NAME_HEADER = 'x-df-user-name';
 const USER_AVATAR_HEADER = 'x-df-user-avatar';
+const IMPERSONATED_BY_HEADER = 'x-df-impersonated-by';
+const IMPERSONATION_READONLY_HEADER = 'x-df-impersonation-readonly';
 
 /**
  * Stamp the resolved user's identity onto the WS upgrade request (server side)
@@ -40,7 +50,14 @@ const USER_AVATAR_HEADER = 'x-df-user-avatar';
  */
 export function setIdentityHeaders(
     headers: Headers,
-    user: { id: string; displayName?: string | null; email?: string | null; avatarUrl?: string | null },
+    user: {
+        id: string;
+        displayName?: string | null;
+        email?: string | null;
+        avatarUrl?: string | null;
+        impersonatedBy?: string;
+        impersonationReadOnly?: boolean;
+    },
 ): void {
     headers.set(USER_ID_HEADER, user.id);
     headers.set(USER_NAME_HEADER, user.displayName || user.email || 'Member');
@@ -52,6 +69,14 @@ export function setIdentityHeaders(
     } else {
         headers.delete(USER_AVATAR_HEADER);
     }
+    // Carry the impersonation context (or DELETE so a client can't forge it).
+    if (user.impersonatedBy) {
+        headers.set(IMPERSONATED_BY_HEADER, user.impersonatedBy);
+        headers.set(IMPERSONATION_READONLY_HEADER, user.impersonationReadOnly ? '1' : '0');
+    } else {
+        headers.delete(IMPERSONATED_BY_HEADER);
+        headers.delete(IMPERSONATION_READONLY_HEADER);
+    }
 }
 
 /** Read the connecting user's identity from the upgrade request headers. */
@@ -60,10 +85,13 @@ export function readConnectionIdentity(request: Request): ConnectionIdentity | n
     if (!userId) {
         return null;
     }
+    const impersonatedBy = request.headers.get(IMPERSONATED_BY_HEADER);
     return {
         userId,
         displayName: request.headers.get(USER_NAME_HEADER) || 'Member',
         avatar: request.headers.get(USER_AVATAR_HEADER) || null,
+        impersonatedBy: impersonatedBy || null,
+        impersonationReadOnly: request.headers.get(IMPERSONATION_READONLY_HEADER) === '1',
     };
 }
 
@@ -114,6 +142,21 @@ function isIdentity(value: unknown): value is ConnectionIdentity {
 /** The identity attached to a connection (null for a pre-feature / unidentified socket). */
 function identityOf(connection: Connection): ConnectionIdentity | null {
     return isIdentity(connection.state) ? connection.state : null;
+}
+
+/**
+ * The impersonation context on a connection, or null when it isn't an
+ * impersonation. Lets the WS-drive plane attribute to the real operator and
+ * enforce read-only — the REST impersonation policy can't reach socket frames.
+ */
+export function connectionImpersonation(
+    connection: Connection,
+): { actorId: string; targetId: string; readOnly: boolean } | null {
+    const id = identityOf(connection);
+    if (!id?.impersonatedBy) {
+        return null;
+    }
+    return { actorId: id.impersonatedBy, targetId: id.userId, readOnly: id.impersonationReadOnly === true };
 }
 
 /** Live roster — one entry per distinct user (collapsing multiple tabs). */
