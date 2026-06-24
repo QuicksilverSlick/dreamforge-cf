@@ -274,6 +274,45 @@ export class ImpersonationService extends BaseService {
     }
 
     /**
+     * Force-end a specific grant (system-initiated teardown — e.g. the target
+     * became suspended/deleted or was promoted into a protected role mid-session,
+     * so it must never resurrect if the target is later reactivated). Idempotent;
+     * writes an audit row so the lifecycle stays accountable.
+     */
+    async endGrant(grantId: string, endedReason: string): Promise<void> {
+        const grant = await this.database
+            .select()
+            .from(schema.impersonationSessions)
+            .where(
+                and(
+                    eq(schema.impersonationSessions.id, grantId),
+                    eq(schema.impersonationSessions.isRevoked, false),
+                ),
+            )
+            .get();
+        if (!grant) {
+            return;
+        }
+
+        const auditRow = AuditLogService.buildRow({
+            actorId: grant.actorUserId,
+            actorRole: grant.actorRole,
+            entityType: 'user',
+            entityId: grant.targetUserId,
+            action: AdminAuditAction.IMPERSONATION_STOP,
+            newValues: { sessionId: grant.sessionId, extendCount: grant.extendCount, endedReason },
+        });
+
+        await this.database.batch([
+            this.database
+                .update(schema.impersonationSessions)
+                .set({ isRevoked: true, revokedAt: new Date(), endedReason })
+                .where(eq(schema.impersonationSessions.id, grantId)),
+            this.database.insert(schema.auditLogs).values(auditRow),
+        ]);
+    }
+
+    /**
      * Extend the idle window. Server-side re-validation (never a client timer):
      * actor still privileged, target still impersonable, the absolute cap not
      * exhausted. The new window is clamped to the immovable absolute cap.

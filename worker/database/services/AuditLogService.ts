@@ -49,6 +49,10 @@ export const AdminAuditAction = {
     // A blocked-action attempt during impersonation (read-only violation or a
     // block-listed route) — attempted misuse is itself a security signal.
     IMPERSONATION_DENIED: 'admin.user.impersonate.denied',
+    // An ALLOWED mutating action performed WHILE impersonating — actor-attributed
+    // so every write the operator makes as the customer is non-repudiable (the
+    // "audited-only" guarantee covers the writes, not just session lifecycle).
+    IMPERSONATION_ACTION: 'admin.user.impersonate.action',
 } as const;
 
 export type AdminAuditActionType = (typeof AdminAuditAction)[keyof typeof AdminAuditAction];

@@ -53,6 +53,7 @@ describe('evaluateImpersonationPolicy', () => {
             ['POST', '/api/user/providers'],
             ['PUT', '/api/user/providers/p1'],
             ['POST', '/api/cloudflare/accounts'],
+            ['POST', '/api/github-app/export'],
             ['DELETE', '/api/apps/abc'],
             ['POST', '/api/orgs'],
             ['DELETE', '/api/orgs/o1/members/u2'],

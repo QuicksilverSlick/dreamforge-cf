@@ -14,7 +14,7 @@ import { AppEnv } from '../../types/appenv';
 import { RateLimitExceededError } from 'shared/types/errors';
 import * as Sentry from '@sentry/cloudflare';
 import { getUserConfigurableSettings } from 'worker/config';
-import { evaluateImpersonationPolicy } from './impersonationPolicy';
+import { evaluateImpersonationPolicy, isMutatingMethod } from './impersonationPolicy';
 import { AuditLogService, AdminAuditAction } from '../../database/services/AuditLogService';
 import { extractRequestMetadata } from '../../utils/authUtils';
 
@@ -257,6 +257,13 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
             await auditImpersonationDenial(c, user, denial.reason);
             return createForbiddenResponse(`Action not permitted while impersonating: ${denial.reason}.`);
         }
+        // Allowed mutation under impersonation: record an actor-attributed audit
+        // row so every write the operator makes AS the customer is non-repudiable
+        // (the "audited-only" guarantee covers the writes, not just lifecycle).
+        // Off the response path, fail-open — never blocks or slows the action.
+        if (isMutatingMethod(c.req.method)) {
+            auditImpersonatedAction(c, user);
+        }
     }
 
     const params = c.req.param();
@@ -296,6 +303,31 @@ async function auditImpersonationDenial(
         });
     } catch (error) {
         logger.error('Failed to audit impersonation denial', error);
+    }
+}
+
+/**
+ * Best-effort, off-the-response-path audit of an ALLOWED mutating action made
+ * while impersonating. actorId = the real operator; never blocks or slows the
+ * action (fired through waitUntil, like read audits).
+ */
+function auditImpersonatedAction(c: Context<AppEnv>, user: AuthUser): void {
+    const write = new AuditLogService(c.env)
+        .record({
+            actorId: user.impersonatedBy ?? user.id,
+            actorRole: user.impersonatorRole,
+            entityType: 'user',
+            entityId: user.id,
+            action: AdminAuditAction.IMPERSONATION_ACTION,
+            newValues: { method: c.req.method, path: c.req.path },
+            metadata: extractRequestMetadata(c.req.raw),
+        })
+        .catch((error) => logger.error('Failed to audit impersonated action', error));
+    try {
+        c.executionCtx.waitUntil(write);
+    } catch {
+        // No execution context available — record() is already best-effort.
+        void write;
     }
 }
 

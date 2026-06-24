@@ -208,6 +208,19 @@ export class GitHubExporterController extends BaseController {
                 );
             }
 
+            // Impersonation: exporting binds a GitHub OAuth state to user.id (the
+            // impersonated TARGET) and is realized at a PUBLIC callback, so the
+            // method+path impersonation policy can't catch the resulting flow.
+            // Refuse to mint the state here (as CloudflareConnectController does)
+            // so an operator can never push a customer's private repo while
+            // impersonating. See worker/middleware/auth/impersonationPolicy.ts.
+            if (context.user.impersonatedBy) {
+                return GitHubExporterController.createErrorResponse<never>(
+                    'Exporting to GitHub is not permitted while impersonating.',
+                    403,
+                );
+            }
+
             const body = await request.json() as {
                 repositoryName: string;
                 description?: string;
