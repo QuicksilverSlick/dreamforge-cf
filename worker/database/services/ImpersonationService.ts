@@ -32,11 +32,11 @@ import type { ImpersonationSession, NewImpersonationSession } from '../schema';
  */
 export const IMPERSONATION_CONFIG = {
     /** Idle window granted at start and on each extend. */
-    idleWindowMs: 15 * 60 * 1000,
+    idleWindowMs: 30 * 60 * 1000,
     /** Hard cap measured from issue; immovable. */
-    absoluteLifetimeMs: 60 * 60 * 1000,
+    absoluteLifetimeMs: 120 * 60 * 1000,
     /** Increment added by an extend (clamped to the absolute cap). */
-    extendIncrementMs: 15 * 60 * 1000,
+    extendIncrementMs: 30 * 60 * 1000,
 } as const;
 
 /** Platform roles permitted to HOLD a human impersonation grant (Phase 1). */

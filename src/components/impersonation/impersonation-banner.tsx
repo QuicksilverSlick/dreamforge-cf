@@ -70,6 +70,7 @@ export function ImpersonationBanner() {
 			await apiClient.stopImpersonation();
 			await refreshUser();
 			navigate('/');
+			toast.success('Returned to your own account');
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Could not exit impersonation');
 		} finally {
