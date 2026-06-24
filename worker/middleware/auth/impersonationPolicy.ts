@@ -55,6 +55,10 @@ const BLOCK_RULES: readonly BlockRule[] = [
     { label: 'BYOK model-provider change', matches: underPrefix('/api/user/providers') },
     // Money / deploy identity (connecting the user's own Cloudflare account)
     { label: 'Cloudflare account connection', matches: underPrefix('/api/cloudflare') },
+    // GitHub export pushes the app's generated source to a GitHub account.
+    // (The OAuth-initiating route is gated at its controller too, since its
+    // public callback is unreachable by this method+path policy.)
+    { label: 'GitHub export', matches: underPrefix('/api/github-app') },
     // Destructive: app deletion (DELETE /api/apps/:id). Sub-paths like
     // /api/apps/:id/star|favorite|visibility are NOT matched (benign).
     { label: 'app deletion', matches: (p) => /^\/api\/apps\/[^/]+$/.test(p) },

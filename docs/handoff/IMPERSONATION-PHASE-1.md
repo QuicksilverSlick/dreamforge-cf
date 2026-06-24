@@ -52,6 +52,8 @@ full-write mode. A denied attempt is logged + audited (`admin.user.impersonate.d
   API-key create/rotate; BYOK secret reveal or rotate.
 - **Money/entitlements:** billing, plan up/downgrade, payment methods, credit purchase,
   BYOK/credit config.
+- **Deploy/exfil identity:** connecting a Cloudflare account, **exporting to GitHub**
+  (both also self-gate at their controller, since their OAuth callbacks are public).
 - **Destructive:** account deletion, app deletion, data export/download.
 - **Privilege/membership:** `setRole`, org member add/remove, org-role changes,
   granting platform-staff roles.

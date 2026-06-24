@@ -775,7 +775,7 @@ export class AuthService extends BaseService {
                     logger.error('getUserForAuth query failed', {
                         errorMessage: error instanceof Error ? error.message : String(error),
                         errorName: error instanceof Error ? error.name : 'UnknownError',
-                        errorCause: (error as any)?.cause,
+                        errorCause: error instanceof Error ? error.cause : undefined,
                         errorStack: error instanceof Error ? error.stack?.split('\n').slice(0, 5).join('\n') : undefined,
                         userId
                     });
@@ -792,7 +792,7 @@ export class AuthService extends BaseService {
             logger.error('Error getting user for auth', {
                 errorMessage: error instanceof Error ? error.message : String(error),
                 errorName: error instanceof Error ? error.name : 'UnknownError',
-                errorCause: (error as any)?.cause,
+                errorCause: error instanceof Error ? error.cause : undefined,
                 userId
             });
             return null;
@@ -886,6 +886,11 @@ export class AuthService extends BaseService {
             }
             const target = await this.getUserForAuth(grant.targetUserId);
             if (!target || !targetRoleMayBeImpersonated(target.role)) {
+                // Target became non-impersonable mid-session (suspended/deleted, or
+                // promoted into a protected role). Tear the grant down so it can
+                // never resurrect when the target is reactivated — then degrade to
+                // acting as the actor (the catch below keeps this fail-open).
+                await this.impersonationService.endGrant(grant.id, 'target_unavailable');
                 return null;
             }
             const activeOrg = await this.organizationService.resolveUserDefaultOrg(target.id);
