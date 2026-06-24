@@ -14,6 +14,7 @@ import {
     claimDriver,
     releaseDriver,
     handlePresenceOnClose,
+    connectionImpersonation,
     type ConnectionIdentity,
 } from './presence';
 import type { CodeGeneratorAgent } from './codingAgent';
@@ -61,6 +62,8 @@ describe('presence + single-driver coordination', () => {
             userId: 'u1',
             displayName: 'Alice',
             avatar: 'a.png',
+            impersonatedBy: null,
+            impersonationReadOnly: false,
         });
         expect(readConnectionIdentity(new Request('https://x'))).toBeNull();
     });
@@ -161,6 +164,60 @@ describe('identity header stamping', () => {
             userId: 'u1',
             displayName: 'a@x.com',
             avatar: null,
+            impersonatedBy: null,
+            impersonationReadOnly: false,
+        });
+    });
+
+    it('round-trips impersonation context (actor + read-only flag) through the headers', () => {
+        const headers = new Headers();
+        setIdentityHeaders(headers, {
+            id: 'target',
+            displayName: 'Target',
+            avatarUrl: null,
+            impersonatedBy: 'operator',
+            impersonationReadOnly: true,
+        });
+        expect(headers.get('x-df-impersonated-by')).toBe('operator');
+        expect(headers.get('x-df-impersonation-readonly')).toBe('1');
+        expect(readConnectionIdentity(new Request('https://x', { headers }))).toEqual({
+            userId: 'target',
+            displayName: 'Target',
+            avatar: null,
+            impersonatedBy: 'operator',
+            impersonationReadOnly: true,
+        });
+    });
+
+    it('strips client-forged impersonation headers for a non-impersonated user', () => {
+        const headers = new Headers({
+            'x-df-impersonated-by': 'attacker',
+            'x-df-impersonation-readonly': '0',
+        });
+        setIdentityHeaders(headers, { id: 'u1', displayName: 'Alice', avatarUrl: null });
+        expect(headers.get('x-df-impersonated-by')).toBeNull();
+        expect(headers.get('x-df-impersonation-readonly')).toBeNull();
+    });
+});
+
+describe('connectionImpersonation', () => {
+    it('returns null for a plain (non-impersonated) connection', () => {
+        const c = conn('c1', ident('u1'));
+        expect(connectionImpersonation(asConn(c))).toBeNull();
+    });
+
+    it('surfaces the actor, target, and read-only flag for an impersonated connection', () => {
+        const c = conn('c1', {
+            userId: 'target',
+            displayName: 'Target',
+            avatar: null,
+            impersonatedBy: 'operator',
+            impersonationReadOnly: true,
+        });
+        expect(connectionImpersonation(asConn(c))).toEqual({
+            actorId: 'operator',
+            targetId: 'target',
+            readOnly: true,
         });
     });
 });

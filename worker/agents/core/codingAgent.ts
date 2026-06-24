@@ -346,7 +346,12 @@ export class CodeGeneratorAgent
         // frame WS messages don't carry cookies, so the handshake is the one chance.
         try {
             const origin = new URL(ctx.request.url).origin;
-            const isCreator = identity?.userId === this.state.metadata.userId;
+            // An IMPERSONATED connection — even one acting as the app's creator —
+            // must NOT (re)capture or replay the creator's Cloudflare token, so an
+            // operator's impersonated spend can't charge the customer's connected
+            // CF account. Treat it as a non-creator for token/origin purposes.
+            const isCreator =
+                identity?.userId === this.state.metadata.userId && !identity?.impersonatedBy;
             const blob = isCreator ? readTokenCookie(ctx.request, this.env) : null;
             const nextToken = blob || this.state.cloudflareToken;
             // wsOrigin is replayed alongside the creator's CF token on usage/billing

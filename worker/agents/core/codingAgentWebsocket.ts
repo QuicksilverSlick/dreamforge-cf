@@ -25,7 +25,8 @@ import { MAX_IMAGES_PER_MESSAGE, MAX_IMAGE_SIZE_BYTES, type ImageAttachment } fr
 import { checkUsageAndBalance } from '../../services/rate-limit';
 import type { CodeGeneratorAgent } from './codingAgent';
 import { sendToConnection, sendError } from './websocketHelpers';
-import { ensureCanDrive, claimDriver, releaseDriver, handlePresenceOnClose } from './presence';
+import { ensureCanDrive, claimDriver, releaseDriver, handlePresenceOnClose, connectionImpersonation } from './presence';
+import { AuditLogService, AdminAuditAction } from '../../database/services/AuditLogService';
 
 /**
  * Commands that DRIVE the shared build (mutate state / spend the creator's
@@ -61,6 +62,30 @@ interface IncomingWebSocketMessage {
 
 const logger = createLogger('CodeGeneratorWebSocket');
 
+/**
+ * Best-effort audit of an operator driving an app while impersonating, attributed
+ * to the real actor (not the customer the frame is running AS). Fire-and-forget:
+ * the agent stays alive processing the command, so the floating insert resolves;
+ * a failure must never block the user's command.
+ */
+function auditImpersonatedDrive(
+    agent: CodeGeneratorAgent,
+    impersonation: { actorId: string; targetId: string; readOnly: boolean },
+    command: string,
+): void {
+    void new AuditLogService(agent.env)
+        .record({
+            actorId: impersonation.actorId,
+            entityType: 'app',
+            entityId: agent.getAgentId(),
+            action: AdminAuditAction.IMPERSONATION_ACTION,
+            newValues: { command, channel: 'websocket', targetUserId: impersonation.targetId },
+        })
+        .catch((error) => {
+            logger.error('Failed to audit impersonated WS drive', error);
+        });
+}
+
 export async function handleWebSocketMessage(
     agent: CodeGeneratorAgent,
     connection: Connection,
@@ -70,10 +95,32 @@ export async function handleWebSocketMessage(
         logger.info(`Received WebSocket message from ${connection.id}: ${message}`);
         const parsedMessage = JSON.parse(message) as IncomingWebSocketMessage;
 
-        // Single-driver gate (soft): a non-driver's driving command is not run
-        // concurrently — they're notified who's driving and may take over.
-        if (DRIVING_COMMANDS.has(parsedMessage.type) && !ensureCanDrive(agent, connection)) {
-            return;
+        if (DRIVING_COMMANDS.has(parsedMessage.type)) {
+            const impersonation = connectionImpersonation(connection);
+            // Read-only impersonation may observe but never drive — the REST
+            // impersonation policy gates HTTP, but a WS upgrade is a GET that
+            // bypasses it, so the same read-only rule is enforced here on the
+            // frames that actually mutate the app.
+            if (impersonation?.readOnly) {
+                logger.warn('Blocked a driving command from a read-only impersonation session', {
+                    command: parsedMessage.type,
+                    actorId: impersonation.actorId,
+                    targetUserId: impersonation.targetId,
+                });
+                sendError(connection, 'This is a read-only session. You cannot drive the agent while impersonating.');
+                return;
+            }
+            // Non-repudiation: a writable impersonation drives AS the customer, so
+            // attribute the command to the real operator (best-effort, off the
+            // response path) before the single-driver gate runs.
+            if (impersonation) {
+                auditImpersonatedDrive(agent, impersonation, parsedMessage.type);
+            }
+            // Single-driver gate (soft): a non-driver's driving command is not run
+            // concurrently — they're notified who's driving and may take over.
+            if (!ensureCanDrive(agent, connection)) {
+                return;
+            }
         }
 
         switch (parsedMessage.type) {
