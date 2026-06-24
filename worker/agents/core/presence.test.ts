@@ -96,6 +96,23 @@ describe('presence + single-driver coordination', () => {
         expect(ensureCanDrive(agent, asConn(anon))).toBe(true);
     });
 
+    it('reclaims a stale seat whose holder has no live connection (ghost)', () => {
+        const me = conn('c1', ident('u1'));
+        // The seat is held by u2, but u2 has NO live connection — a session that
+        // dropped without releasing it. The drive must reclaim, not soft-block.
+        const { agent } = makeAgent([me], 'u2');
+        expect(ensureCanDrive(agent, asConn(me))).toBe(true);
+        expect(agent.state.currentDriverUserId).toBe('u1'); // reclaimed from the ghost
+    });
+
+    it('still soft-blocks when the seat holder IS live (not a ghost)', () => {
+        const driver = conn('c1', ident('u1'));
+        const other = conn('c2', ident('u2'));
+        const { agent } = makeAgent([driver, other], 'u1'); // u1 live AND holds the seat
+        expect(ensureCanDrive(agent, asConn(other))).toBe(false);
+        expect(agent.state.currentDriverUserId).toBe('u1'); // not stolen from a live driver
+    });
+
     it('take-over reassigns the seat; only the holder can release it', () => {
         const a = conn('c1', ident('u1'));
         const b = conn('c2', ident('u2'));
