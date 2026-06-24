@@ -64,12 +64,11 @@ import { normalizePath, isPathSafe } from '../../utils/pathUtils';
 import { FileManager } from '../services/implementations/FileManager';
 import { StateManager } from '../services/implementations/StateManager';
 import { DeploymentManager } from '../services/implementations/DeploymentManager';
-import { GitVersionControlStub } from '../../services/git/GitVersionControlStub';
+import { GitVersionControl, type SqlExecutor, type SqlValue } from '../git';
 import { getSandboxService } from '../../services/sandbox/factory';
 import {
     AgentInfrastructure,
     type DeploymentManager as IDeploymentManager,
-    type GitVersionControl,
     type ICodingBehavior,
 } from './AgentCore';
 import {
@@ -100,6 +99,23 @@ import { readTokenCookie } from '../../utils/oauthCookie';
 import { generateId } from '../../utils/idGenerator';
 
 const DEFAULT_CONVERSATION_SESSION_ID = 'default';
+
+/**
+ * Build a SqliteFS-compatible SQL executor from the DO's SqlStorage. SqliteFS
+ * binds binary git objects (ArrayBuffer); the pinned agents SDK's `this.sql`
+ * omits ArrayBuffer from its value types, but the underlying SqlStorage accepts
+ * blobs — so we go straight to it. The single generic cast bridges the cursor's
+ * row type to the caller's requested `T` (mirrors the SDK's own `sql<T>()`).
+ */
+function createDoSqlExecutor(storage: AgentContext['storage']): SqlExecutor {
+    return <T = unknown>(strings: TemplateStringsArray, ...values: SqlValue[]): T[] => {
+        const query = strings.reduce(
+            (acc, str, i) => acc + str + (i < values.length ? '?' : ''),
+            '',
+        );
+        return storage.sql.exec(query, ...values).toArray() as T[];
+    };
+}
 
 interface AgentBootstrapProps {
     behaviorType?: BehaviorType;
@@ -194,7 +210,13 @@ export class CodeGeneratorAgent
         this.sql`CREATE TABLE IF NOT EXISTS full_conversations (id TEXT PRIMARY KEY, messages TEXT)`;
         this.sql`CREATE TABLE IF NOT EXISTS compact_conversations (id TEXT PRIMARY KEY, messages TEXT)`;
 
-        this.git = new GitVersionControlStub();
+        // Real git version control backed by this DO's SQLite (isomorphic-git
+        // over SqliteFS). Every file write is auto-committed (see FileManager),
+        // so each change is a revertible checkpoint. The executor is built from
+        // the DO's SqlStorage directly (not the agents-SDK `this.sql`), because
+        // this pinned SDK (0.2.35) under-types `sql`'s value params — it omits
+        // ArrayBuffer, which SqliteFS binds for binary git objects.
+        this.git = new GitVersionControl(createDoSqlExecutor(ctx.storage));
 
         // The state manager is typed against `CodeGenState` (= `PhasicState`
         // alias). The agent's runtime state is `AgentState` (the
@@ -208,7 +230,7 @@ export class CodeGeneratorAgent
             () => this.state as PhasicState,
             (s) => this.setState(s),
         );
-        this.fileManager = new FileManager(stateManager);
+        this.fileManager = new FileManager(stateManager, this.git);
     }
 
     private createObjective(projectType: ProjectType): ProjectObjective<BaseProjectState> {
@@ -295,6 +317,14 @@ export class CodeGeneratorAgent
             behaviorType,
             projectType,
         });
+
+        // Baseline git commit on every wake-up (idempotent — gitInit only commits
+        // when HEAD is absent). For an app created before the git subsystem
+        // landed (or any cold resume with no repo yet), this backfills the FULL
+        // current generated-file set as the "Initial commit" so the first revert
+        // target is a complete project, not just the next phase's files. A no-op
+        // once a baseline exists; gitInit swallows its own errors.
+        await this.gitInit();
     }
 
     async onConnect(connection: Connection, ctx: ConnectionContext) {
@@ -760,26 +790,23 @@ export class CodeGeneratorAgent
 
     protected async gitInit() {
         try {
-            const result = await this.git.init();
-            if (!result.ok) {
-                this.logger().info(
-                    'Git stub returned not-available (M3 ships without Git DO subsystem)',
-                    { reason: result.reason },
-                );
-                return;
+            await this.git.init();
+            // Seed the repo with an initial commit so HEAD exists and there is a
+            // baseline to revert to. Idempotent: skipped once any commit exists.
+            const head = await this.git.getHead();
+            if (!head) {
+                const files = this.fileManager.getGeneratedFiles();
+                const oid = await this.git.commit(files, 'Initial commit');
+                this.logger().info('Git initialized', { initialCommit: oid });
             }
-            this.logger().info('Git initialized successfully');
         } catch (error) {
             this.logger().error('Error during git init:', error);
         }
     }
 
     /**
-     * Export git objects — adapted to the fork's `GitVersionControlStub`,
-     * which does not yet expose a `.fs.exportGitObjects()` accessor or a
-     * `getHead()` query. Returns the empty-bundle shape; the route
-     * handler at `worker/api/controllers/github-exporter` falls back to
-     * pushing files via REST (see `objectives/base.ts` export path).
+     * Snapshot the current project as a git-object bundle for export (e.g.
+     * /api/github-exporter/push), read straight from the DO-SQLite-backed repo.
      */
     async exportGitObjects(): Promise<{
         gitObjects: Array<{ path: string; data: Uint8Array }>;
@@ -791,10 +818,12 @@ export class CodeGeneratorAgent
             await this.gitInit();
             await this.behavior.ensureTemplateDetails();
             const templateDetails = this.behavior.getTemplateDetails();
+            const gitObjects = this.git.fs.exportGitObjects();
+            const head = await this.git.getHead();
             return {
-                gitObjects: [],
+                gitObjects,
                 query: this.state.query || 'N/A',
-                hasCommits: false,
+                hasCommits: head !== null,
                 templateDetails,
             };
         } catch (error) {

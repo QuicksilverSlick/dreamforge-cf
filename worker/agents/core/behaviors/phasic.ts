@@ -18,8 +18,7 @@
  * **What this slice delivers:**
  *   - `initialize()` — generate blueprint via `generateBlueprint`,
  *     synthesize `projectName`, populate state, save customized
- *     template files to git (single-arg `saveGeneratedFiles` —
- *     fork's signature).
+ *     template files (auto-committed to git via `saveGeneratedFiles`).
  *   - `migrateStateIfNeeded()` — invoke `StateMigration.migratePhasic`
  *     and re-customize `package.json` if it was overwritten.
  *   - `getOperationOptions()` — return the fork's non-generic
@@ -50,10 +49,10 @@
  *     args shape doesn't have it); the field is dropped from the
  *     call.
  *   - `fileManager.saveGeneratedFiles(files, commitMessage, hashOnly)`
- *     in upstream becomes `fileManager.saveGeneratedFiles(files)` —
- *     fork's signature is single-arg. The commit message + hash-only
- *     flag are lost (git is stubbed on the fork anyway; cleanup lands
- *     when the wider `IFileManager` is rebased).
+ *     in upstream becomes `saveGeneratedFiles(files, commitMessage?)`
+ *     here — the `hashOnly` flag is dropped, but git IS the real
+ *     isomorphic-git/SqliteFS subsystem and a `commitMessage` creates a
+ *     labeled, revertible checkpoint (passed at phase + fix boundaries).
  *   - `runPreDeploySafetyGate` (item 5, slice 2b.18) is called over the
  *     phase's generated files inside `implementPhase` before deploy.
  *   - `generateNextPhase` does NOT forward `isFinal` to the operation —
@@ -250,10 +249,7 @@ export class PhasicCodingBehavior
                 }),
             );
 
-            // Fork's `saveGeneratedFiles` is single-arg; the upstream
-            // commit message and `hashOnly` flag are dropped (git is
-            // stubbed on the fork).
-            this.fileManager.saveGeneratedFiles(filesToSave);
+            await this.fileManager.saveGeneratedFiles(filesToSave);
 
             this.logger.info('Saved customized template files');
         }
@@ -263,7 +259,7 @@ export class PhasicCodingBehavior
         // models mistranscribe long asset URLs when typing them into code.
         const brandAssetsSource = renderBrandAssetsModule(blueprint.imageAssets);
         if (brandAssetsSource) {
-            this.fileManager.saveGeneratedFiles([{
+            await this.fileManager.saveGeneratedFiles([{
                 filePath: BRAND_ASSETS_MODULE_PATH,
                 fileContents: brandAssetsSource,
                 filePurpose: 'Hosted brand-asset URLs (pipeline-managed, not model-written)',
@@ -300,7 +296,10 @@ export class PhasicCodingBehavior
             this.state.lastPackageJson;
         if (oldPackageJson) {
             const packageJson = customizePackageJson(oldPackageJson, this.state.projectName);
-            this.fileManager.saveGeneratedFiles([
+            // migrateStateIfNeeded is synchronous (ICodingBehavior contract), so
+            // we can't await; the state record is synchronous regardless and the
+            // git stage is best-effort (re-committed at the next phase).
+            void this.fileManager.saveGeneratedFiles([
                 {
                     filePath: 'package.json',
                     fileContents: packageJson,
@@ -965,7 +964,7 @@ export class PhasicCodingBehavior
             phase,
         });
 
-        this.fileManager.saveGeneratedFiles(safeFiles);
+        await this.fileManager.saveGeneratedFiles(safeFiles, `Phase: ${phase.name}`);
 
         this.logger.info(
             'Files generated for phase:',
@@ -1050,7 +1049,7 @@ export class PhasicCodingBehavior
             );
 
             if (fastCodeFixer.length > 0) {
-                this.fileManager.saveGeneratedFiles(fastCodeFixer);
+                await this.fileManager.saveGeneratedFiles(fastCodeFixer, 'Fast smart code fixes');
                 await this.deployToSandbox(fastCodeFixer);
                 this.logger.info('Fast smart code fixes applied successfully');
             }

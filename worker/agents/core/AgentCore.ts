@@ -1,24 +1,16 @@
 /**
  * Infrastructure contract exposed by the agent DO to its behaviors and
- * objectives. Ported from upstream `cloudflare/vibesdk` with two
- * fork-local stubs so M3 can land without pulling in M4 work:
+ * objectives. Ported from upstream `cloudflare/vibesdk`.
  *
- *   - `GitVersionControl` is upstream's M4/PR-6 Git Durable Object. M3
- *     does not port that subsystem; instead this file declares a minimal
- *     interface that a no-op shim (lands in commit 2 at
- *     `worker/services/git/GitVersionControlStub.ts`) implements. The
- *     `git` field on the infrastructure is non-null so behaviors don't
- *     need null-guards everywhere; the stub returns `{ ok: false }` from
- *     every operation so the LLM gets an informative error and plans
- *     without git tooling.
+ *   - `GitVersionControl` is the real git subsystem (isomorphic-git over the
+ *     DO's SQLite via SqliteFS), re-exported above from `worker/agents/git/`.
+ *     Every file write is auto-committed (see `FileManager`), so each change is
+ *     a revertible checkpoint.
  *
  *   - `DeploymentManager` is an upstream service module; the fork ships
  *     an equivalent through `worker/agents/services/implementations/`
  *     (see `IFileManager`, `FileManager`). Behaviors call into both via
  *     the contract below.
- *
- * If/when M4 lands, replace the stub interface here with a re-export
- * from the real `worker/agents/git/` module.
  */
 
 import type { StructuredLogger } from '../../logger';
@@ -38,6 +30,10 @@ import type {
 } from '../../services/sandbox/sandboxTypes';
 import type { FileManager } from '../services/implementations/FileManager';
 import type { BaseProjectState } from './state';
+// The real git subsystem (isomorphic-git over the DO's SQLite). Re-exported so
+// any consumer can keep importing the type from AgentCore.
+import type { GitVersionControl } from '../git';
+export type { GitVersionControl };
 import type {
     AgentActionKey,
     ModelConfig,
@@ -76,26 +72,6 @@ export interface DeploymentManager {
         token?: string;
         metadata?: Record<string, unknown>;
     }): Promise<{ deployedUrl?: string; error?: string }>;
-}
-
-/**
- * Minimal git-version-control surface. M3 ships this as an informative
- * no-op via `GitVersionControlStub`; M4/PR-6 replaces with the real Git
- * Durable Object client. Method shapes mirror upstream so the upgrade is
- * a re-export, not a rewrite.
- */
-export interface GitVersionControl {
-    /** True when a real implementation is wired; false when stubbed. */
-    readonly available: boolean;
-    init(): Promise<{ ok: boolean; reason?: string }>;
-    commit(message: string): Promise<{ ok: boolean; sha?: string; reason?: string }>;
-    push(): Promise<{ ok: boolean; reason?: string }>;
-    status(): Promise<{
-        ok: boolean;
-        clean?: boolean;
-        files?: string[];
-        reason?: string;
-    }>;
 }
 
 // ---------------------------------------------------------------------------
