@@ -37,7 +37,7 @@ moves**). Active iff `!isRevoked AND now < min(expiresAt, absoluteExpiresAt)`.
 `impersonationReadOnly` — set only on an impersonated request.
 
 ## Time-box (Phase 1 defaults — `IMPERSONATION_CONFIG`)
-- Idle window: **15 min** · Absolute cap: **60 min** (~3 extends) · Extend: **+15 min**, clamped to the cap.
+- Idle window: **30 min** · Absolute cap: **120 min** (~3 extends) · Extend: **+30 min**, clamped to the cap.
 - Pre-expiry prompt fires ~2 min before the idle window ends (frontend, PR 1.4).
 - **Extend re-validates server-side every time** (actor still privileged, target still
   impersonable, cap not exhausted) — never a silent client timer. At the absolute
