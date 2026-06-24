@@ -19,7 +19,7 @@
  *   - `initialize()` — synthesize project name from the user query,
  *     populate state with a structurally-complete (but minimal)
  *     blueprint, save customized template files when one is present
- *     (single-arg `saveGeneratedFiles`).
+ *     (auto-committed to git via `saveGeneratedFiles`).
  *   - `handleUserInput()` override — queues without AI processing
  *     when a build is in flight; renders a "Message Queued" tool-call
  *     in the conversation UI so the user gets immediate feedback.
@@ -45,7 +45,8 @@
  *     synthesis happens during `build()` once the agentic loop is
  *     ported.
  *   - `saveGeneratedFiles(files, commitMessage, hashOnly)` upstream
- *     becomes `saveGeneratedFiles(files)` — fork is single-arg.
+ *     becomes `saveGeneratedFiles(files, commitMessage?)` here — the
+ *     `hashOnly` flag is dropped; git is the real subsystem.
  *   - `handleUserInput`'s "Message Queued" broadcast omits the
  *     conversation-id correlation that upstream's `deep_debug` flow
  *     uses — deferred until the deep-debug machinery is ported.
@@ -200,9 +201,7 @@ export class AgenticCodingBehavior
                 }),
             );
 
-            // Fork's `saveGeneratedFiles` is single-arg; commit
-            // message + `hashOnly` flag from upstream are dropped.
-            this.fileManager.saveGeneratedFiles(filesToSave);
+            await this.fileManager.saveGeneratedFiles(filesToSave);
 
             this.logger.info('Saved customized template files');
 

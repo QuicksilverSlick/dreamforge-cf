@@ -1246,7 +1246,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                         filePurpose: allFiles.find((f) => f.filePath === file.filePath)?.filePurpose ?? '',
                         fileContents: file.fileContents,
                     }));
-                    this.fileManager.saveGeneratedFiles(fixedFiles);
+                    await this.fileManager.saveGeneratedFiles(fixedFiles, 'Applied deterministic fixes');
                     await this.deployToSandbox(fixedFiles, false, 'fix: applied deterministic fixes');
                     this.logger.info('Deployed deterministic fixes to sandbox');
                 }
@@ -1748,7 +1748,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
         const readme = await this.operations.simpleGenerateFiles.generateReadme(this.getOperationOptions());
 
-        this.fileManager.saveGeneratedFile(readme);
+        await this.fileManager.saveGeneratedFile(readme, 'Add README');
 
         this.broadcast(WebSocketMessageResponses.FILE_GENERATED, {
             message: 'README.md generated successfully',
@@ -2047,7 +2047,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         // so newly hosted URLs are importable instead of hand-transcribed.
         const brandAssetsSource = renderBrandAssetsModule(updated);
         if (brandAssetsSource) {
-            this.fileManager.saveGeneratedFiles([{
+            // Synchronous method (mergeGeneratedImages: void) — state records
+            // synchronously; the git stage is best-effort.
+            void this.fileManager.saveGeneratedFiles([{
                 filePath: BRAND_ASSETS_MODULE_PATH,
                 fileContents: brandAssetsSource,
                 filePurpose: 'Hosted brand-asset URLs (pipeline-managed, not model-written)',

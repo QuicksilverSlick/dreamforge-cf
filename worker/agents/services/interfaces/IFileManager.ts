@@ -22,14 +22,17 @@ export interface IFileManager {
     getAllFiles(): FileOutputType[];
 
     /**
-     * Save a generated file
+     * Save a generated file. Records state synchronously, then auto-commits to
+     * the per-app git repo (a labeled checkpoint when `commitMessage` is given).
      */
-    saveGeneratedFile(file: FileOutputType): void;
+    saveGeneratedFile(file: FileOutputType, commitMessage?: string): Promise<void>;
 
     /**
-     * Save multiple generated files
+     * Save multiple generated files. Records state synchronously, then
+     * auto-commits to git (a labeled, revertible checkpoint when `commitMessage`
+     * is given; otherwise the changes are staged for the next labeled commit).
      */
-    saveGeneratedFiles(files: FileOutputType[]): void;
+    saveGeneratedFiles(files: FileOutputType[], commitMessage?: string): Promise<void>;
 
     /**
      * Delete files from the file manager
