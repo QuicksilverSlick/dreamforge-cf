@@ -57,12 +57,29 @@ export class FileManager implements IFileManager {
         const fileStates = this.recordGeneratedFiles(files);
         try {
             if (commitMessage) {
-                await this.git.commit(fileStates, commitMessage);
+                await this.commitToGit(fileStates, commitMessage);
             } else if (fileStates.some(f => f.lastDiff !== '')) {
                 await this.git.stage(fileStates);
             }
         } catch (error) {
             console.error('[FileManager] Failed to persist files to git:', error, commitMessage);
+        }
+    }
+
+    /**
+     * Commit to git. The FIRST commit (no HEAD yet) commits the COMPLETE current
+     * file set so the first reversion point is the whole project — not just this
+     * change. This establishes the baseline lazily here (inside generation, which
+     * is already async/slow and sequential) instead of eagerly on the DO wake-up /
+     * WS-connect path. Subsequent commits are incremental.
+     */
+    private async commitToGit(changed: FileState[], message: string): Promise<void> {
+        const head = await this.git.getHead();
+        if (head === null) {
+            await this.git.init();
+            await this.git.commit(this.getGeneratedFiles(), message);
+        } else {
+            await this.git.commit(changed, message);
         }
     }
 
