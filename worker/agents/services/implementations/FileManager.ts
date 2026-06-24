@@ -8,6 +8,14 @@ import { FileProcessing } from '../../domain/pure/FileProcessing';
 import { GitVersionControl } from 'worker/agents/git';
 
 /**
+ * Soft cap on the per-app git store (a fraction of the DO's 10GB SQLite, leaving
+ * ample headroom for agent state + conversation history). Above this, auto-commit
+ * halts so a runaway repo can never block the agent's own writes. A fail-safe —
+ * a single generated app's history realistically never approaches it.
+ */
+const GIT_STORE_SOFT_CAP_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+
+/**
  * Manages file operations for code generation. Handles both template and
  * generated files, and auto-commits every write to the per-app git repo
  * (stored in the DO's SQLite via SqliteFS) so each change is a revertible
@@ -55,14 +63,47 @@ export class FileManager implements IFileManager {
      */
     async saveGeneratedFiles(files: FileOutputType[], commitMessage?: string): Promise<void> {
         const fileStates = this.recordGeneratedFiles(files);
+        // Storage fail-safe: never let the git store grow into the DO's own state.
+        if (this.gitStoreOverCap()) {
+            return;
+        }
         try {
             if (commitMessage) {
                 await this.commitToGit(fileStates, commitMessage);
-            } else if (fileStates.some(f => f.lastDiff !== '')) {
+            } else {
+                // Stage on EVERY save, not only when a textual diff exists: a
+                // brand-new file has an empty lastDiff, so a diff-string guard would
+                // never stage it and it would be missing from the next commit / the
+                // reversion history. git.stage early-returns on an empty list.
                 await this.git.stage(fileStates);
             }
         } catch (error) {
             console.error('[FileManager] Failed to persist files to git:', error, commitMessage);
+        }
+    }
+
+    /**
+     * Fail-safe guard against the per-app git store growing into the DO's 10GB
+     * SQLite cap (which would block the agent's own setState). Auto-commit halts
+     * at a soft cap that leaves ample headroom for state + conversation history;
+     * reverts (reads) keep working. A single app realistically never approaches
+     * this — it's a safety valve, not a normal-path limit. A stats failure must
+     * not block generation (assume under cap).
+     */
+    private gitStoreOverCap(): boolean {
+        try {
+            const { totalBytes } = this.git.getStorageStats();
+            if (totalBytes >= GIT_STORE_SOFT_CAP_BYTES) {
+                console.error('[FileManager] git store at soft cap — halting auto-commit to protect agent state', {
+                    totalBytes,
+                    cap: GIT_STORE_SOFT_CAP_BYTES,
+                });
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('[FileManager] Failed to read git storage stats:', error);
+            return false;
         }
     }
 
