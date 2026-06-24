@@ -17,6 +17,12 @@ interface CollaborationBarProps {
 	isReadOnlyViewer: boolean;
 	/** Name of the driver a drive attempt was just soft-blocked behind, or null. */
 	drivingBlockedBy: string | null;
+	/**
+	 * Display name of the user being impersonated, or null when not impersonating.
+	 * Reframes the take-over copy so an operator acting AS a user understands they
+	 * still hold the single-driver seat and why a take-over is needed.
+	 */
+	impersonatingAs: string | null;
 	onTakeOver: () => void;
 	onRelease: () => void;
 	onDismissBlocked: () => void;
@@ -37,6 +43,7 @@ export function CollaborationBar({
 	isViewerDriving,
 	isReadOnlyViewer,
 	drivingBlockedBy,
+	impersonatingAs,
 	onTakeOver,
 	onRelease,
 	onDismissBlocked,
@@ -51,7 +58,12 @@ export function CollaborationBar({
 		? 'You’re driving'
 		: driver
 			? `${driver.displayName} is driving`
-			: 'Open — start typing to drive';
+			: isReadOnlyViewer
+				? // The seat is held by an id with no live connection (e.g. a session
+					// that dropped without releasing it) — say so plainly instead of
+					// inviting the viewer to "start typing", which would be soft-blocked.
+					'Another session holds the editor'
+				: 'Open — start typing to drive';
 
 	return (
 		<div
@@ -108,8 +120,17 @@ export function CollaborationBar({
 			{drivingBlockedBy && (
 				<div className="mt-2 flex items-center gap-2 rounded-md bg-accent/10 px-2.5 py-1.5 text-xs text-text-primary/90">
 					<span className="flex-1">
-						<span className="font-medium">{drivingBlockedBy}</span> is actively building — take over to make
-						changes.
+						{impersonatingAs ? (
+							<>
+								You’re viewing as <span className="font-medium">{impersonatingAs}</span>. Another session
+								holds this app’s editor — take over to make changes.
+							</>
+						) : (
+							<>
+								<span className="font-medium">{drivingBlockedBy}</span> is currently driving — take over to
+								make changes.
+							</>
+						)}
 					</span>
 					<Button size="sm" variant="secondary" className="h-6 text-xs" onClick={onTakeOver}>
 						Take over

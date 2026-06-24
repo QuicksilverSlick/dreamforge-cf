@@ -154,6 +154,11 @@ export default function Chat() {
 	const isReadOnlyViewer = !!currentDriverId && currentDriverId !== user?.id;
 	const currentDriverName =
 		presenceMembers.find((m) => m.isDriver)?.displayName ?? 'Another member';
+	// While impersonating, the effective user IS the target, so user.displayName is
+	// the impersonated user's name — used to reframe the take-over copy.
+	const impersonatingAs = user?.impersonatedBy
+		? (user.displayName ?? user.email ?? 'this user')
+		: null;
 
 	// GitHub export functionality - use urlChatId directly from URL params
 	const githubExport = useGitHubExport(websocket, urlChatId);
@@ -665,6 +670,7 @@ export default function Chat() {
 							isViewerDriving={isViewerDriving}
 							isReadOnlyViewer={isReadOnlyViewer}
 							drivingBlockedBy={drivingBlockedBy}
+							impersonatingAs={impersonatingAs}
 							onTakeOver={claimDriving}
 							onRelease={releaseDriving}
 							onDismissBlocked={() => setDrivingBlockedBy(null)}
