@@ -11,6 +11,7 @@ import type {
     UserStats,
     AdminUserSummary,
     AdminOverview,
+    AdminAppSummary,
     GitHubTokenStatus,
     AdminSessionInfo,
 } from '../../../database/types';
@@ -19,6 +20,9 @@ import type { AuditLog } from '../../../database/schema';
 export type AdminOverviewData = AdminOverview;
 
 export type AdminUsersListData = PaginatedResult<AdminUserSummary>;
+
+/** The operator's global app list (every app across all users/orgs). */
+export type AdminAppsListData = PaginatedResult<AdminAppSummary>;
 
 export interface AdminUserDetailData {
     user: AdminUserSummary;

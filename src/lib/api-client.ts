@@ -61,6 +61,7 @@ import type{
     InterviewAnswer,
     AdminOverviewData,
     AdminUsersListData,
+    AdminAppsListData,
     AdminUserDetailData,
     AdminUserAppsData,
     AdminUserSessionsData,
@@ -1398,6 +1399,19 @@ class ApiClient {
 
 	async getAdminUser(userId: string): Promise<ApiResponse<AdminUserDetailData>> {
 		return this.request<AdminUserDetailData>(`/api/admin/users/${encodeURIComponent(userId)}`);
+	}
+
+	async getAdminApps(
+		params: {
+			q?: string;
+			status?: 'all' | 'generating' | 'completed';
+			visibility?: 'all' | 'private' | 'public';
+			plan?: string;
+			limit?: number;
+			offset?: number;
+		} = {},
+	): Promise<ApiResponse<AdminAppsListData>> {
+		return this.request<AdminAppsListData>(`/api/admin/apps${this.buildAdminQuery(params)}`);
 	}
 
 	async getAdminUserApps(

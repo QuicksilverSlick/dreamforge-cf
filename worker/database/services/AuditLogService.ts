@@ -37,6 +37,7 @@ export const AdminAuditAction = {
     USER_SESSIONS_VIEW: 'admin.user.sessions.view',
     USER_SECRETS_VIEW: 'admin.user.secrets.view',
     APP_VIEW: 'admin.app.view',
+    APP_SEARCH: 'admin.app.search',
     AUDIT_VIEW: 'admin.audit.view',
     USER_SUSPEND: 'admin.user.suspend',
     USER_REACTIVATE: 'admin.user.reactivate',

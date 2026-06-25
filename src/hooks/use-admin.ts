@@ -4,12 +4,15 @@ import type {
     ApiResponse,
     AdminOverviewData,
     AdminUsersListData,
+    AdminAppsListData,
     AdminUserDetailData,
     AdminUserAppsData,
     AdminUserSessionsData,
     AdminUserSecretsData,
     AdminAuditListData,
     AdminUserStatusFilter,
+    AdminAppStatusFilter,
+    AdminAppVisibilityFilter,
     UserRole,
 } from '@/api-types';
 
@@ -83,6 +86,23 @@ export function useAdminUsers(query: AdminUsersQuery): AsyncState<AdminUsersList
 
 export function useAdminUser(userId: string): AsyncState<AdminUserDetailData> {
     return useAsyncData<AdminUserDetailData>(() => apiClient.getAdminUser(userId), [userId]);
+}
+
+export interface AdminAppsQuery {
+    q?: string;
+    status?: AdminAppStatusFilter;
+    visibility?: AdminAppVisibilityFilter;
+    plan?: string;
+    limit?: number;
+    offset?: number;
+}
+
+export function useAdminApps(query: AdminAppsQuery): AsyncState<AdminAppsListData> {
+    const { q, status, visibility, plan, limit, offset } = query;
+    return useAsyncData<AdminAppsListData>(
+        () => apiClient.getAdminApps({ q, status, visibility, plan, limit, offset }),
+        [q, status, visibility, plan, limit, offset],
+    );
 }
 
 export function useAdminUserApps(userId: string): AsyncState<AdminUserAppsData> {

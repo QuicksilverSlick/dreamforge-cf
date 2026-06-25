@@ -282,6 +282,36 @@ export interface AdminOverview {
     publicApps: number;
 }
 
+export type AdminAppStatusFilter = 'all' | 'generating' | 'completed';
+export type AdminAppVisibilityFilter = 'all' | 'private' | 'public';
+
+/**
+ * Plaintext-safe app projection for the operator's GLOBAL app list (every app
+ * across all users/orgs — the one cross-tenant app read). Joins the owner (safe
+ * columns only) and the org plan (the free/paid signal). Owner fields are null
+ * for an app whose creator row is gone.
+ */
+export interface AdminAppSummary {
+    id: string;
+    title: string;
+    description: string | null;
+    framework: string | null;
+    status: 'generating' | 'completed';
+    visibility: Visibility;
+    screenshotUrl: string | null;
+    deploymentId: string | null;
+    createdAt: Date | null;
+    updatedAt: Date | null;
+    lastDeployedAt: Date | null;
+    ownerId: string | null;
+    ownerEmail: string | null;
+    ownerDisplayName: string | null;
+    ownerProvider: string | null;
+    orgId: string;
+    orgName: string | null;
+    orgPlan: string | null;
+}
+
 /** Plaintext-safe GitHub connection status (metadata only; never the token). */
 export interface GitHubTokenStatus {
     connected: boolean;

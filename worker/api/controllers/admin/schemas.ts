@@ -4,7 +4,11 @@
 
 import { z } from 'zod';
 import type { UserRole } from '../../../types/auth-types';
-import type { AdminUserStatusFilter } from '../../../database/services/AdminService';
+import type {
+    AdminUserStatusFilter,
+    AdminAppStatusFilter,
+    AdminAppVisibilityFilter,
+} from '../../../database/services/AdminService';
 
 const USER_ROLES: readonly UserRole[] = [
     'superadmin',
@@ -16,6 +20,8 @@ const USER_ROLES: readonly UserRole[] = [
 ];
 
 const USER_STATUSES: readonly AdminUserStatusFilter[] = ['all', 'active', 'suspended'];
+const APP_STATUSES: readonly AdminAppStatusFilter[] = ['all', 'generating', 'completed'];
+const APP_VISIBILITIES: readonly AdminAppVisibilityFilter[] = ['all', 'private', 'public'];
 
 /** Suspension requires an operator-supplied justification (audited). */
 export const suspendBodySchema = z.object({
@@ -39,6 +45,20 @@ export function parseUserRole(value: string | null): UserRole | undefined {
 export function parseUserStatus(value: string | null): AdminUserStatusFilter | undefined {
     if (value && (USER_STATUSES as readonly string[]).includes(value)) {
         return value as AdminUserStatusFilter;
+    }
+    return undefined;
+}
+
+export function parseAppStatus(value: string | null): AdminAppStatusFilter | undefined {
+    if (value && (APP_STATUSES as readonly string[]).includes(value)) {
+        return value as AdminAppStatusFilter;
+    }
+    return undefined;
+}
+
+export function parseAppVisibility(value: string | null): AdminAppVisibilityFilter | undefined {
+    if (value && (APP_VISIBILITIES as readonly string[]).includes(value)) {
+        return value as AdminAppVisibilityFilter;
     }
     return undefined;
 }
