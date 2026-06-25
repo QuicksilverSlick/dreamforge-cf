@@ -78,6 +78,7 @@ import {
 import {
     handleWebSocketMessage,
     handleWebSocketClose,
+    expireTakeoverRequest,
 } from './codingAgentWebsocket';
 import { readConnectionIdentity, broadcastPresence, handlePresenceOnClose, connectionForErrorOrRethrow } from './presence';
 import {
@@ -740,6 +741,17 @@ export class CodeGeneratorAgent
 
     async onClose(connection: Connection): Promise<void> {
         handleWebSocketClose(this, connection);
+    }
+
+    /**
+     * Scheduler callback (via `this.schedule(...)`) for the consent-gated takeover
+     * auto-deny: when a privileged operator's takeover request goes unanswered for
+     * the consent window, fail closed and deny. Idempotent — `expireTakeoverRequest`
+     * no-ops unless the still-pending request matches `requestId`, so a late fire
+     * after the user already decided does nothing.
+     */
+    onTakeoverConsentTimeout(payload: { requestId: string }): void {
+        expireTakeoverRequest(this, payload.requestId);
     }
 
     /**

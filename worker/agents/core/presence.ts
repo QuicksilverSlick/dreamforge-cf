@@ -22,6 +22,8 @@ import { WebSocketMessageResponses } from '../constants';
 import { sendToConnection } from './websocketHelpers';
 import type { CodeGeneratorAgent } from './codingAgent';
 import type { PresenceMember } from '../../api/websocketTypes';
+import { isUserRole, type UserRole } from '../../types/auth-types';
+import type { GrantedTakeover, PendingTakeover } from './state';
 
 /** Identity persisted on each WebSocket connection (the per-socket attachment). */
 export interface ConnectionIdentity {
@@ -36,6 +38,12 @@ export interface ConnectionIdentity {
      */
     impersonatedBy?: string | null;
     impersonationReadOnly?: boolean;
+    /**
+     * The operator's REAL role (superadmin / org-admin / ai_*), carried so the
+     * consent-takeover gate, prompt, and audit can name the role and detect an AI
+     * agent. Null when not impersonating. Sourced from AuthUser.impersonatorRole.
+     */
+    impersonatorRole?: UserRole | null;
 }
 
 const USER_ID_HEADER = 'x-df-user-id';
@@ -43,6 +51,7 @@ const USER_NAME_HEADER = 'x-df-user-name';
 const USER_AVATAR_HEADER = 'x-df-user-avatar';
 const IMPERSONATED_BY_HEADER = 'x-df-impersonated-by';
 const IMPERSONATION_READONLY_HEADER = 'x-df-impersonation-readonly';
+const IMPERSONATOR_ROLE_HEADER = 'x-df-impersonator-role';
 
 /**
  * Stamp the resolved user's identity onto the WS upgrade request (server side)
@@ -57,6 +66,7 @@ export function setIdentityHeaders(
         avatarUrl?: string | null;
         impersonatedBy?: string;
         impersonationReadOnly?: boolean;
+        impersonatorRole?: UserRole | null;
     },
 ): void {
     headers.set(USER_ID_HEADER, user.id);
@@ -73,9 +83,17 @@ export function setIdentityHeaders(
     if (user.impersonatedBy) {
         headers.set(IMPERSONATED_BY_HEADER, user.impersonatedBy);
         headers.set(IMPERSONATION_READONLY_HEADER, user.impersonationReadOnly ? '1' : '0');
+        // The operator's real role, for the consent prompt + audit (role-only, no
+        // operator-name leak). DELETE when absent so a client can't forge it.
+        if (user.impersonatorRole) {
+            headers.set(IMPERSONATOR_ROLE_HEADER, user.impersonatorRole);
+        } else {
+            headers.delete(IMPERSONATOR_ROLE_HEADER);
+        }
     } else {
         headers.delete(IMPERSONATED_BY_HEADER);
         headers.delete(IMPERSONATION_READONLY_HEADER);
+        headers.delete(IMPERSONATOR_ROLE_HEADER);
     }
 }
 
@@ -86,12 +104,14 @@ export function readConnectionIdentity(request: Request): ConnectionIdentity | n
         return null;
     }
     const impersonatedBy = request.headers.get(IMPERSONATED_BY_HEADER);
+    const impersonatorRole = request.headers.get(IMPERSONATOR_ROLE_HEADER);
     return {
         userId,
         displayName: request.headers.get(USER_NAME_HEADER) || 'Member',
         avatar: request.headers.get(USER_AVATAR_HEADER) || null,
         impersonatedBy: impersonatedBy || null,
         impersonationReadOnly: request.headers.get(IMPERSONATION_READONLY_HEADER) === '1',
+        impersonatorRole: isUserRole(impersonatorRole) ? impersonatorRole : null,
     };
 }
 
@@ -140,7 +160,7 @@ function isIdentity(value: unknown): value is ConnectionIdentity {
 }
 
 /** The identity attached to a connection (null for a pre-feature / unidentified socket). */
-function identityOf(connection: Connection): ConnectionIdentity | null {
+export function identityOf(connection: Connection): ConnectionIdentity | null {
     return isIdentity(connection.state) ? connection.state : null;
 }
 
@@ -151,12 +171,17 @@ function identityOf(connection: Connection): ConnectionIdentity | null {
  */
 export function connectionImpersonation(
     connection: Connection,
-): { actorId: string; targetId: string; readOnly: boolean } | null {
+): { actorId: string; targetId: string; readOnly: boolean; actorRole: UserRole | null } | null {
     const id = identityOf(connection);
     if (!id?.impersonatedBy) {
         return null;
     }
-    return { actorId: id.impersonatedBy, targetId: id.userId, readOnly: id.impersonationReadOnly === true };
+    return {
+        actorId: id.impersonatedBy,
+        targetId: id.userId,
+        readOnly: id.impersonationReadOnly === true,
+        actorRole: id.impersonatorRole ?? null,
+    };
 }
 
 /** Live roster — one entry per distinct user (collapsing multiple tabs). */
@@ -236,44 +261,164 @@ function hasLiveConnection(agent: CodeGeneratorAgent, userId: string): boolean {
     return [...agent.getConnections()].some((c) => identityOf(c)?.userId === userId);
 }
 
-/** Explicit claim / take-over of the driver seat. */
+/**
+ * The REAL user's own live connections for `targetUserId` — genuine sessions
+ * (impersonatedBy == null), excluding the operator's own socket. This is the
+ * security-critical distinction from hasLiveConnection: under impersonation the
+ * operator's socket ALSO carries targetUserId, so a plain userId match cannot
+ * tell "the real user is here" apart from "only the operator is here".
+ */
+export function realUserConnections(
+    agent: CodeGeneratorAgent,
+    targetUserId: string,
+    excludeConnectionId: string,
+): Connection[] {
+    return [...agent.getConnections()].filter((c) => {
+        const id = identityOf(c);
+        return id?.userId === targetUserId && !id.impersonatedBy && c.id !== excludeConnectionId;
+    });
+}
+
+/** True when the real target user has a genuine live session separate from the operator. */
+export function hasLiveRealUserConnection(
+    agent: CodeGeneratorAgent,
+    targetUserId: string,
+    excludeConnectionId: string,
+): boolean {
+    return realUserConnections(agent, targetUserId, excludeConnectionId).length > 0;
+}
+
+export type TakeoverGate = 'allow' | 'pending' | 'blocked' | 'request';
+
+/**
+ * Consent gate for a driving attempt by a privileged impersonating operator.
+ * MUST be consulted BEFORE ensureCanDrive (C1): under impersonation the operator's
+ * userId equals the target's, so ensureCanDrive's `current === me` short-circuit
+ * would otherwise let the operator drive with NO consent. PURE (no side effects):
+ *  - 'allow'   not impersonating, or no genuine live user to protect, or this
+ *              operator already holds the user's session-long consent;
+ *  - 'pending' this operator already has a consent request in flight;
+ *  - 'blocked' a DIFFERENT operator's request is mid-flight (one at a time);
+ *  - 'request' a fresh consent request must be sent to the real user.
+ * The caller performs the 'request' side effects (mint id / schedule / send / audit).
+ *
+ * NOTE on scope: the protected party is the impersonation TARGET specifically.
+ * A non-target org member who happens to be present is NOT being taken over (the
+ * operator drives AS the target), so their consent is not required — matching the
+ * owner's "protect the user being impersonated" intent.
+ */
+export function takeoverGateDecision(
+    agent: CodeGeneratorAgent,
+    connection: Connection,
+): TakeoverGate {
+    const imp = connectionImpersonation(connection);
+    if (!imp) {
+        return 'allow'; // not impersonating — consent never applies
+    }
+    const granted = agent.state.grantedTakeover;
+    if (granted && granted.operatorConnectionId === connection.id) {
+        return 'allow'; // this operator already has the user's session-long consent
+    }
+    if (!hasLiveRealUserConnection(agent, imp.targetId, connection.id)) {
+        return 'allow'; // no genuine live user to protect; the grant store governs
+    }
+    const pending = agent.state.pendingTakeover;
+    if (pending && pending.operatorConnectionId === connection.id) {
+        return 'pending'; // already awaiting this operator's consent
+    }
+    if (pending) {
+        return 'blocked'; // another operator's request is mid-flight — one at a time
+    }
+    return 'request';
+}
+
+/**
+ * Explicit claim / take-over of the driver seat. A REAL user (impersonatedBy ==
+ * null) reclaiming control also instantly REVOKES any operator takeover grant or
+ * pending request — asymmetric and consent-free, so the user is always able to
+ * take the wheel back. (Under impersonation the operator's seat shows the target's
+ * userId, so the seat id may be unchanged; the revoke is the load-bearing effect.)
+ */
 export function claimDriver(
     agent: CodeGeneratorAgent,
     connection: Connection,
 ): void {
-    const me = identityOf(connection)?.userId;
-    if (me && agent.state.currentDriverUserId !== me) {
-        setDriver(agent, me);
+    const id = identityOf(connection);
+    const me = id?.userId;
+    if (!me) {
+        return;
+    }
+    const isRealUser = !id.impersonatedBy;
+    const hadTakeover = !!(agent.state.grantedTakeover || agent.state.pendingTakeover);
+    if (isRealUser && hadTakeover) {
+        agent.setState({ ...agent.state, grantedTakeover: null, pendingTakeover: null });
+    }
+    if (agent.state.currentDriverUserId !== me) {
+        setDriver(agent, me); // claim the seat + broadcast
+    } else if (isRealUser && hadTakeover) {
+        broadcastPresence(agent); // seat id unchanged (shared id) but the revoke must surface
     }
 }
 
-/** Release the driver seat (only its holder can release it). */
+/**
+ * Release the driver seat (only its holder can release it). A granted operator
+ * releasing also relinquishes the takeover grant.
+ */
 export function releaseDriver(
     agent: CodeGeneratorAgent,
     connection: Connection,
 ): void {
     const me = identityOf(connection)?.userId;
-    if (me && agent.state.currentDriverUserId === me) {
-        setDriver(agent, null);
+    if (!me || agent.state.currentDriverUserId !== me) {
+        return;
     }
+    if (agent.state.grantedTakeover?.operatorConnectionId === connection.id) {
+        agent.setState({ ...agent.state, grantedTakeover: null });
+    }
+    setDriver(agent, null);
 }
 
 /**
- * On disconnect: free the seat when the driver's LAST connection closes, then
- * refresh presence for everyone still connected.
+ * On disconnect: free the seat when the driver's LAST connection closes, tear down
+ * any takeover grant / pending request tied to the closing socket, then refresh
+ * presence. (A pending request the operator abandons by leaving is also covered by
+ * the consent timeout, which is idempotent; this just clears it sooner.)
  */
 export function handlePresenceOnClose(
     agent: CodeGeneratorAgent,
     connection: Connection,
 ): void {
     const me = identityOf(connection)?.userId;
-    if (me && agent.state.currentDriverUserId === me) {
+    const takeoverPatch = takeoverCleanupOnClose(agent, connection);
+
+    let nextDriver = agent.state.currentDriverUserId ?? null;
+    if (me && nextDriver === me) {
         const hasOtherConnection = [...agent.getConnections()].some(
             (c) => c.id !== connection.id && identityOf(c)?.userId === me,
         );
         if (!hasOtherConnection) {
-            agent.setState({ ...agent.state, currentDriverUserId: null });
+            nextDriver = null;
         }
     }
+
+    if (takeoverPatch || nextDriver !== (agent.state.currentDriverUserId ?? null)) {
+        agent.setState({ ...agent.state, ...(takeoverPatch ?? {}), currentDriverUserId: nextDriver });
+    }
     broadcastPresence(agent);
+}
+
+/** Clear a takeover grant / pending request whose operator socket is the one closing. */
+function takeoverCleanupOnClose(
+    agent: CodeGeneratorAgent,
+    connection: Connection,
+): { grantedTakeover?: GrantedTakeover | null; pendingTakeover?: PendingTakeover | null } | null {
+    const grantGone = agent.state.grantedTakeover?.operatorConnectionId === connection.id;
+    const pendingGone = agent.state.pendingTakeover?.operatorConnectionId === connection.id;
+    if (!grantGone && !pendingGone) {
+        return null;
+    }
+    return {
+        ...(grantGone ? { grantedTakeover: null } : {}),
+        ...(pendingGone ? { pendingTakeover: null } : {}),
+    };
 }

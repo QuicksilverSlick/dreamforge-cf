@@ -92,6 +92,13 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
     // "someone else is driving" notice sent when a non-driver tries to drive.
     PRESENCE_UPDATE: 'presence_update',
     DRIVING_BLOCKED: 'driving_blocked',
+
+    // Consent-gated takeover: a privileged impersonating operator wanting to drive
+    // while the real user is live must get the real user's on-stream consent.
+    // REQUEST is sent ONLY to the real user's connection(s); RESOLVED tells the
+    // operator the outcome (granted / denied / timed_out).
+    TAKEOVER_REQUEST: 'takeover_request',
+    TAKEOVER_RESOLVED: 'takeover_resolved',
 }
 
 // WebSocket message types
@@ -123,6 +130,10 @@ export const WebSocketMessageRequests = {
     // Org collaboration: claim / release the single driver seat.
     CLAIM_DRIVER: 'claim_driver',
     RELEASE_DRIVER: 'release_driver',
+
+    // Consent-gated takeover: the real user's allow/deny answer to a privileged
+    // operator's takeover request.
+    TAKEOVER_DECISION: 'takeover_decision',
     
     // Terminal command request
     TERMINAL_COMMAND: 'terminal_command',

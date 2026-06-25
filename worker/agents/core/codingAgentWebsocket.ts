@@ -25,8 +25,20 @@ import { MAX_IMAGES_PER_MESSAGE, MAX_IMAGE_SIZE_BYTES, type ImageAttachment } fr
 import { checkUsageAndBalance } from '../../services/rate-limit';
 import type { CodeGeneratorAgent } from './codingAgent';
 import { sendToConnection, sendError } from './websocketHelpers';
-import { ensureCanDrive, claimDriver, releaseDriver, handlePresenceOnClose, connectionImpersonation } from './presence';
+import {
+    ensureCanDrive,
+    claimDriver,
+    releaseDriver,
+    handlePresenceOnClose,
+    connectionImpersonation,
+    takeoverGateDecision,
+    realUserConnections,
+    identityOf,
+    broadcastPresence,
+} from './presence';
 import { AuditLogService, AdminAuditAction } from '../../database/services/AuditLogService';
+import type { PendingTakeover } from './state';
+import type { UserRole } from '../../types/auth-types';
 
 /**
  * Commands that DRIVE the shared build (mutate state / spend the creator's
@@ -58,7 +70,15 @@ interface IncomingWebSocketMessage {
         viewport?: unknown;
         [key: string]: unknown;
     };
+    // Consent-gated takeover decision (TAKEOVER_DECISION), real user → server.
+    requestId?: string;
+    allow?: boolean;
 }
+
+/** Consent-gated takeover tunables (privileged impersonation only). */
+const TAKEOVER_CONSENT_TIMEOUT_SECONDS = 30; // auto-DENY on no response (fail-closed)
+const TAKEOVER_THROTTLE_MAX = 3; // re-requests allowed per operator per window
+const TAKEOVER_THROTTLE_WINDOW_MS = 5 * 60 * 1000;
 
 const logger = createLogger('CodeGeneratorWebSocket');
 
@@ -86,6 +106,241 @@ function auditImpersonatedDrive(
         });
 }
 
+/**
+ * Consent-gated takeover (privileged impersonation only). Returns true if the
+ * operator may drive now; false when the command must be WITHHELD (consent is
+ * pending, blocked by another operator's in-flight request, or throttled). On a
+ * fresh 'request' it prompts the real user's connection(s), schedules the
+ * fail-closed auto-deny, and audits the request — then withholds. MUST be called
+ * BEFORE ensureCanDrive (C1): under impersonation the operator's userId equals the
+ * target's, so the seat's `current === me` shortcut would otherwise let the
+ * operator drive with no consent.
+ */
+async function requireTakeoverConsent(
+    agent: CodeGeneratorAgent,
+    connection: Connection,
+    impersonation: { actorId: string; targetId: string; actorRole: UserRole | null },
+): Promise<boolean> {
+    switch (takeoverGateDecision(agent, connection)) {
+        case 'allow':
+            return true;
+        case 'pending':
+            return false; // already awaiting this operator's consent — keep waiting
+        case 'blocked':
+            sendError(connection, 'Another takeover request for this user is already in progress.');
+            return false;
+        case 'request':
+            await startTakeoverRequest(agent, connection, impersonation);
+            return false;
+    }
+}
+
+async function startTakeoverRequest(
+    agent: CodeGeneratorAgent,
+    connection: Connection,
+    impersonation: { actorId: string; targetId: string; actorRole: UserRole | null },
+): Promise<void> {
+    // Throttle keyed on the operator's REAL actorId (C7: survives a reconnect,
+    // unlike connection.id) so the user can't be prompt-bombed into consenting.
+    if (isTakeoverThrottled(agent, impersonation.actorId)) {
+        sendError(connection, 'Too many takeover requests. Please wait a few minutes before trying again.');
+        return;
+    }
+    const requestId = crypto.randomUUID(); // crypto-random + single-use (C5)
+    const now = Date.now();
+    const expiresAt = now + TAKEOVER_CONSENT_TIMEOUT_SECONDS * 1000;
+    const isAgent = impersonation.actorRole === 'ai_support' || impersonation.actorRole === 'ai_admin';
+
+    recordTakeoverRequest(agent, {
+        requestId,
+        operatorConnectionId: connection.id,
+        targetUserId: impersonation.targetId,
+        actorId: impersonation.actorId,
+        actorRole: impersonation.actorRole,
+        requestedAt: now,
+        expiresAt,
+    });
+
+    const reasonUser = `${operatorRoleLabel(impersonation.actorRole, isAgent)} is requesting to take over and make changes to this app on your behalf.`;
+    for (const real of realUserConnections(agent, impersonation.targetId, connection.id)) {
+        sendToConnection(real, WebSocketMessageResponses.TAKEOVER_REQUEST, {
+            requestId,
+            operatorRole: impersonation.actorRole,
+            isAgent,
+            appId: agent.getAgentId(),
+            expiresAt,
+            reasonUser,
+        });
+    }
+
+    // Tell the operator their drive is awaiting consent (so the UI shows a waiting
+    // state with the same countdown), rather than silently withholding it.
+    sendToConnection(connection, WebSocketMessageResponses.TAKEOVER_RESOLVED, {
+        requestId,
+        outcome: 'pending',
+        expiresAt,
+    });
+
+    // Fail-closed auto-deny on no response. The callback is idempotent (it
+    // re-checks the requestId), so we don't track/cancel the schedule id.
+    await agent.schedule(TAKEOVER_CONSENT_TIMEOUT_SECONDS, 'onTakeoverConsentTimeout', { requestId });
+
+    auditTakeover(agent, impersonation.actorId, 'takeover_requested', {
+        requestId,
+        targetUserId: impersonation.targetId,
+        operatorRole: impersonation.actorRole ?? null,
+    });
+}
+
+function isTakeoverThrottled(agent: CodeGeneratorAgent, actorId: string): boolean {
+    const entry = agent.state.takeoverRequestThrottle?.[actorId];
+    if (!entry) {
+        return false;
+    }
+    const withinWindow = Date.now() - entry.windowStartedAt < TAKEOVER_THROTTLE_WINDOW_MS;
+    return withinWindow && entry.count >= TAKEOVER_THROTTLE_MAX;
+}
+
+/** Persist the pending request + bump the per-operator (actorId) re-request counter. */
+function recordTakeoverRequest(agent: CodeGeneratorAgent, pending: PendingTakeover): void {
+    const throttle = { ...(agent.state.takeoverRequestThrottle ?? {}) };
+    const prior = throttle[pending.actorId];
+    throttle[pending.actorId] =
+        prior && pending.requestedAt - prior.windowStartedAt < TAKEOVER_THROTTLE_WINDOW_MS
+            ? { count: prior.count + 1, windowStartedAt: prior.windowStartedAt }
+            : { count: 1, windowStartedAt: pending.requestedAt };
+    agent.setState({ ...agent.state, pendingTakeover: pending, takeoverRequestThrottle: throttle });
+}
+
+/** Role-only label for the consent prompt — never the operator's name (no identity leak). */
+function operatorRoleLabel(role: UserRole | null, isAgent: boolean): string {
+    if (isAgent) {
+        return 'An AI support agent';
+    }
+    switch (role) {
+        case 'superadmin':
+            return 'A platform admin';
+        case 'support':
+            return 'A support agent';
+        case 'admin':
+            return 'An org admin';
+        default:
+            return 'An authorized operator';
+    }
+}
+
+/**
+ * Handle the real user's allow/deny to a takeover request. C4: ONLY the genuine
+ * target (userId === pending.targetUserId AND NOT impersonating) may decide — an
+ * operator shares the target's userId but is impersonating, so it can never
+ * self-consent. C5/C8: the pending request is cleared SYNCHRONOUSLY (single-use)
+ * before any side effects, and the matching requestId is required, so a replayed
+ * or stale decision is ignored.
+ */
+function handleTakeoverDecision(
+    agent: CodeGeneratorAgent,
+    connection: Connection,
+    parsed: IncomingWebSocketMessage,
+): void {
+    const pending = agent.state.pendingTakeover;
+    if (!pending || parsed.requestId !== pending.requestId) {
+        return; // no pending request, or a stale/forged requestId
+    }
+    const decider = identityOf(connection);
+    if (!decider || decider.userId !== pending.targetUserId || decider.impersonatedBy) {
+        return; // only the real target may consent — never the operator
+    }
+    if (parsed.allow === true) {
+        agent.setState({
+            ...agent.state,
+            pendingTakeover: null,
+            grantedTakeover: {
+                operatorConnectionId: pending.operatorConnectionId,
+                consentingUserId: pending.targetUserId,
+            },
+            currentDriverUserId: pending.targetUserId, // the operator (as target) now drives
+        });
+        broadcastPresence(agent);
+        notifyOperator(agent, pending, 'granted');
+        auditTakeover(agent, pending.actorId, 'takeover_granted', {
+            requestId: pending.requestId,
+            targetUserId: pending.targetUserId,
+            decidedByConnectionId: connection.id,
+        });
+    } else {
+        agent.setState({ ...agent.state, pendingTakeover: null });
+        notifyOperator(agent, pending, 'denied');
+        auditTakeoverDenied(agent, pending, 'user_denied');
+    }
+}
+
+/**
+ * Scheduler callback (invoked from CodeGeneratorAgent.onTakeoverConsentTimeout):
+ * fail-closed auto-deny when the user never answered. Idempotent — no-ops unless
+ * the still-pending request matches requestId, so a late fire after a resolved
+ * decision does nothing.
+ */
+export function expireTakeoverRequest(agent: CodeGeneratorAgent, requestId: string): void {
+    const pending = agent.state.pendingTakeover;
+    if (!pending || pending.requestId !== requestId) {
+        return;
+    }
+    agent.setState({ ...agent.state, pendingTakeover: null });
+    notifyOperator(agent, pending, 'timed_out');
+    auditTakeoverDenied(agent, pending, 'timed_out');
+}
+
+/** Tell the operator's connection (if still live) the outcome of its request. */
+function notifyOperator(
+    agent: CodeGeneratorAgent,
+    pending: PendingTakeover,
+    outcome: 'granted' | 'denied' | 'timed_out',
+): void {
+    const operator = [...agent.getConnections()].find((c) => c.id === pending.operatorConnectionId);
+    if (operator) {
+        sendToConnection(operator, WebSocketMessageResponses.TAKEOVER_RESOLVED, {
+            requestId: pending.requestId,
+            outcome,
+        });
+    }
+}
+
+/** Best-effort audit of a takeover lifecycle event, attributed to the real operator. */
+function auditTakeover(
+    agent: CodeGeneratorAgent,
+    actorId: string,
+    phase: string,
+    extra: Record<string, unknown>,
+): void {
+    void new AuditLogService(agent.env)
+        .record({
+            actorId,
+            entityType: 'app',
+            entityId: agent.getAgentId(),
+            action: AdminAuditAction.IMPERSONATION_ACTION,
+            newValues: { phase, channel: 'websocket', ...extra },
+        })
+        .catch((error) => logger.error('Failed to audit takeover event', error));
+}
+
+function auditTakeoverDenied(agent: CodeGeneratorAgent, pending: PendingTakeover, reason: string): void {
+    void new AuditLogService(agent.env)
+        .record({
+            actorId: pending.actorId,
+            entityType: 'app',
+            entityId: agent.getAgentId(),
+            action: AdminAuditAction.IMPERSONATION_DENIED,
+            newValues: {
+                phase: reason === 'timed_out' ? 'takeover_timeout' : 'takeover_denied',
+                channel: 'websocket',
+                requestId: pending.requestId,
+                targetUserId: pending.targetUserId,
+                reason,
+            },
+        })
+        .catch((error) => logger.error('Failed to audit takeover denial', error));
+}
+
 export async function handleWebSocketMessage(
     agent: CodeGeneratorAgent,
     connection: Connection,
@@ -97,10 +352,10 @@ export async function handleWebSocketMessage(
 
         if (DRIVING_COMMANDS.has(parsedMessage.type)) {
             const impersonation = connectionImpersonation(connection);
-            // Read-only impersonation may observe but never drive — the REST
-            // impersonation policy gates HTTP, but a WS upgrade is a GET that
-            // bypasses it, so the same read-only rule is enforced here on the
-            // frames that actually mutate the app.
+            // Read-only impersonation may observe but never drive (C11: this stays
+            // ABOVE the consent gate + the seat, so a read-only session never even
+            // reaches takeover). The REST policy gates HTTP, but a WS upgrade is a
+            // GET that bypasses it, so the rule is enforced here.
             if (impersonation?.readOnly) {
                 logger.warn('Blocked a driving command from a read-only impersonation session', {
                     command: parsedMessage.type,
@@ -110,16 +365,24 @@ export async function handleWebSocketMessage(
                 sendError(connection, 'This is a read-only session. You cannot drive the agent while impersonating.');
                 return;
             }
-            // Non-repudiation: a writable impersonation drives AS the customer, so
-            // attribute the command to the real operator (best-effort, off the
-            // response path) before the single-driver gate runs.
-            if (impersonation) {
-                auditImpersonatedDrive(agent, impersonation, parsedMessage.type);
+            // Consent-gated takeover (C1: BEFORE ensureCanDrive — under impersonation
+            // the operator's userId equals the target's, so the seat's `current ===
+            // me` shortcut would otherwise let the operator drive with no consent).
+            // When the real user is live, this withholds the command and prompts
+            // them until they consent.
+            if (impersonation && !(await requireTakeoverConsent(agent, connection, impersonation))) {
+                return;
             }
             // Single-driver gate (soft): a non-driver's driving command is not run
             // concurrently — they're notified who's driving and may take over.
             if (!ensureCanDrive(agent, connection)) {
                 return;
+            }
+            // Non-repudiation: attribute the now-executing impersonated drive to the
+            // real operator (best-effort, off the response path). AFTER the gates, so
+            // only commands that actually run are attributed.
+            if (impersonation) {
+                auditImpersonatedDrive(agent, impersonation, parsedMessage.type);
             }
         }
 
@@ -371,11 +634,27 @@ export async function handleWebSocketMessage(
                     );
                 }
                 break;
-            case WebSocketMessageRequests.CLAIM_DRIVER:
+            case WebSocketMessageRequests.CLAIM_DRIVER: {
+                // An impersonating operator's explicit take-over also needs the real
+                // user's consent when they're live (mirrors the driving gate). A real
+                // user's claim ("take back control") has no impersonation context, so
+                // it goes straight through claimDriver and revokes any grant.
+                const claimImpersonation = connectionImpersonation(connection);
+                if (claimImpersonation?.readOnly) {
+                    sendError(connection, 'This is a read-only session. You cannot take over the agent while impersonating.');
+                    break;
+                }
+                if (claimImpersonation && !(await requireTakeoverConsent(agent, connection, claimImpersonation))) {
+                    break;
+                }
                 claimDriver(agent, connection);
                 break;
+            }
             case WebSocketMessageRequests.RELEASE_DRIVER:
                 releaseDriver(agent, connection);
+                break;
+            case WebSocketMessageRequests.TAKEOVER_DECISION:
+                handleTakeoverDecision(agent, connection, parsedMessage);
                 break;
             default:
                 sendError(connection, `Unknown message type: ${parsedMessage.type}`);

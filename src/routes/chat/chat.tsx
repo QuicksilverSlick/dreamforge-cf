@@ -11,6 +11,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router';
 import { MonacoEditor } from '../../components/monaco-editor/monaco-editor';
 import { useAuth } from '@/contexts/auth-context';
 import { CollaborationBar } from './components/collaboration-bar';
+import { TakeoverConsentModal } from './components/takeover-consent-modal';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Expand, Github, LoaderCircle, RefreshCw } from 'lucide-react';
 import { Blueprint } from './components/blueprint';
@@ -139,6 +140,12 @@ export default function Chat() {
 		setDrivingBlockedBy,
 		claimDriving,
 		releaseDriving,
+		// Consent-gated takeover
+		takeoverRequest,
+		takeoverStatus,
+		operatorHoldsGrant,
+		respondToTakeover,
+		dismissTakeoverStatus,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
@@ -675,7 +682,53 @@ export default function Chat() {
 							onRelease={releaseDriving}
 							onDismissBlocked={() => setDrivingBlockedBy(null)}
 						/>
+
+						{/* Operator side: status of an in-flight takeover request. */}
+						{takeoverStatus && (
+							<div
+								role="status"
+								aria-live="polite"
+								className="mb-2 flex items-center gap-2 rounded-lg border border-accent/30 bg-bg-3 px-3 py-2 text-xs text-text-primary/90"
+							>
+								<span className="flex-1">
+									{takeoverStatus.kind === 'waiting'
+										? 'Waiting for the user to allow your takeover…'
+										: takeoverStatus.kind === 'denied'
+											? 'The user denied your takeover request.'
+											: 'No response — your takeover request timed out.'}
+								</span>
+								{takeoverStatus.kind !== 'waiting' && (
+									<button
+										type="button"
+										onClick={dismissTakeoverStatus}
+										className="text-text-primary/50 hover:text-text-primary"
+									>
+										Dismiss
+									</button>
+								)}
+							</div>
+						)}
+
+						{/* Real user side: an operator is driving as you after you consented. */}
+						{operatorHoldsGrant && (
+							<div
+								role="status"
+								aria-live="polite"
+								className="mb-2 flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-text-primary/90"
+							>
+								<span className="flex-1">An operator is making changes as you.</span>
+								<button
+									type="button"
+									onClick={claimDriving}
+									className="rounded-md border border-amber-500/50 px-2 py-1 font-medium hover:bg-amber-500/20"
+								>
+									Take back control
+								</button>
+							</div>
+						)}
 					</div>
+
+					<TakeoverConsentModal request={takeoverRequest} onRespond={respondToTakeover} />
 
 					<form
                         ref={chatFormRef}

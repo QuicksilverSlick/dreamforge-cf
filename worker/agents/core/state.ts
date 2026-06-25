@@ -32,6 +32,35 @@ import type { ConversationMessage } from '../inferutils/common';
 import type { InferenceMetadata } from '../inferutils/config.types';
 import type { TemplateDetails } from '../../services/sandbox/sandboxTypes';
 import type { BehaviorType, Plan, ProjectType } from './types';
+import type { UserRole } from '../../types/auth-types';
+
+/**
+ * Consent-gated takeover: an in-flight request for a privileged impersonating
+ * operator to take the single-driver seat while the real user is live. Keyed on
+ * the OPERATOR's stable connection.id (never userId, which collides under
+ * impersonation). Fail-closed — cleared on decision, timeout, or disconnect.
+ */
+export interface PendingTakeover {
+    requestId: string;
+    operatorConnectionId: string;
+    /** The real user whose consent is required (the impersonation target). */
+    targetUserId: string;
+    /** The real operator behind the impersonation (for audit attribution). */
+    actorId: string;
+    actorRole: UserRole | null;
+    requestedAt: number;
+    expiresAt: number;
+}
+
+/**
+ * A session-long takeover grant: the real user consented to a specific operator
+ * connection driving as them. Scoped to the CONSENTING userId so a different,
+ * non-consenting real member who later joins re-arms the consent gate (C9).
+ */
+export interface GrantedTakeover {
+    operatorConnectionId: string;
+    consentingUserId: string;
+}
 
 export interface FileState extends FileOutputType {
     /**
@@ -144,6 +173,23 @@ export interface BaseProjectState {
      * survives hibernation and is consistent across all connected members.
      */
     currentDriverUserId?: string | null;
+    /**
+     * Consent-gated takeover (privileged impersonation only). The in-flight
+     * request awaiting the real user's allow/deny, or null. See PendingTakeover.
+     */
+    pendingTakeover?: PendingTakeover | null;
+    /**
+     * A session-long takeover grant the real user approved, or null. While set,
+     * the granted operator connection drives without re-prompting; cleared on
+     * release, the operator's disconnect, or the user taking control back.
+     */
+    grantedTakeover?: GrantedTakeover | null;
+    /**
+     * Takeover re-request throttle, keyed on the operator's REAL actorId (NOT
+     * connection.id, so a reconnect can't reset it — C7). Caps prompt-bombing of
+     * the user: attempts in the current window and when it opened.
+     */
+    takeoverRequestThrottle?: Record<string, { count: number; windowStartedAt: number }>;
 
     // ---- Fork-local additions preserved from pre-M3 CodeGenState ----
 

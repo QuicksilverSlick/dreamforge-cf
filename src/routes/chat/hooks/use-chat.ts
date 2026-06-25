@@ -44,6 +44,7 @@ import { isConversationalMessage, addOrUpdateMessage, createUserMessage, handleR
 import { sendWebSocketMessage } from '../utils/websocket-helpers';
 import { initialStages as defaultStages, updateStage as updateStageHelper } from '../utils/project-stage-helpers';
 import type { ProjectStage } from '../utils/project-stage-helpers';
+import type { TakeoverRequest, TakeoverStatus } from '../utils/takeover';
 
 
 export interface FileType {
@@ -159,6 +160,13 @@ export function useChat({
 	const [presenceMembers, setPresenceMembers] = useState<PresenceMember[]>([]);
 	const [currentDriverId, setCurrentDriverId] = useState<string | null>(null);
 	const [drivingBlockedBy, setDrivingBlockedBy] = useState<string | null>(null);
+	// Consent-gated takeover: the inbound consent prompt (when THIS viewer is the
+	// real user being taken over), the operator's own request status (when THIS
+	// viewer is the operator awaiting consent), and the real user's local "I
+	// consented; an operator is driving as me" flag (drives "Take back control").
+	const [takeoverRequest, setTakeoverRequest] = useState<TakeoverRequest | null>(null);
+	const [takeoverStatus, setTakeoverStatus] = useState<TakeoverStatus | null>(null);
+	const [operatorHoldsGrant, setOperatorHoldsGrant] = useState(false);
 
 	const updateStage = useCallback(
 		(stageId: ProjectStage['id'], data: Partial<Omit<ProjectStage, 'id'>>) => {
@@ -224,6 +232,8 @@ export function useChat({
 			setPresenceMembers,
 			setCurrentDriverId,
 			setDrivingBlockedBy,
+			setTakeoverRequest,
+			setTakeoverStatus,
 			// Current state
 			isInitialStateRestored,
 			blueprint,
@@ -648,15 +658,32 @@ export function useChat({
 		}
 	}, [websocket, sendMessage, isDeploying, onDebugMessage]);
 
-	// Org collaboration: claim (take over) / release the single driver seat.
+	// Org collaboration: claim (take over) / release the single driver seat. For
+	// the real user this is also "take back control", which clears the local grant
+	// flag (the server-side revoke happens via claim_driver).
 	const claimDriving = useCallback(() => {
 		setDrivingBlockedBy(null);
+		setOperatorHoldsGrant(false);
 		sendWebSocketMessage(websocket, 'claim_driver');
 	}, [websocket]);
 
 	const releaseDriving = useCallback(() => {
 		sendWebSocketMessage(websocket, 'release_driver');
 	}, [websocket]);
+
+	// Consent-gated takeover: the real user's allow/deny answer. Closes the prompt
+	// immediately; on allow, remember locally that an operator now drives as us so
+	// "Take back control" is offered.
+	const respondToTakeover = useCallback(
+		(requestId: string, allow: boolean) => {
+			sendWebSocketMessage(websocket, 'takeover_decision', { requestId, allow });
+			setTakeoverRequest(null);
+			setOperatorHoldsGrant(allow);
+		},
+		[websocket],
+	);
+
+	const dismissTakeoverStatus = useCallback(() => setTakeoverStatus(null), []);
 
 	return {
 		messages,
@@ -702,6 +729,12 @@ export function useChat({
 		drivingBlockedBy,
 		setDrivingBlockedBy,
 		claimDriving,
+		// Consent-gated takeover
+		takeoverRequest,
+		takeoverStatus,
+		operatorHoldsGrant,
+		respondToTakeover,
+		dismissTakeoverStatus,
 		releaseDriving,
 	};
 }
