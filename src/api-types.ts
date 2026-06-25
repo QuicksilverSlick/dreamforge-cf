@@ -334,6 +334,7 @@ export type {
 export type {
   AdminOverviewData,
   AdminUsersListData,
+  AdminAppsListData,
   AdminUserDetailData,
   AdminUserAppsData,
   AdminUserSessionsData,
@@ -344,6 +345,9 @@ export type {
 export type {
   AdminUserSummary,
   AdminUserStatusFilter,
+  AdminAppSummary,
+  AdminAppStatusFilter,
+  AdminAppVisibilityFilter,
   GitHubTokenStatus,
 } from 'worker/database/types';
 export type { AuditLog } from 'worker/database/schema';

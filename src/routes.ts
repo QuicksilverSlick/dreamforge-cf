@@ -18,6 +18,7 @@ import { OrgRoute } from './routes/org-route';
 import AdminOverview from './routes/admin/overview';
 import AdminUsers from './routes/admin/users';
 import AdminUserDetail from './routes/admin/user-detail';
+import AdminApps from './routes/admin/apps';
 import AdminAudit from './routes/admin/audit';
 import OrganizationPage from './routes/organization/index';
 import InviteAccept from './routes/invite-accept';
@@ -87,6 +88,10 @@ const routes = [
 					{
 						path: 'admin/users/:id',
 						element: React.createElement(AdminRoute, { children: React.createElement(AdminUserDetail) }),
+					},
+					{
+						path: 'admin/apps',
+						element: React.createElement(AdminRoute, { children: React.createElement(AdminApps) }),
 					},
 					{
 						path: 'admin/audit',

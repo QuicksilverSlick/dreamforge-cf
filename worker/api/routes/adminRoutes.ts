@@ -78,6 +78,12 @@ export function setupAdminRoutes(app: Hono<AppEnv>): void {
         adaptController(AdminController, AdminController.getUserSecrets),
     );
     app.get(
+        '/api/admin/apps',
+        requireAdminConsole,
+        setAuthLevel(ADMIN_AUTH),
+        adaptController(AdminController, AdminController.listApps),
+    );
+    app.get(
         '/api/admin/apps/:id',
         requireAdminConsole,
         setAuthLevel(ADMIN_AUTH),

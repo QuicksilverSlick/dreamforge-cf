@@ -50,7 +50,12 @@ async function insertUser(id: string, opts: UserOpts = {}): Promise<void> {
         .run();
 }
 
-async function insertApp(id: string, userId: string, visibility: 'public' | 'private'): Promise<void> {
+async function insertApp(
+    id: string,
+    userId: string,
+    visibility: 'public' | 'private',
+    status: 'generating' | 'completed' = 'completed',
+): Promise<void> {
     // apps.orgId is NOT NULL (2.3) — file the app under a personal org for the
     // user (idempotent; covers multiple apps for the same user).
     await env.DB.prepare(
@@ -61,7 +66,7 @@ async function insertApp(id: string, userId: string, visibility: 'public' | 'pri
     await env.DB.prepare(
         `INSERT INTO apps (id, title, original_prompt, user_id, org_id, visibility, status) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-        .bind(id, `App ${id}`, 'build me an app', userId, `org_${userId}`, visibility, 'completed')
+        .bind(id, `App ${id}`, 'build me an app', userId, `org_${userId}`, visibility, status)
         .run();
 }
 
@@ -160,6 +165,33 @@ describe('AdminService reads', () => {
         expect(overview.staffUsers).toBe(1); // only the superadmin
         expect(overview.totalApps).toBe(2);
         expect(overview.publicApps).toBe(1);
+    });
+
+    it('listAllApps returns every app across users with owner + plan joined, and filters', async () => {
+        await insertUser('op', { role: 'superadmin' });
+        await insertUser('alice', { email: 'alice@example.com' });
+        await insertUser('bob', { email: 'bob@example.com' });
+        await insertApp('a1', 'alice', 'public');
+        await insertApp('a2', 'alice', 'private');
+        await insertApp('b1', 'bob', 'private', 'generating');
+
+        const service = new AdminService(env);
+
+        const all = await service.listAllApps({});
+        expect(all.pagination.total).toBe(3); // cross-user / global
+        const a1 = all.data.find((a) => a.id === 'a1');
+        expect(a1?.ownerEmail).toBe('alice@example.com');
+        expect(a1?.ownerProvider).toBe('email');
+        expect(a1?.orgPlan).toBe('free'); // org plan joined (the free/paid signal)
+
+        const publicOnly = await service.listAllApps({ visibility: 'public' });
+        expect(publicOnly.data.map((a) => a.id)).toEqual(['a1']);
+
+        const generating = await service.listAllApps({ status: 'generating' });
+        expect(generating.data.map((a) => a.id)).toEqual(['b1']);
+
+        const byOwnerEmail = await service.listAllApps({ search: 'bob@' });
+        expect(byOwnerEmail.data.map((a) => a.id)).toEqual(['b1']);
     });
 
     it('serves secret metadata without the encrypted value', async () => {

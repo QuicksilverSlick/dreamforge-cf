@@ -26,14 +26,34 @@ import type {
     AdminUserSummary,
     AdminUserStatusFilter,
     AdminOverview,
+    AdminAppSummary,
+    AdminAppStatusFilter,
+    AdminAppVisibilityFilter,
 } from '../types';
 
-export type { AdminUserSummary, AdminUserStatusFilter, AdminOverview } from '../types';
+export type {
+    AdminUserSummary,
+    AdminUserStatusFilter,
+    AdminOverview,
+    AdminAppSummary,
+    AdminAppStatusFilter,
+    AdminAppVisibilityFilter,
+} from '../types';
 
 export interface AdminListUsersParams {
     search?: string;
     role?: UserRole;
     status?: AdminUserStatusFilter;
+    limit?: number;
+    offset?: number;
+}
+
+export interface AdminListAppsParams {
+    search?: string;
+    status?: AdminAppStatusFilter;
+    visibility?: AdminAppVisibilityFilter;
+    /** Org plan filter (e.g. 'free'); undefined / 'all' = no filter. */
+    plan?: string;
     limit?: number;
     offset?: number;
 }
@@ -70,6 +90,28 @@ const USER_SUMMARY_COLUMNS = {
     updatedAt: schema.users.updatedAt,
     lastActiveAt: schema.users.lastActiveAt,
     deletedAt: schema.users.deletedAt,
+} as const;
+
+/** Safe column set for the operator's global app list (owner + org-plan joined). */
+const APP_SUMMARY_COLUMNS = {
+    id: schema.apps.id,
+    title: schema.apps.title,
+    description: schema.apps.description,
+    framework: schema.apps.framework,
+    status: schema.apps.status,
+    visibility: schema.apps.visibility,
+    screenshotUrl: schema.apps.screenshotUrl,
+    deploymentId: schema.apps.deploymentId,
+    createdAt: schema.apps.createdAt,
+    updatedAt: schema.apps.updatedAt,
+    lastDeployedAt: schema.apps.lastDeployedAt,
+    ownerId: schema.apps.userId,
+    ownerEmail: schema.users.email,
+    ownerDisplayName: schema.users.displayName,
+    ownerProvider: schema.users.provider,
+    orgId: schema.apps.orgId,
+    orgName: schema.organizations.name,
+    orgPlan: schema.organizations.plan,
 } as const;
 
 export class AdminService extends BaseService {
@@ -124,6 +166,62 @@ export class AdminService extends BaseService {
             readDb
                 .select({ count: sql<number>`COUNT(*)` })
                 .from(schema.users)
+                .where(whereClause)
+                .get(),
+        ]);
+
+        const total = Number(totalResult?.count ?? 0);
+        return {
+            data: rows,
+            pagination: { limit, offset, total, hasMore: offset + rows.length < total },
+        };
+    }
+
+    /**
+     * Global app list for the operator console — every app across all users and
+     * orgs (the one cross-tenant app read; the normal app list is org-scoped). Joins
+     * the owner (safe columns) and the org plan. `search` is a parameterized
+     * contains-match across app title/description and owner email. Newest first.
+     */
+    async listAllApps(params: AdminListAppsParams = {}): Promise<PaginatedResult<AdminAppSummary>> {
+        const limit = Math.min(Math.max(params.limit ?? 25, 1), 100);
+        const offset = Math.max(params.offset ?? 0, 0);
+
+        const search = params.search?.trim();
+        const searchCondition = search
+            ? or(
+                  like(schema.apps.title, `%${search}%`),
+                  like(schema.apps.description, `%${search}%`),
+                  like(schema.users.email, `%${search}%`),
+              )
+            : undefined;
+
+        const whereClause = this.buildWhereConditions([
+            params.status && params.status !== 'all' ? eq(schema.apps.status, params.status) : undefined,
+            params.visibility && params.visibility !== 'all'
+                ? eq(schema.apps.visibility, params.visibility)
+                : undefined,
+            params.plan && params.plan !== 'all' ? eq(schema.organizations.plan, params.plan) : undefined,
+            searchCondition,
+        ]);
+
+        const readDb = this.getReadDb('fast');
+
+        const [rows, totalResult] = await Promise.all([
+            readDb
+                .select(APP_SUMMARY_COLUMNS)
+                .from(schema.apps)
+                .leftJoin(schema.users, eq(schema.users.id, schema.apps.userId))
+                .leftJoin(schema.organizations, eq(schema.organizations.id, schema.apps.orgId))
+                .where(whereClause)
+                .orderBy(desc(schema.apps.createdAt))
+                .limit(limit)
+                .offset(offset),
+            readDb
+                .select({ count: sql<number>`COUNT(*)` })
+                .from(schema.apps)
+                .leftJoin(schema.users, eq(schema.users.id, schema.apps.userId))
+                .leftJoin(schema.organizations, eq(schema.organizations.id, schema.apps.orgId))
                 .where(whereClause)
                 .get(),
         ]);

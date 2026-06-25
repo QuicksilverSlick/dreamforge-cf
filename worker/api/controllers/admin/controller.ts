@@ -31,10 +31,11 @@ import { buildUserWorkerUrl } from '../../../utils/urls';
 import { SecretsService } from '../../../database/services/SecretsService';
 import { SessionService } from '../../../database/services/SessionService';
 import { GitHubTokenService } from '../../../database/services/GitHubTokenService';
-import { parseBoundedInt, parseUserRole, parseUserStatus, suspendBodySchema, reactivateBodySchema } from './schemas';
+import { parseBoundedInt, parseUserRole, parseUserStatus, parseAppStatus, parseAppVisibility, suspendBodySchema, reactivateBodySchema } from './schemas';
 import type {
     AdminOverviewData,
     AdminUsersListData,
+    AdminAppsListData,
     AdminUserDetailData,
     AdminUserAppsData,
     AdminUserSessionsData,
@@ -115,6 +116,44 @@ export class AdminController extends BaseController {
         } catch (error) {
             this.logger.error('Error listing users', error);
             return AdminController.createErrorResponse<AdminUsersListData>('Failed to list users', 500);
+        }
+    }
+
+    /** GET /api/admin/apps — global app list across all users/orgs (audited). */
+    static async listApps(
+        request: Request,
+        env: Env,
+        ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<AdminAppsListData>>> {
+        try {
+            const actor = context.user!;
+            const q = context.queryParams.get('q')?.trim() || undefined;
+            const status = parseAppStatus(context.queryParams.get('status'));
+            const visibility = parseAppVisibility(context.queryParams.get('visibility'));
+            const plan = context.queryParams.get('plan')?.trim() || undefined;
+            const limit = parseBoundedInt(context.queryParams.get('limit'), 25, 1, 100);
+            const offset = parseBoundedInt(context.queryParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+
+            const result = await new AdminService(env).listAllApps({ search: q, status, visibility, plan, limit, offset });
+
+            AdminController.fireViewAudit(ctx, env, request, actor, {
+                entityType: 'app',
+                entityId: '*',
+                action: AdminAuditAction.APP_SEARCH,
+                context: {
+                    query: q ?? null,
+                    status: status ?? null,
+                    visibility: visibility ?? null,
+                    plan: plan ?? null,
+                    total: result.pagination.total,
+                },
+            });
+
+            return AdminController.createSuccessResponse(result);
+        } catch (error) {
+            this.logger.error('Error listing apps', error);
+            return AdminController.createErrorResponse<AdminAppsListData>('Failed to list apps', 500);
         }
     }
 
