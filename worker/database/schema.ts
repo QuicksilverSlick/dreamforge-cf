@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import type { Acquisition } from '../types/acquisition';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -37,6 +38,11 @@ export const users = sqliteTable('users', {
     theme: text('theme', { enum: ['light', 'dark', 'system'] }).default('system'),
     timezone: text('timezone').default('UTC'),
     
+    // First-touch acquisition attribution (UTMs + referrer), captured ONCE at
+    // signup from the df_acq cookie. Null for accounts created before this landed
+    // or with no attribution. See worker/types/acquisition.ts.
+    acquisition: text('acquisition', { mode: 'json' }).$type<Acquisition>(),
+
     // Account Status
     isActive: integer('is_active', { mode: 'boolean' }).default(true),
     isSuspended: integer('is_suspended', { mode: 'boolean' }).default(false),

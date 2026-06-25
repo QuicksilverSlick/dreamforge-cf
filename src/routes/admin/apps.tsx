@@ -24,9 +24,38 @@ import {
 } from '@/components/ui/table';
 import { useAdminApps } from '@/hooks/use-admin';
 import { formatDate } from './admin-utils';
-import type { AdminAppStatusFilter, AdminAppVisibilityFilter, AdminAppSummary } from '@/api-types';
+import type { AdminAppStatusFilter, AdminAppVisibilityFilter, AdminAppSummary, Acquisition } from '@/api-types';
 
 const PAGE_SIZE = 20;
+
+function referrerHost(ref: string | undefined): string | undefined {
+    if (!ref) {
+        return undefined;
+    }
+    try {
+        return new URL(ref).hostname.replace(/^www\./, '');
+    } catch {
+        return undefined;
+    }
+}
+
+/** "Where they came from": UTM source (campaign/medium as sub), else referrer host, else Direct. */
+function SourceCell({ acq }: { acq: Acquisition | null }) {
+    if (!acq) {
+        return <span className="text-text-primary/40">—</span>;
+    }
+    const primary = acq.utmSource ?? referrerHost(acq.referrer);
+    if (!primary) {
+        return <span className="text-text-primary/50">Direct</span>;
+    }
+    const sub = acq.utmSource ? acq.utmCampaign ?? acq.utmMedium : undefined;
+    return (
+        <div>
+            <div className="line-clamp-1 max-w-[10rem]">{primary}</div>
+            {sub && <div className="text-xs text-text-primary/50 line-clamp-1">{sub}</div>}
+        </div>
+    );
+}
 
 /** Org plan badge — the free/paid signal (everyone is 'free' until billing lands). */
 function PlanBadge({ plan }: { plan: string | null }) {
@@ -148,6 +177,7 @@ export default function AdminApps() {
                                 <TableHead className="w-20">Preview</TableHead>
                                 <TableHead>App</TableHead>
                                 <TableHead>Owner</TableHead>
+                                <TableHead>Source</TableHead>
                                 <TableHead>Plan</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Visibility</TableHead>
@@ -158,14 +188,14 @@ export default function AdminApps() {
                             {loading ? (
                                 Array.from({ length: 6 }).map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell colSpan={7}>
+                                        <TableCell colSpan={8}>
                                             <Skeleton className="h-10 w-full" />
                                         </TableCell>
                                     </TableRow>
                                 ))
                             ) : apps.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-center text-text-primary/50 py-8">
+                                    <TableCell colSpan={8} className="text-center text-text-primary/50 py-8">
                                         No apps found
                                     </TableCell>
                                 </TableRow>
@@ -190,6 +220,9 @@ export default function AdminApps() {
                                             {a.ownerProvider && (
                                                 <div className="text-xs text-text-primary/50">via {a.ownerProvider}</div>
                                             )}
+                                        </TableCell>
+                                        <TableCell>
+                                            <SourceCell acq={a.ownerAcquisition} />
                                         </TableCell>
                                         <TableCell>
                                             <PlanBadge plan={a.orgPlan} />

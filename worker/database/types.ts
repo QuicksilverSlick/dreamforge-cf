@@ -5,6 +5,7 @@
 import * as schema from './schema';
 import type { ModelConfig } from '../agents/inferutils/config.types';
 import type { UserRole } from '../types/auth-types';
+import type { Acquisition } from '../types/acquisition';
 
 // ========================================
 // CORE SHARED INTERFACES
@@ -307,6 +308,8 @@ export interface AdminAppSummary {
     ownerEmail: string | null;
     ownerDisplayName: string | null;
     ownerProvider: string | null;
+    /** First-touch acquisition attribution captured at the owner's signup (or null). */
+    ownerAcquisition: Acquisition | null;
     orgId: string;
     orgName: string | null;
     orgPlan: string | null;

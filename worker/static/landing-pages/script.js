@@ -17,6 +17,25 @@ document.addEventListener('DOMContentLoaded', function () {
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
 
+    // Forward first-touch UTM params from this landing URL to the app, so paid /
+    // campaign attribution survives the domain hop (the app then also captures
+    // document.referrer and writes the df_acq cookie read at signup).
+    const landingParams = new URLSearchParams(window.location.search);
+    const utmQuery = (() => {
+        const u = new URLSearchParams();
+        ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'].forEach((k) => {
+            const v = landingParams.get(k);
+            if (v) u.set(k, v);
+        });
+        return u.toString();
+    })();
+    const withUtm = (url) => (utmQuery ? url + (url.includes('?') ? '&' : '?') + utmQuery : url);
+    if (utmQuery) {
+        document.querySelectorAll('a[href*="app.getdreamforge.com"]').forEach((a) => {
+            try { a.href = withUtm(a.href); } catch (e) { /* ignore */ }
+        });
+    }
+
     // Hero prompt: deep-link into the app with the typed idea
     const promptForm = document.getElementById('promptForm');
     const promptInput = document.getElementById('promptInput');
@@ -24,7 +43,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (promptForm && promptInput) {
         const go = () => {
             const v = promptInput.value.trim();
-            window.location.href = v ? APP_URL + '?prompt=' + encodeURIComponent(v) : APP_URL;
+            const base = v ? APP_URL + '?prompt=' + encodeURIComponent(v) : APP_URL;
+            window.location.href = withUtm(base);
         };
         promptForm.addEventListener('submit', (e) => { e.preventDefault(); go(); });
         promptInput.addEventListener('keydown', (e) => {
