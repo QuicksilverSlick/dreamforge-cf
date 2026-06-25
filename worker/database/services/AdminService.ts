@@ -109,6 +109,7 @@ const APP_SUMMARY_COLUMNS = {
     ownerEmail: schema.users.email,
     ownerDisplayName: schema.users.displayName,
     ownerProvider: schema.users.provider,
+    ownerAcquisition: schema.users.acquisition,
     orgId: schema.apps.orgId,
     orgName: schema.organizations.name,
     orgPlan: schema.organizations.plan,

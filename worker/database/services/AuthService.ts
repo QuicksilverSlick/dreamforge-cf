@@ -14,6 +14,7 @@ import { PasswordService } from '../../utils/passwordService';
 import { GoogleOAuthProvider } from '../../services/oauth/google';
 import { GitHubOAuthProvider } from '../../services/oauth/github';
 import { BaseOAuthProvider } from '../../services/oauth/base';
+import { ACQUISITION_COOKIE, ACQUISITION_MAX_BYTES, type Acquisition } from '../../types/acquisition';
 import { 
     SecurityError, 
     SecurityErrorType 
@@ -128,6 +129,7 @@ export class AuthService extends BaseService {
                 emailVerified: true, // Set as verified immediately
                 provider: 'email',
                 providerId: userId,
+                acquisition: this.readAcquisition(request),
                 createdAt: now,
                 updatedAt: now
             });
@@ -440,7 +442,7 @@ export class AuthService extends BaseService {
             const oauthUserInfo = await oauthProvider.getUserInfo(tokens.accessToken);
             
             // Find or create user
-            const user = await this.findOrCreateOAuthUser(provider, oauthUserInfo);
+            const user = await this.findOrCreateOAuthUser(provider, oauthUserInfo, request);
 
             // Suspended/deactivated accounts must not get a session via OAuth
             // either — mirror the email-login gate so enforcement is consistent
@@ -491,9 +493,57 @@ export class AuthService extends BaseService {
     /**
      * Find or create OAuth user
      */
+    /**
+     * Read + SANITIZE the first-touch acquisition cookie (df_acq) set by the SPA,
+     * for persisting on user creation. Defends against a forged/oversized cookie:
+     * size-capped, and only the known string fields are kept (anything else in the
+     * JSON is dropped). Returns null when absent, oversized, malformed, or empty.
+     * Best-effort — never throws into the signup path.
+     */
+    private readAcquisition(request: Request): Acquisition | null {
+        try {
+            const cookieHeader = request.headers.get('Cookie');
+            if (!cookieHeader) {
+                return null;
+            }
+            const entry = cookieHeader
+                .split(';')
+                .map((c) => c.trim())
+                .find((c) => c.startsWith(`${ACQUISITION_COOKIE}=`));
+            if (!entry) {
+                return null;
+            }
+            const raw = entry.slice(ACQUISITION_COOKIE.length + 1);
+            if (raw.length > ACQUISITION_MAX_BYTES) {
+                return null; // oversized — reject rather than store
+            }
+            const parsed: unknown = JSON.parse(decodeURIComponent(raw));
+            if (typeof parsed !== 'object' || parsed === null) {
+                return null;
+            }
+            const src = parsed as Record<string, unknown>;
+            const str = (k: string): string | undefined =>
+                typeof src[k] === 'string' && src[k] !== '' ? (src[k] as string).slice(0, 300) : undefined;
+            const acquisition: Acquisition = {
+                utmSource: str('utmSource'),
+                utmMedium: str('utmMedium'),
+                utmCampaign: str('utmCampaign'),
+                utmTerm: str('utmTerm'),
+                utmContent: str('utmContent'),
+                referrer: str('referrer'),
+                landingPath: str('landingPath'),
+                capturedAt: str('capturedAt'),
+            };
+            return Object.values(acquisition).some((v) => v !== undefined) ? acquisition : null;
+        } catch {
+            return null;
+        }
+    }
+
     private async findOrCreateOAuthUser(
         provider: OAuthProvider,
-        oauthUserInfo: OAuthUserInfo
+        oauthUserInfo: OAuthUserInfo,
+        request: Request,
     ): Promise<schema.User> {
         // Check if user exists with this email
         let user = await this.database
@@ -515,6 +565,7 @@ export class AuthService extends BaseService {
                 emailVerified: oauthUserInfo.emailVerified || false,
                 provider: provider,
                 providerId: oauthUserInfo.id,
+                acquisition: this.readAcquisition(request),
                 createdAt: now,
                 updatedAt: now
             });

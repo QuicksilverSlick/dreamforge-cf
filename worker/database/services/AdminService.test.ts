@@ -171,6 +171,10 @@ describe('AdminService reads', () => {
         await insertUser('op', { role: 'superadmin' });
         await insertUser('alice', { email: 'alice@example.com' });
         await insertUser('bob', { email: 'bob@example.com' });
+        // Alice signed up with first-touch attribution; it must surface in the list.
+        await env.DB.prepare('UPDATE users SET acquisition = ? WHERE id = ?')
+            .bind(JSON.stringify({ utmSource: 'google', utmCampaign: 'launch' }), 'alice')
+            .run();
         await insertApp('a1', 'alice', 'public');
         await insertApp('a2', 'alice', 'private');
         await insertApp('b1', 'bob', 'private', 'generating');
@@ -183,6 +187,9 @@ describe('AdminService reads', () => {
         expect(a1?.ownerEmail).toBe('alice@example.com');
         expect(a1?.ownerProvider).toBe('email');
         expect(a1?.orgPlan).toBe('free'); // org plan joined (the free/paid signal)
+        expect(a1?.ownerAcquisition?.utmSource).toBe('google'); // acquisition joined
+        const b1 = all.data.find((a) => a.id === 'b1');
+        expect(b1?.ownerAcquisition).toBeNull(); // no attribution → null
 
         const publicOnly = await service.listAllApps({ visibility: 'public' });
         expect(publicOnly.data.map((a) => a.id)).toEqual(['a1']);

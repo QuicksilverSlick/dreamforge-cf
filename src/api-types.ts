@@ -350,6 +350,7 @@ export type {
   AdminAppVisibilityFilter,
   GitHubTokenStatus,
 } from 'worker/database/types';
+export type { Acquisition } from 'worker/types/acquisition';
 export type { AuditLog } from 'worker/database/schema';
 export type { UserRole } from 'worker/types/auth-types';
 
