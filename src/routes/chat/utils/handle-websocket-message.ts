@@ -20,6 +20,7 @@ import {
 import { completeStages } from './project-stage-helpers';
 import { sendWebSocketMessage } from './websocket-helpers';
 import type { FileType, PhaseTimelineItem } from '../hooks/use-chat';
+import type { TakeoverRequest, TakeoverStatus } from './takeover';
 import { toast } from 'sonner';
 
 export interface ImageGenerationState {
@@ -55,6 +56,10 @@ export interface HandleMessageDeps {
     setPresenceMembers: React.Dispatch<React.SetStateAction<PresenceMember[]>>;
     setCurrentDriverId: React.Dispatch<React.SetStateAction<string | null>>;
     setDrivingBlockedBy: React.Dispatch<React.SetStateAction<string | null>>;
+    // Consent-gated takeover: the inbound consent prompt (real user) and the
+    // operator's own request status.
+    setTakeoverRequest: React.Dispatch<React.SetStateAction<TakeoverRequest | null>>;
+    setTakeoverStatus: React.Dispatch<React.SetStateAction<TakeoverStatus | null>>;
 
     // Current state
     isInitialStateRestored: boolean;
@@ -126,6 +131,8 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setPresenceMembers,
             setCurrentDriverId,
             setDrivingBlockedBy,
+            setTakeoverRequest,
+            setTakeoverStatus,
             isInitialStateRestored,
             blueprint,
             query,
@@ -790,6 +797,27 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 // Soft single-driver block: surface who's driving so the UI can
                 // offer "take over".
                 setDrivingBlockedBy(message.currentDriverName);
+                break;
+            case 'takeover_request':
+                // This viewer IS the real user a privileged operator wants to take
+                // over: raise the consent prompt (role-only).
+                setTakeoverRequest({
+                    requestId: message.requestId,
+                    operatorRole: message.operatorRole,
+                    isAgent: message.isAgent,
+                    reasonUser: message.reasonUser,
+                    expiresAt: message.expiresAt,
+                });
+                break;
+            case 'takeover_resolved':
+                // This viewer IS the operator: track our request's lifecycle.
+                if (message.outcome === 'granted') {
+                    setTakeoverStatus(null); // we now drive (presence_update confirms)
+                } else if (message.outcome === 'pending') {
+                    setTakeoverStatus({ kind: 'waiting', expiresAt: message.expiresAt });
+                } else {
+                    setTakeoverStatus({ kind: message.outcome }); // 'denied' | 'timed_out'
+                }
                 break;
 
             case 'agent_connected':

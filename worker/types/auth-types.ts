@@ -15,8 +15,15 @@ export type OAuthProvider = 'google' | 'github';
  * Platform authorization roles. 'user' is the baseline end user. 'admin' is
  * the org-admin role (org scoping lands in Phase 2). 'superadmin' is the
  * platform operator. 'support'/'ai_support'/'ai_admin' are staff/agent roles.
+ * The union is derived from USER_ROLES so the canonical list lives in one place.
  */
-export type UserRole = 'superadmin' | 'admin' | 'user' | 'support' | 'ai_support' | 'ai_admin';
+export const USER_ROLES = ['superadmin', 'admin', 'user', 'support', 'ai_support', 'ai_admin'] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
+/** Narrow an untrusted string to a known UserRole (e.g. a value read off a header). */
+export function isUserRole(value: unknown): value is UserRole {
+    return typeof value === 'string' && (USER_ROLES as readonly string[]).includes(value);
+}
 
 /** Platform-staff roles that may access operator surfaces (NOT org 'admin', NOT 'user'). */
 export const PLATFORM_STAFF_ROLES: readonly UserRole[] = ['superadmin', 'support', 'ai_support', 'ai_admin'];

@@ -5,6 +5,7 @@ import type { CodeIssue, RuntimeError, StaticAnalysisResponse } from "../service
 import type { CodeFixResult } from "../services/code-fixer";
 import { IssueReport } from "../agents/domain/values/IssueReport";
 import type { RateLimitExceededError } from 'shared/types/errors';
+import type { UserRole } from '../types/auth-types';
 
 type ErrorMessage = {
     type: 'error';
@@ -479,6 +480,38 @@ type DrivingBlockedMessage = {
 	currentDriverName: string;
 };
 
+/**
+ * Sent ONLY to the real user's connection(s) when a privileged impersonating
+ * operator wants to take over the driver seat while the real user is live. The
+ * payload is role-only (no operator name) so it never leaks operator identity.
+ */
+type TakeoverRequestMessage = {
+	type: 'takeover_request';
+	requestId: string;
+	/** The operator's real role, role-only for the prompt; null if unknown. */
+	operatorRole: UserRole | null;
+	/** True when the operator is an AI support/admin agent. */
+	isAgent: boolean;
+	appId: string;
+	/** Epoch ms at which the request auto-denies if unanswered. */
+	expiresAt: number;
+	/** Plain-language reason shown to the user. */
+	reasonUser: string;
+};
+
+/**
+ * Sent to the operator's connection to track its takeover lifecycle: 'pending'
+ * the moment the request is raised (so the operator UI shows a waiting state),
+ * then 'granted' / 'denied' / 'timed_out' once the real user decides or it lapses.
+ */
+type TakeoverResolvedMessage = {
+	type: 'takeover_resolved';
+	requestId: string;
+	outcome: 'pending' | 'granted' | 'denied' | 'timed_out';
+	/** Present on 'pending' — epoch ms at which the request auto-denies. */
+	expiresAt?: number;
+};
+
 export type WebSocketMessage =
 	| StateMessage
 	| ConversationStateMessage
@@ -539,7 +572,9 @@ export type WebSocketMessage =
 	| ImageGenerationCompletedMessage
 	| ImageGenerationErrorMessage
 	| PresenceUpdateMessage
-	| DrivingBlockedMessage;
+	| DrivingBlockedMessage
+	| TakeoverRequestMessage
+	| TakeoverResolvedMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)
 export type WebSocketMessageType = WebSocketMessage['type'];

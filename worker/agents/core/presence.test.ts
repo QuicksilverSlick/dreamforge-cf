@@ -15,10 +15,13 @@ import {
     releaseDriver,
     handlePresenceOnClose,
     connectionImpersonation,
+    takeoverGateDecision,
+    hasLiveRealUserConnection,
     type ConnectionIdentity,
 } from './presence';
 import type { CodeGeneratorAgent } from './codingAgent';
 import type { Connection } from 'agents';
+import type { GrantedTakeover, PendingTakeover } from './state';
 
 interface MockConnection {
     id: string;
@@ -33,17 +36,40 @@ function conn(id: string, identity: ConnectionIdentity | null): MockConnection {
 }
 
 const ident = (userId: string): ConnectionIdentity => ({ userId, displayName: userId, avatar: null });
+/** An impersonating operator's connection identity: shares the target's userId. */
+const impIdent = (
+    targetUserId: string,
+    impersonatedBy: string,
+    opts: { role?: ConnectionIdentity['impersonatorRole']; readOnly?: boolean } = {},
+): ConnectionIdentity => ({
+    userId: targetUserId,
+    displayName: targetUserId,
+    avatar: null,
+    impersonatedBy,
+    impersonationReadOnly: opts.readOnly ?? false,
+    impersonatorRole: opts.role ?? 'superadmin',
+});
 const asConn = (c: MockConnection) => c as unknown as Connection;
 
-function makeAgent(connections: MockConnection[], driver: string | null = null) {
+interface MockState {
+    currentDriverUserId: string | null;
+    metadata: { userId: string };
+    pendingTakeover?: PendingTakeover | null;
+    grantedTakeover?: GrantedTakeover | null;
+    takeoverRequestThrottle?: Record<string, { count: number; windowStartedAt: number }>;
+}
+
+function makeAgent(connections: MockConnection[], driver: string | null = null, extra: Partial<MockState> = {}) {
     const broadcasts: Array<{ type: string; data: unknown }> = [];
-    const state = { currentDriverUserId: driver as string | null, metadata: { userId: 'creator' } };
+    const state: MockState = { currentDriverUserId: driver, metadata: { userId: 'creator' }, ...extra };
     const agent = {
         get state() {
             return state;
         },
-        setState(next: { currentDriverUserId?: string | null }) {
-            state.currentDriverUserId = next.currentDriverUserId ?? null;
+        setState(next: Partial<MockState>) {
+            // Mirror the real Agent.setState (full-state replace); the production
+            // code always passes `{ ...state, ...changes }`, so a merge is faithful.
+            Object.assign(state, next);
         },
         broadcast(type: string, data: unknown) {
             broadcasts.push({ type, data });
@@ -64,6 +90,7 @@ describe('presence + single-driver coordination', () => {
             avatar: 'a.png',
             impersonatedBy: null,
             impersonationReadOnly: false,
+            impersonatorRole: null,
         });
         expect(readConnectionIdentity(new Request('https://x'))).toBeNull();
     });
@@ -183,10 +210,11 @@ describe('identity header stamping', () => {
             avatar: null,
             impersonatedBy: null,
             impersonationReadOnly: false,
+            impersonatorRole: null,
         });
     });
 
-    it('round-trips impersonation context (actor + read-only flag) through the headers', () => {
+    it('round-trips impersonation context (actor + role + read-only flag) through the headers', () => {
         const headers = new Headers();
         setIdentityHeaders(headers, {
             id: 'target',
@@ -194,26 +222,43 @@ describe('identity header stamping', () => {
             avatarUrl: null,
             impersonatedBy: 'operator',
             impersonationReadOnly: true,
+            impersonatorRole: 'superadmin',
         });
         expect(headers.get('x-df-impersonated-by')).toBe('operator');
         expect(headers.get('x-df-impersonation-readonly')).toBe('1');
+        expect(headers.get('x-df-impersonator-role')).toBe('superadmin');
         expect(readConnectionIdentity(new Request('https://x', { headers }))).toEqual({
             userId: 'target',
             displayName: 'Target',
             avatar: null,
             impersonatedBy: 'operator',
             impersonationReadOnly: true,
+            impersonatorRole: 'superadmin',
         });
     });
 
-    it('strips client-forged impersonation headers for a non-impersonated user', () => {
+    it('strips client-forged impersonation headers (incl. role) for a non-impersonated user', () => {
         const headers = new Headers({
             'x-df-impersonated-by': 'attacker',
             'x-df-impersonation-readonly': '0',
+            'x-df-impersonator-role': 'superadmin',
         });
         setIdentityHeaders(headers, { id: 'u1', displayName: 'Alice', avatarUrl: null });
         expect(headers.get('x-df-impersonated-by')).toBeNull();
         expect(headers.get('x-df-impersonation-readonly')).toBeNull();
+        expect(headers.get('x-df-impersonator-role')).toBeNull();
+    });
+
+    it('rejects a bogus impersonator-role header value (not a known role)', () => {
+        const headers = new Headers();
+        setIdentityHeaders(headers, {
+            id: 'target',
+            displayName: 'Target',
+            avatarUrl: null,
+            impersonatedBy: 'operator',
+        });
+        headers.set('x-df-impersonator-role', 'root'); // not a UserRole
+        expect(readConnectionIdentity(new Request('https://x', { headers }))?.impersonatorRole).toBeNull();
     });
 });
 
@@ -223,19 +268,105 @@ describe('connectionImpersonation', () => {
         expect(connectionImpersonation(asConn(c))).toBeNull();
     });
 
-    it('surfaces the actor, target, and read-only flag for an impersonated connection', () => {
+    it('surfaces the actor, target, role, and read-only flag for an impersonated connection', () => {
         const c = conn('c1', {
             userId: 'target',
             displayName: 'Target',
             avatar: null,
             impersonatedBy: 'operator',
             impersonationReadOnly: true,
+            impersonatorRole: 'support',
         });
         expect(connectionImpersonation(asConn(c))).toEqual({
             actorId: 'operator',
             targetId: 'target',
             readOnly: true,
+            actorRole: 'support',
         });
+    });
+});
+
+describe('consent-gated takeover', () => {
+    const pending = (operatorConnectionId: string, actorId = 'operator'): PendingTakeover => ({
+        requestId: 'r1',
+        operatorConnectionId,
+        targetUserId: 'target',
+        actorId,
+        actorRole: 'superadmin',
+        requestedAt: 0,
+        expiresAt: 0,
+    });
+
+    it('C1: an impersonating operator whose LIVE target holds the seat must REQUEST consent (not auto-allow via current===me)', () => {
+        const operator = conn('op-sock', impIdent('target', 'operator'));
+        const realUser = conn('real-sock', ident('target')); // the genuine target (impersonatedBy null)
+        const { agent } = makeAgent([operator, realUser], 'target'); // seat = target (shared id!)
+        // ensureCanDrive alone would see current===me (both 'target') and ALLOW —
+        // the gate must instead require consent. This is the load-bearing fix.
+        expect(takeoverGateDecision(agent, asConn(operator))).toBe('request');
+    });
+
+    it('allows a non-impersonating user (consent never applies)', () => {
+        const u = conn('c1', ident('u1'));
+        const { agent } = makeAgent([u], 'u1');
+        expect(takeoverGateDecision(agent, asConn(u))).toBe('allow');
+    });
+
+    it('allows the operator when NO genuine live target session is present (only the operator)', () => {
+        const operator = conn('op-sock', impIdent('target', 'operator'));
+        const { agent } = makeAgent([operator], 'target');
+        expect(hasLiveRealUserConnection(agent, 'target', 'op-sock')).toBe(false);
+        expect(takeoverGateDecision(agent, asConn(operator))).toBe('allow');
+    });
+
+    it('hasLiveRealUserConnection ignores the operator socket (shared userId), counts only the real user', () => {
+        const operator = conn('op-sock', impIdent('target', 'operator'));
+        const { agent: a1 } = makeAgent([operator], 'target');
+        expect(hasLiveRealUserConnection(a1, 'target', 'op-sock')).toBe(false); // only the operator
+        const realUser = conn('real-sock', ident('target'));
+        const { agent: a2 } = makeAgent([operator, realUser], 'target');
+        expect(hasLiveRealUserConnection(a2, 'target', 'op-sock')).toBe(true);
+    });
+
+    it('allows the operator once a session-long grant exists for its connection', () => {
+        const operator = conn('op-sock', impIdent('target', 'operator'));
+        const realUser = conn('real-sock', ident('target'));
+        const { agent } = makeAgent([operator, realUser], 'target', {
+            grantedTakeover: { operatorConnectionId: 'op-sock', consentingUserId: 'target' },
+        });
+        expect(takeoverGateDecision(agent, asConn(operator))).toBe('allow');
+    });
+
+    it('reports pending for the SAME operator and blocked for a DIFFERENT one (one at a time)', () => {
+        const opA = conn('opA', impIdent('target', 'operatorA'));
+        const opB = conn('opB', impIdent('target', 'operatorB'));
+        const realUser = conn('real-sock', ident('target'));
+        const { agent } = makeAgent([opA, opB, realUser], 'target', { pendingTakeover: pending('opA', 'operatorA') });
+        expect(takeoverGateDecision(agent, asConn(opA))).toBe('pending');
+        expect(takeoverGateDecision(agent, asConn(opB))).toBe('blocked');
+    });
+
+    it('a real user reclaiming control ("take back") revokes the operator grant + re-arms the gate', () => {
+        const operator = conn('op-sock', impIdent('target', 'operator'));
+        const realUser = conn('real-sock', ident('target'));
+        const { agent, state } = makeAgent([operator, realUser], 'target', {
+            grantedTakeover: { operatorConnectionId: 'op-sock', consentingUserId: 'target' },
+        });
+        claimDriver(agent, asConn(realUser)); // the real user takes the wheel back
+        expect(state.grantedTakeover).toBeNull();
+        expect(takeoverGateDecision(agent, asConn(operator))).toBe('request'); // operator re-gated
+    });
+
+    it('clears a grant + pending request tied to the operator socket on disconnect', () => {
+        const operator = conn('op-sock', impIdent('target', 'operator'));
+        const realUser = conn('real-sock', ident('target'));
+        const { agent, state } = makeAgent([realUser], 'target', {
+            grantedTakeover: { operatorConnectionId: 'op-sock', consentingUserId: 'target' },
+            pendingTakeover: pending('op-sock'),
+        });
+        handlePresenceOnClose(agent, asConn(operator)); // operator's socket closes
+        expect(state.grantedTakeover).toBeNull();
+        expect(state.pendingTakeover).toBeNull();
     });
 });
 
