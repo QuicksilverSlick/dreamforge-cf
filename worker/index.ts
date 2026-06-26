@@ -197,6 +197,16 @@ const worker = {
 
 		// Route 2: Main Application (e.g., app.getdreamforge.com or localhost)
 		if (isMainDomainRequest) {
+			// Cloudflare "Connect" OAuth lives on the app domain at /oauth/* and
+			// /auth/callback — NOT under /api/ — so it must reach Hono BEFORE the
+			// assets fallback below, which would otherwise swallow these paths into
+			// env.ASSETS and leave the connect flow dead on arrival. The controllers
+			// stay gated on ENABLE_CLOUDFLARE_LIMITS (and the connect UI is unmounted),
+			// so this routing is inert until that feature is turned on.
+			if (pathname.startsWith('/oauth/') || pathname === '/auth/callback') {
+				const app = createApp(env);
+				return app.fetch(request, env, ctx);
+			}
 			// Serve static assets for all non-API routes from the ASSETS binding.
 			if (!pathname.startsWith('/api/')) {
 				const assetResponse = await env.ASSETS.fetch(request);
