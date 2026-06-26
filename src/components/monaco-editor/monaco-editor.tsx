@@ -176,10 +176,14 @@ monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
 	jsxFragmentFactory: 'React.Fragment',
 });
 
-export type MonacoEditorProps = React.ComponentProps<'div'> & {
+export type MonacoEditorProps = Omit<React.ComponentProps<'div'>, 'onChange'> & {
 	createOptions?: monaco.editor.IStandaloneEditorConstructionOptions;
 	find?: string;
 	replace?: string;
+	/** Fired on every user edit with the editor's full current contents. */
+	onChange?: (value: string) => void;
+	/** Fired on Cmd/Ctrl+S (for an explicit save affordance). */
+	onSave?: () => void;
 };
 
 /**
@@ -190,12 +194,20 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 	createOptions = {},
 	find,
 	replace,
+	onChange,
+	onSave,
 	...props
 }) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const editor = useRef<monaco.editor.IStandaloneCodeEditor>(undefined);
 	const prevValue = useRef<string>(createOptions.value || '');
 	const stickyScroll = useRef(true);
+	// Latest callbacks via refs so the editor (created once) always calls the
+	// current handler without being re-created on every parent render.
+	const onChangeRef = useRef(onChange);
+	onChangeRef.current = onChange;
+	const onSaveRef = useRef(onSave);
+	onSaveRef.current = onSave;
 	const { theme } = useTheme();
 
 
@@ -211,6 +223,15 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 			// `.dark` class), so it is applied last and intentionally overrides any
 			// `theme` passed through createOptions.
 			theme: effectiveEditorTheme(),
+		});
+
+		// Flow user edits back out (only when editable; readOnly suppresses these).
+		editor.current.onDidChangeModelContent(() => {
+			onChangeRef.current?.(editor.current?.getValue() ?? '');
+		});
+		// Cmd/Ctrl+S → explicit save, instead of the browser's save dialog.
+		editor.current.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+			onSaveRef.current?.();
 		});
 
 		// Add scroll listener to detect user interaction
@@ -239,11 +260,17 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 	}, []);
 
 	useEffect(() => {
-		if (editor.current && createOptions.value !== prevValue.current) {
+		// Compare against the editor's LIVE value, not just the last prop: when the
+		// user is typing, onChange round-trips their text back as `value`, and a
+		// setValue here would reset the cursor on every keystroke. Only push when the
+		// incoming value genuinely differs from what's on screen (file switch, an
+		// external regeneration/echo, or streaming).
+		const incoming = createOptions.value ?? '';
+		if (editor.current && incoming !== editor.current.getValue()) {
 			const model = editor.current.getModel();
 			if (!model) return;
 
-			editor.current.setValue(createOptions.value || '');
+			editor.current.setValue(incoming);
 
 			if (stickyScroll.current) {
 				// Scroll to bottom
