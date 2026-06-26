@@ -685,6 +685,16 @@ export function useChat({
 
 	const dismissTakeoverStatus = useCallback(() => setTakeoverStatus(null), []);
 
+	// In-editor manual code edit: persist a generated file the user edited. The
+	// server commits it as a git reversion point, redeploys the preview (HMR), and
+	// broadcasts file_regenerated so every member's file view syncs.
+	const saveFileEdit = useCallback(
+		(filePath: string, fileContents: string) => {
+			sendWebSocketMessage(websocket, 'user_edit_file', { filePath, fileContents });
+		},
+		[websocket],
+	);
+
 	return {
 		messages,
 		edit,
@@ -735,6 +745,8 @@ export function useChat({
 		operatorHoldsGrant,
 		respondToTakeover,
 		dismissTakeoverStatus,
+		// In-editor code editing
+		saveFileEdit,
 		releaseDriving,
 	};
 }

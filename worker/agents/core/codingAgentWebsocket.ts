@@ -59,7 +59,14 @@ const DRIVING_COMMANDS = new Set<string>([
     WebSocketMessageRequests.RESUME_GENERATION,
     WebSocketMessageRequests.USER_SUGGESTION,
     WebSocketMessageRequests.CLEAR_CONVERSATION,
+    // A manual code edit mutates the app + redeploys, so it is a driving command:
+    // gated by the single-driver seat, blocked for read-only impersonation, and
+    // consent-gated for a writable impersonation — exactly like the others.
+    WebSocketMessageRequests.USER_EDIT_FILE,
 ]);
+
+/** Hard cap on a single manual file edit (a generated source file never approaches it). */
+const MAX_USER_EDIT_BYTES = 1024 * 1024; // 1 MB
 
 interface IncomingWebSocketMessage {
     type: string;
@@ -73,6 +80,9 @@ interface IncomingWebSocketMessage {
     // Consent-gated takeover decision (TAKEOVER_DECISION), real user → server.
     requestId?: string;
     allow?: boolean;
+    // Manual file edit (USER_EDIT_FILE), editor → server.
+    filePath?: string;
+    fileContents?: string;
 }
 
 /** Consent-gated takeover tunables (privileged impersonation only). */
@@ -339,6 +349,56 @@ function auditTakeoverDenied(agent: CodeGeneratorAgent, pending: PendingTakeover
             },
         })
         .catch((error) => logger.error('Failed to audit takeover denial', error));
+}
+
+/**
+ * Apply a manual edit of a generated file from the in-app code editor. Persists it
+ * as a git reversion point (FileManager.saveGeneratedFile commits to the per-app
+ * repo), pushes it to the live sandbox preview (HMR), and broadcasts so every other
+ * connected member's file view syncs. Only ALREADY-GENERATED files are editable
+ * (not template/bootstrap), and never mid-generation. Reaches here only after the
+ * DRIVING_COMMANDS gate (single-driver seat + read-only/consent impersonation).
+ */
+async function handleUserFileEdit(
+    agent: CodeGeneratorAgent,
+    connection: Connection,
+    parsed: IncomingWebSocketMessage,
+): Promise<void> {
+    const filePath = typeof parsed.filePath === 'string' ? parsed.filePath : '';
+    const fileContents = parsed.fileContents;
+    if (!filePath || typeof fileContents !== 'string') {
+        sendError(connection, 'Invalid file edit.');
+        return;
+    }
+    if (fileContents.length > MAX_USER_EDIT_BYTES) {
+        sendError(connection, 'This file is too large to save.');
+        return;
+    }
+    if (agent.getBehavior().isCodeGenerating()) {
+        sendError(connection, 'Cannot save edits while the app is still generating — try again once it finishes.');
+        return;
+    }
+    const existing = agent.fileManager.getGeneratedFile(filePath);
+    if (!existing) {
+        sendError(connection, `"${filePath}" is not an editable file.`);
+        return;
+    }
+    const file = { ...existing, fileContents };
+    try {
+        // Reversion point: record to state + commit to the per-app git repo.
+        await agent.fileManager.saveGeneratedFile(file, `Manual edit: ${filePath}`);
+    } catch (error) {
+        logger.error('Failed to persist a manual file edit', error);
+        sendError(connection, `Failed to save ${filePath}.`);
+        return;
+    }
+    // The save is durable + a reversion point now — sync every member's file view.
+    agent.broadcast(WebSocketMessageResponses.FILE_REGENERATED, { message: `Saved ${filePath}`, file });
+    // Refresh the live preview off the response path (HMR); a redeploy failure
+    // does NOT undo the saved checkpoint.
+    void agent.deployToSandbox([file], true, `Manual edit: ${filePath}`).catch((error) => {
+        logger.error('Sandbox redeploy after a manual edit failed', error);
+    });
 }
 
 export async function handleWebSocketMessage(
@@ -655,6 +715,9 @@ export async function handleWebSocketMessage(
                 break;
             case WebSocketMessageRequests.TAKEOVER_DECISION:
                 handleTakeoverDecision(agent, connection, parsedMessage);
+                break;
+            case WebSocketMessageRequests.USER_EDIT_FILE:
+                await handleUserFileEdit(agent, connection, parsedMessage);
                 break;
             default:
                 sendError(connection, `Unknown message type: ${parsedMessage.type}`);

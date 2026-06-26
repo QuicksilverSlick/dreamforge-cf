@@ -127,6 +127,10 @@ export const WebSocketMessageRequests = {
     // Model configuration info request
     GET_MODEL_CONFIGS: 'get_model_configs',
 
+    // A manual user edit of a generated file from the in-app code editor —
+    // persisted as a git reversion point + redeployed to the live preview.
+    USER_EDIT_FILE: 'user_edit_file',
+
     // Org collaboration: claim / release the single driver seat.
     CLAIM_DRIVER: 'claim_driver',
     RELEASE_DRIVER: 'release_driver',

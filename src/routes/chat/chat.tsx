@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { CollaborationBar } from './components/collaboration-bar';
 import { TakeoverConsentModal } from './components/takeover-consent-modal';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Expand, Github, LoaderCircle, RefreshCw } from 'lucide-react';
+import { Expand, Github, LoaderCircle, RefreshCw, Save } from 'lucide-react';
 import { Blueprint } from './components/blueprint';
 import { FileExplorer } from './components/file-explorer';
 import { UserMessage, AIMessage } from './components/messages';
@@ -146,6 +146,8 @@ export default function Chat() {
 		operatorHoldsGrant,
 		respondToTakeover,
 		dismissTakeoverStatus,
+		// In-editor code editing
+		saveFileEdit,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
@@ -338,6 +340,62 @@ export default function Chat() {
 		streamedBootstrapFiles,
 		isBootstrapping,
 	]);
+
+	// In-editor code editing: per-file buffer of unsaved manual edits (path → contents).
+	const [unsavedEdits, setUnsavedEdits] = useState<Record<string, string>>({});
+
+	// A file is user-editable only if it's an already-GENERATED file (not a
+	// template/bootstrap one), this viewer holds the driver seat, and nothing is
+	// generating. Saving is otherwise gated server-side too (USER_EDIT_FILE is a
+	// driving command), so this is the UI affordance, not the security boundary.
+	const isActiveFileGenerated =
+		!!activeFilePath && files.some((f) => f.filePath === activeFilePath);
+	const canEditCode =
+		isActiveFileGenerated && isViewerDriving && !isGenerating && !activeFile?.isGenerating;
+	const isActiveFileDirty = !!activeFilePath && unsavedEdits[activeFilePath] !== undefined;
+	const editorValue =
+		(activeFilePath && unsavedEdits[activeFilePath] !== undefined
+			? unsavedEdits[activeFilePath]
+			: activeFile?.fileContents) || '';
+
+	const handleEditorChange = useCallback(
+		(contents: string) => {
+			if (!canEditCode || !activeFilePath) return;
+			const saved = activeFile?.fileContents ?? '';
+			setUnsavedEdits((prev) => {
+				if (contents === saved) {
+					if (prev[activeFilePath] === undefined) return prev;
+					const next = { ...prev };
+					delete next[activeFilePath];
+					return next;
+				}
+				if (prev[activeFilePath] === contents) return prev;
+				return { ...prev, [activeFilePath]: contents };
+			});
+		},
+		[canEditCode, activeFilePath, activeFile?.fileContents],
+	);
+
+	const handleSaveEdit = useCallback(() => {
+		if (!activeFilePath || unsavedEdits[activeFilePath] === undefined) return;
+		saveFileEdit(activeFilePath, unsavedEdits[activeFilePath]);
+	}, [activeFilePath, unsavedEdits, saveFileEdit]);
+
+	// Reconcile the buffer when `files` updates (notably the save echo): drop any
+	// buffer whose contents now match the saved file (no longer dirty).
+	useEffect(() => {
+		setUnsavedEdits((prev) => {
+			let changed = false;
+			const next = { ...prev };
+			for (const f of files) {
+				if (next[f.filePath] !== undefined && next[f.filePath] === f.fileContents) {
+					delete next[f.filePath];
+					changed = true;
+				}
+			}
+			return changed ? next : prev;
+		});
+	}, [files]);
 
 	const isPhase1Complete = useMemo(() => {
 		return phaseTimeline.length > 0 && phaseTimeline[0].status === 'completed';
@@ -1106,6 +1164,25 @@ export default function Chat() {
 													<Github className="size-3" />
 													GitHub
 												</button> */}
+												{canEditCode && (
+													<button
+														className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-all duration-200 text-xs font-medium shadow-sm ${
+															isActiveFileDirty
+																? 'bg-accent text-text-inverted hover:bg-accent/90'
+																: 'bg-bg-3 text-text-primary/40 cursor-not-allowed'
+														}`}
+														onClick={isActiveFileDirty ? handleSaveEdit : undefined}
+														disabled={!isActiveFileDirty}
+														title={
+															isActiveFileDirty
+																? 'Save changes (⌘/Ctrl+S) — creates a reversion point'
+																: 'No unsaved changes'
+														}
+													>
+														<Save className="size-3" />
+														Save
+													</button>
+												)}
 												<ModelConfigInfo
 													configs={modelConfigs}
 													onRequestConfigs={handleRequestConfigs}
@@ -1140,13 +1217,11 @@ export default function Chat() {
 												<MonacoEditor
 													className="h-full"
 													createOptions={{
-														value:
-															activeFile?.fileContents ||
-															'',
+														value: editorValue,
 														language:
 															activeFile?.language ||
 															'plaintext',
-														readOnly: true,
+														readOnly: !canEditCode,
 														minimap: {
 															enabled: false,
 														},
@@ -1155,6 +1230,8 @@ export default function Chat() {
 														fontSize: 13,
 														automaticLayout: true,
 													}}
+													onChange={handleEditorChange}
+													onSave={handleSaveEdit}
 													find={
 														edit &&
 														edit.filePath ===
