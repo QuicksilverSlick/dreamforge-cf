@@ -2226,7 +2226,15 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
         // Toggles are forced off in `buildInferenceContext` — see its doc
         // comment for why we do not honor `metadata.enable*CodeFix` yet.
-        return buildInferenceContext(this.state.metadata, this.userModelConfigs);
+        return {
+            ...buildInferenceContext(this.state.metadata, this.userModelConfigs),
+            // The Cloudflare OAuth token is request-scoped DO state (refreshable;
+            // captured from the HttpOnly cookie at WS upgrade), not persisted
+            // metadata — inject it so user-gateway inference can authenticate.
+            // shouldUseUserKey + userGateway flow from state.metadata via
+            // buildInferenceContext.
+            userApiToken: this.state.cloudflareToken ?? null,
+        };
     }
 
     // ==========================================
