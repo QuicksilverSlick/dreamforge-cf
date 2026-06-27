@@ -10,6 +10,8 @@ import { RouteContext } from '../../types/route-context';
 import { ModelConfigService } from '../../../database';
 import { ModelConfig } from '../../../agents/inferutils/config.types';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
+import { checkUsageAndBalance, getUserGateway } from '../../../services/rate-limit/usageChecker';
+import { readTokenCookie } from '../../../utils/oauthCookie';
 import { InterviewSessionService } from '../../../database/services/InterviewSessionService';
 import { extractUrlFromText } from '../../../services/referenceSite/urlSafety';
 import { validateWebSocketOrigin } from '../../../middleware/security/websocket';
@@ -35,7 +37,7 @@ export class CodingAgentController extends BaseController {
     /**
      * Start the incremental code generation process
      */
-    static async startCodeGeneration(request: Request, env: Env, _: ExecutionContext, context: RouteContext): Promise<Response> {
+    static async startCodeGeneration(request: Request, env: Env, ctx: ExecutionContext, context: RouteContext): Promise<Response> {
         try {
             this.logger.info('Starting code generation process');
 
@@ -77,6 +79,25 @@ export class CodingAgentController extends BaseController {
                 }
             }
 
+            // Cloudflare unified-billing usage gate. INERT unless
+            // ENABLE_CLOUDFLARE_LIMITS is on — checkUsageAndBalance short-circuits to
+            // allowed/within-limits (shouldUseByok=false) when the feature is
+            // disabled, so this whole block is a no-op today. When ON and the user is
+            // over the free tier: route their build through THEIR Cloudflare gateway
+            // on THEIR credits (shouldUseUserKey) if connected; otherwise block.
+            const userCfToken = readTokenCookie(request, env);
+            const usage = await checkUsageAndBalance(env, user.id, request, userCfToken, undefined, ctx);
+            if (!usage.allowed) {
+                return CodingAgentController.createErrorResponse(
+                    usage.reason ?? 'You have reached your free build limit. Connect your Cloudflare account to keep building on your own credits, or try again later.',
+                    429,
+                );
+            }
+            // shouldUseByok is the usage checker's "use the user's own credentials"
+            // signal (true only over the free tier with a usable token/balance).
+            const shouldUseUserKey = usage.shouldUseByok;
+            const userGateway = shouldUseUserKey ? await getUserGateway(env, user.id) : null;
+
             const agentId = generateId();
             const modelConfigService = new ModelConfigService(env);
                                 
@@ -115,6 +136,12 @@ export class CodingAgentController extends BaseController {
                 // fixer toggles off regardless of this value. Honoring it (and the per-build AI
                 // cost it implies) is a deliberate, measured decision tracked as a follow-up.
                 enableFastSmartCodeFix: true,
+                // CF unified-billing (PR B consumes these): persisted into state.metadata
+                // so the build routes inference through the user's own Cloudflare gateway
+                // on their credits when they're over the free tier. The token itself is
+                // captured into state.cloudflareToken at WS upgrade (onConnect).
+                shouldUseUserKey,
+                userGateway,
             }
                                 
             this.logger.info(`Initialized inference context for user ${user.id}`, {
