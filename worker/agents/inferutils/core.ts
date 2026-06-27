@@ -255,6 +255,7 @@ async function getApiKey(
     userApiKeys?: Record<string, string>,
     shouldUseUserKey?: boolean,
     encryptedUserToken?: string | null,
+    userGateway?: { accountId: string; gatewaySlug: string } | null,
 ): Promise<ResolvedApiKey> {
     console.log("Getting API key for provider: ", provider);
     // Runtime-supplied keys (e.g. model-config tests) take precedence over
@@ -281,7 +282,13 @@ async function getApiKey(
     // Cloudflare account, use their decrypted AI-Gateway OAuth token (userId-bound,
     // so a stolen blob can't be replayed). After the D1 provider key (cheaper for
     // the user), and only when shouldUseUserKey was set by the creation gate.
-    if (shouldUseUserKey && encryptedUserToken) {
+    //
+    // CRITICAL (review B1): also require a selected `userGateway`. A 'cf-gateway'
+    // key MUST only exist when there is a user gateway to pair it with — otherwise
+    // getConfigurationForModel would route this user token through the PLATFORM
+    // gateway AND grant the rate-limit exemption, a platform-funded leak. Gating
+    // here keeps the key↔URL coupling: cf-gateway keySource ⟺ user gateway present.
+    if (shouldUseUserKey && encryptedUserToken && userGateway) {
         try {
             const accessToken = await getAccessTokenFromBlob(encryptedUserToken, env, userId);
             if (accessToken && isValidApiKey(accessToken)) {
@@ -291,11 +298,18 @@ async function getApiKey(
         } catch (error) {
             console.warn('[CF-OAuth] Failed to decrypt user Cloudflare gateway token; falling back', error);
         }
-        // Over the free tier but no usable user token → falls through to the
-        // platform key, so the PLATFORM pays. Surface it (telemetry trap from the
-        // port handoff) so a silently broken cookie->DO transport reads as a cost
-        // leak, not an outage.
-        console.warn('[CF-OAuth] shouldUseUserKey set but no valid user token resolved — using platform key (cost falls on the platform)', { userId, provider });
+    }
+    if (shouldUseUserKey) {
+        // Over the free tier but no usable user gateway+token → falls through to the
+        // platform key (rate-limited, platform-funded). Surface it (telemetry trap
+        // from the port handoff) so a broken cookie->DO transport or a missing
+        // selected gateway reads as a cost-attribution issue, not an outage.
+        console.warn('[CF-OAuth] shouldUseUserKey set but no usable user gateway+token — using platform key (rate-limited, platform-funded)', {
+            userId,
+            provider,
+            hasToken: !!encryptedUserToken,
+            hasGateway: !!userGateway,
+        });
     }
     // Fallback to environment variables
     const providerKeyString = provider.toUpperCase().replaceAll('-', '_');
@@ -323,14 +337,17 @@ export async function getConfigurationForModel(
     defaultHeaders?: Record<string, string>,
     keySource: ResolvedApiKey['keySource'],
 }> {
-    // User-gateway (unified-billing) mode requires all three: the over-free-tier
-    // flag, a selected gateway, and a token. Without any one, we use the platform.
-    const useUserGateway = !!(shouldUseUserKey && userGateway && userApiToken);
     let providerForcedOverride: AIGatewayProviders | undefined;
     // Check if provider forceful-override is set
     const match = model.match(/\[(.*?)\]/);
     if (match) {
         const provider = match[1];
+        if (shouldUseUserKey && (provider === 'openrouter' || provider === 'gemini' || provider === 'claude')) {
+            // Review (low): direct-override models bypass BOTH gateways and run on
+            // platform keys even for an over-tier user — a small, bounded platform
+            // cost (these are pinned design / escape-hatch models). Surface it.
+            console.warn('[CF-OAuth] Over-tier user on a direct-override model — platform-funded (override bypasses the user gateway)', { provider });
+        }
         if (provider === 'openrouter') {
             return {
                 baseURL: 'https://openrouter.ai/api/v1',
@@ -353,13 +370,17 @@ export async function getConfigurationForModel(
         providerForcedOverride = provider as AIGatewayProviders;
     }
 
-    const baseURL = await buildGatewayUrl(env, providerForcedOverride, useUserGateway ? userGateway : null);
-
     // Extract the provider name from model name. Model name is of type `provider/model_name`
     const provider = providerForcedOverride || model.split('/')[0];
-    // Try to find API key of type <PROVIDER>_API_KEY else default to CLOUDFLARE_AI_GATEWAY_TOKEN
-    // `env` is an interface of type `Env`
-    const { apiKey, keySource } = await getApiKey(provider, env, userId, userApiKeys, shouldUseUserKey, userApiToken);
+    // Resolve the key FIRST, then derive the baseURL FROM the resolved key — they
+    // are ONE coupled unit (review B1/B2). getApiKey only returns 'cf-gateway' when
+    // a userGateway exists, so cf-gateway keySource ⟺ route to the user gateway;
+    // every other source (runtime/byok/platform) routes to the platform gateway.
+    // This makes it impossible to pair a user token with the platform gateway, or a
+    // platform/BYOK key with the user gateway.
+    const { apiKey, keySource } = await getApiKey(provider, env, userId, userApiKeys, shouldUseUserKey, userApiToken, userGateway);
+    const useUserGateway = keySource === 'cf-gateway';
+    const baseURL = await buildGatewayUrl(env, providerForcedOverride, useUserGateway ? userGateway : null);
     // AI Gateway wholesaling header is only needed on the PLATFORM gateway paired
     // with the user's key. The user's OWN gateway authenticates with their token,
     // so it must NOT carry the platform wholesaling header.
@@ -844,6 +865,12 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                         reasoning_effort,
                         temperature,
                         userApiKeys,
+                        // Tool-call recursion must keep funding the build on the
+                        // user's gateway (review B3) — otherwise follow-up calls bill
+                        // the platform and re-impose the rate limit.
+                        shouldUseUserKey,
+                        userApiToken,
+                        userGateway,
                     }, newToolCallContext);
                     return output;
                 } else {
@@ -859,6 +886,12 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                         reasoning_effort,
                         temperature,
                         userApiKeys,
+                        // Tool-call recursion must keep funding the build on the
+                        // user's gateway (review B3) — otherwise follow-up calls bill
+                        // the platform and re-impose the rate limit.
+                        shouldUseUserKey,
+                        userApiToken,
+                        userGateway,
                     }, newToolCallContext);
                     return output;
                 }
