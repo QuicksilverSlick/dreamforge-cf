@@ -17,6 +17,7 @@ import { Message, MessageContent, MessageRole } from './common';
 import { ToolCallResult, ToolDefinition } from '../tools/types';
 import { AgentActionKey, AIModels, InferenceMetadata } from './config.types';
 import { SecretsService } from '../../database';
+import { getAccessTokenFromBlob } from '../../utils/tokenEncryption';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { getUserConfigurableSettings } from '../../config';
 import { SecurityError, RateLimitExceededError } from 'shared/types/errors';
@@ -186,7 +187,18 @@ function optimizeTextContent(content: string): string {
     return content;
 }
 
-export async function buildGatewayUrl(env: Env, providerOverride?: AIGatewayProviders): Promise<string> {
+export async function buildGatewayUrl(
+    env: Env,
+    providerOverride?: AIGatewayProviders,
+    userGateway?: { accountId: string; gatewaySlug: string } | null,
+): Promise<string> {
+    // User's own Cloudflare AI Gateway (unified-billing / BYOK-credits mode):
+    // route through their account+gateway so inference draws their credits.
+    if (userGateway) {
+        const baseUrl = `https://gateway.ai.cloudflare.com/v1/${userGateway.accountId}/${userGateway.gatewaySlug}`;
+        return providerOverride ? `${baseUrl}/${providerOverride}` : `${baseUrl}/compat`;
+    }
+
     // If CLOUDFLARE_AI_GATEWAY_URL is set and is a valid URL, use it directly
     if (env.CLOUDFLARE_AI_GATEWAY_URL && 
         env.CLOUDFLARE_AI_GATEWAY_URL !== 'none' && 
@@ -227,14 +239,23 @@ function isValidApiKey(apiKey: string): boolean {
 type ResolvedApiKey = {
     apiKey: string;
     /**
-     * Where the key came from. Only 'byok' (a stored, template-validated,
-     * owner-bound key) is treated as user-funded for rate-limit purposes;
-     * runtime-supplied keys are weakly validated and stay rate-limited.
+     * Where the key came from. 'byok' (a stored, template-validated, owner-bound
+     * provider key) and 'cf-gateway' (the user's Cloudflare AI-Gateway OAuth
+     * token — user-funded via unified billing) are both user-funded and so skip
+     * the platform LLM rate limit; runtime-supplied keys are weakly validated and
+     * stay rate-limited.
      */
-    keySource: 'runtime' | 'byok' | 'platform';
+    keySource: 'runtime' | 'byok' | 'cf-gateway' | 'platform';
 };
 
-async function getApiKey(provider: string, env: Env, userId: string, userApiKeys?: Record<string, string>): Promise<ResolvedApiKey> {
+async function getApiKey(
+    provider: string,
+    env: Env,
+    userId: string,
+    userApiKeys?: Record<string, string>,
+    shouldUseUserKey?: boolean,
+    encryptedUserToken?: string | null,
+): Promise<ResolvedApiKey> {
     console.log("Getting API key for provider: ", provider);
     // Runtime-supplied keys (e.g. model-config tests) take precedence over
     // any stored key. The key value itself is never logged.
@@ -256,6 +277,26 @@ async function getApiKey(provider: string, env: Env, userId: string, userApiKeys
     } catch (error) {
         console.error("Error getting user BYOK key for provider: ", provider, error);
     }
+    // CF unified-billing: when the user is over the free tier AND has a connected
+    // Cloudflare account, use their decrypted AI-Gateway OAuth token (userId-bound,
+    // so a stolen blob can't be replayed). After the D1 provider key (cheaper for
+    // the user), and only when shouldUseUserKey was set by the creation gate.
+    if (shouldUseUserKey && encryptedUserToken) {
+        try {
+            const accessToken = await getAccessTokenFromBlob(encryptedUserToken, env, userId);
+            if (accessToken && isValidApiKey(accessToken)) {
+                console.log("Using user Cloudflare AI-Gateway OAuth token for provider: ", provider);
+                return { apiKey: accessToken, keySource: 'cf-gateway' };
+            }
+        } catch (error) {
+            console.warn('[CF-OAuth] Failed to decrypt user Cloudflare gateway token; falling back', error);
+        }
+        // Over the free tier but no usable user token → falls through to the
+        // platform key, so the PLATFORM pays. Surface it (telemetry trap from the
+        // port handoff) so a silently broken cookie->DO transport reads as a cost
+        // leak, not an outage.
+        console.warn('[CF-OAuth] shouldUseUserKey set but no valid user token resolved — using platform key (cost falls on the platform)', { userId, provider });
+    }
     // Fallback to environment variables
     const providerKeyString = provider.toUpperCase().replaceAll('-', '_');
     const envKey = `${providerKeyString}_API_KEY` as keyof Env;
@@ -273,12 +314,18 @@ export async function getConfigurationForModel(
     env: Env,
     userId: string,
     userApiKeys?: Record<string, string>,
+    shouldUseUserKey?: boolean,
+    userApiToken?: string | null,
+    userGateway?: { accountId: string; gatewaySlug: string } | null,
 ): Promise<{
     baseURL: string,
     apiKey: string,
     defaultHeaders?: Record<string, string>,
     keySource: ResolvedApiKey['keySource'],
 }> {
+    // User-gateway (unified-billing) mode requires all three: the over-free-tier
+    // flag, a selected gateway, and a token. Without any one, we use the platform.
+    const useUserGateway = !!(shouldUseUserKey && userGateway && userApiToken);
     let providerForcedOverride: AIGatewayProviders | undefined;
     // Check if provider forceful-override is set
     const match = model.match(/\[(.*?)\]/);
@@ -306,15 +353,17 @@ export async function getConfigurationForModel(
         providerForcedOverride = provider as AIGatewayProviders;
     }
 
-    const baseURL = await buildGatewayUrl(env, providerForcedOverride);
+    const baseURL = await buildGatewayUrl(env, providerForcedOverride, useUserGateway ? userGateway : null);
 
     // Extract the provider name from model name. Model name is of type `provider/model_name`
     const provider = providerForcedOverride || model.split('/')[0];
     // Try to find API key of type <PROVIDER>_API_KEY else default to CLOUDFLARE_AI_GATEWAY_TOKEN
     // `env` is an interface of type `Env`
-    const { apiKey, keySource } = await getApiKey(provider, env, userId, userApiKeys);
-    // AI Gateway Wholesaling checks
-    const defaultHeaders = env.CLOUDFLARE_AI_GATEWAY_TOKEN && apiKey !== env.CLOUDFLARE_AI_GATEWAY_TOKEN ? {
+    const { apiKey, keySource } = await getApiKey(provider, env, userId, userApiKeys, shouldUseUserKey, userApiToken);
+    // AI Gateway wholesaling header is only needed on the PLATFORM gateway paired
+    // with the user's key. The user's OWN gateway authenticates with their token,
+    // so it must NOT carry the platform wholesaling header.
+    const defaultHeaders = !useUserGateway && env.CLOUDFLARE_AI_GATEWAY_TOKEN && apiKey !== env.CLOUDFLARE_AI_GATEWAY_TOKEN ? {
         'cf-aig-authorization': `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`,
     } : undefined;
     return {
@@ -341,6 +390,12 @@ type InferArgsBase = {
     tools?: ToolDefinition<any, any>[];
     providerOverride?: 'cloudflare' | 'direct';
     userApiKeys?: Record<string, string>;
+    // CF unified-billing (BYOK-credits): route inference through the user's own
+    // Cloudflare AI Gateway on their credits. Threaded from the InferenceContext
+    // by executeInference; all undefined => the platform path (unchanged).
+    shouldUseUserKey?: boolean;
+    userApiToken?: string | null;
+    userGateway?: { accountId: string; gatewaySlug: string } | null;
 };
 
 type InferArgsStructured = InferArgsBase & {
@@ -470,6 +525,9 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
     reasoning_effort,
     temperature,
     userApiKeys,
+    shouldUseUserKey,
+    userApiToken,
+    userGateway,
 }: InferArgsBase & {
     schema?: OutputSchema;
     schemaName?: string;
@@ -497,12 +555,21 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
     try {
         const userConfig = await getUserConfigurableSettings(env, metadata.userId)
 
-        const { apiKey, baseURL, defaultHeaders, keySource } = await getConfigurationForModel(modelName, env, metadata.userId, userApiKeys);
+        const { apiKey, baseURL, defaultHeaders, keySource } = await getConfigurationForModel(
+            modelName,
+            env,
+            metadata.userId,
+            userApiKeys,
+            shouldUseUserKey,
+            userApiToken,
+            userGateway,
+        );
 
-        // Stored BYOK keys are user-funded, so the platform LLM rate limit
-        // doesn't apply. Runtime-supplied keys are only weakly validated and
+        // User-funded keys skip the platform LLM rate limit: stored BYOK provider
+        // keys ('byok') and the user's own Cloudflare AI-Gateway credits
+        // ('cf-gateway'). Runtime-supplied keys are only weakly validated and
         // remain rate-limited.
-        if (keySource !== 'byok') {
+        if (keySource !== 'byok' && keySource !== 'cf-gateway') {
             // Maybe in the future can expand using config object for other stuff like global model configs?
             await RateLimitService.enforceLLMCallsRateLimit(env, userConfig.security.rateLimit, metadata.userId, modelName)
         }

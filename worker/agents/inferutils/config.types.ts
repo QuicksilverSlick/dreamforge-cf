@@ -103,6 +103,19 @@ export type InferenceMetadata = {
      * creator's personal org.
      */
     orgId?: string;
+    /**
+     * Cloudflare unified-billing (BYOK-credits). Set once at request start by the
+     * agent-creation usage gate: true when the user is over the free tier AND has
+     * a connected Cloudflare account, so inference should route through THEIR AI
+     * Gateway on THEIR credits instead of the platform's keys.
+     */
+    shouldUseUserKey?: boolean;
+    /**
+     * The user's selected Cloudflare AI Gateway (account + gateway slug). When set
+     * with shouldUseUserKey + a token, inference base-URLs at
+     * gateway.ai.cloudflare.com/v1/{accountId}/{gatewaySlug}.
+     */
+    userGateway?: { accountId: string; gatewaySlug: string } | null;
     // llmRateLimits: LLMCallsRateLimitConfig;
 }
 
@@ -124,4 +137,12 @@ export interface InferenceContext extends InferenceMetadata {
     userModelConfigs?: Record<AgentActionKey, ModelConfig>;
     enableRealtimeCodeFix: boolean;
     enableFastSmartCodeFix: boolean;
+    /**
+     * The user's encrypted Cloudflare OAuth token blob (the value of the DO's
+     * `cloudflareToken` state, captured server-side from the HttpOnly cookie at
+     * WS upgrade time — never a client header). Decrypted per-request by the
+     * backend, userId-bound to block replay. Request-scoped (the token can
+     * refresh), so it's injected here rather than persisted in metadata.
+     */
+    userApiToken?: string | null;
 }

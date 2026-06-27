@@ -109,6 +109,12 @@ export async function executeInference<T extends z.AnyZodObject>(   {
             const result = schema ? await infer<T>({
                 env,
                 metadata: context,
+                // CF unified-billing: route through the user's own AI Gateway on
+                // their credits when the creation gate flagged them over the free
+                // tier with a connected account. All undefined => platform path.
+                shouldUseUserKey: context.shouldUseUserKey,
+                userApiToken: context.userApiToken,
+                userGateway: context.userGateway,
                 messages,
                 schema,
                 schemaName: agentActionName,
@@ -126,6 +132,9 @@ export async function executeInference<T extends z.AnyZodObject>(   {
             }) : await infer({
                 env,
                 metadata: context,
+                shouldUseUserKey: context.shouldUseUserKey,
+                userApiToken: context.userApiToken,
+                userGateway: context.userGateway,
                 messages,
                 maxTokens,
                 modelName: useCheaperModel ? AIModels.GEMINI_2_5_FLASH: modelName,
