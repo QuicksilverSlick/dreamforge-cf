@@ -31,6 +31,7 @@ import {
 	type ImageAttachment,
 	type PresenceMember
 } from '@/api-types';
+import { ApiError } from '@/lib/api-client';
 import {
 	createRepairingJSONParser,
 	ndjsonStream,
@@ -98,6 +99,9 @@ export function useChat({
 	// Track the latest connection attempt to avoid handling stale socket events
 	const connectAttemptIdRef = useRef(0);
 	const [chatId, setChatId] = useState<string>();
+	// Set when agent creation is blocked by the free-tier usage gate (HTTP 429);
+	// chat.tsx turns this into the connect/configure dialog when the flag is on.
+	const [creationLimitExceeded, setCreationLimitExceeded] = useState(false);
 	const [messages, setMessages] = useState<ChatMessage[]>([
 		createAIMessage('main', 'Thinking...', true),
 	]);
@@ -558,6 +562,14 @@ export function useChat({
 				if (error instanceof RateLimitExceededError) {
 					const rateLimitMessage = handleRateLimitError(error.details, onDebugMessage);
 					setMessages(prev => [...prev, rateLimitMessage]);
+				} else if (error instanceof ApiError) {
+					// requestRaw leaves bare ApiErrors un-toasted, so surface it here.
+					// A 429 means the free build tier is exhausted at creation → raise the
+					// signal that chat.tsx renders as the connect/configure CTA.
+					toast.error(error.message);
+					if (error.status === 429) {
+						setCreationLimitExceeded(true);
+					}
 				}
 			}
 		}
@@ -748,5 +760,8 @@ export function useChat({
 		// In-editor code editing
 		saveFileEdit,
 		releaseDriving,
+		// CF-OAuth: free build tier exhausted at creation (HTTP 429)
+		creationLimitExceeded,
+		clearCreationLimit: () => setCreationLimitExceeded(false),
 	};
 }

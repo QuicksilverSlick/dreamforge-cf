@@ -628,11 +628,17 @@ class ApiClient {
 				stream: response
 			};
 		} catch (error) {
-			// Handle any network or parsing errors
+			// Preserve typed errors so callers can branch on them — ApiError carries the
+			// HTTP status, which the chat hook turns into the "connect Cloudflare" dialog
+			// on a creation 429. (requestRaw already toasts any typed-with-`type` error; a
+			// bare ApiError such as the 429 is surfaced by the caller instead.)
+			if (error instanceof ApiError || error instanceof RateLimitExceededError || error instanceof SecurityError) {
+				throw error;
+			}
+			// Network/parsing failure — wrap with a friendly message.
 			const errorMessage = error instanceof Error ? error.message : 'Failed to create agent session';
 			toast.error(errorMessage);
-			
-            throw new Error(errorMessage);
+			throw new Error(errorMessage);
 		}
 	}
 

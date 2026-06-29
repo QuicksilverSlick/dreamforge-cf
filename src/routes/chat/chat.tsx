@@ -40,7 +40,7 @@ import { ImageAttachmentPreview } from '@/components/image-attachment-preview';
 import { createAIMessage } from './utils/message-helpers';
 import { useLimitsContext } from '@/contexts/limits-context';
 import { CreditsBanner } from '@/components/credits-banner';
-import { checkCanSendPrompt } from '@/utils/usage-limit-checker';
+import { checkCanSendPrompt, getBackendLimitDialog } from '@/utils/usage-limit-checker';
 import { startCloudflareConnect } from '@/utils/cloudflare-connect';
 
 export default function Chat() {
@@ -153,6 +153,9 @@ export default function Chat() {
 		dismissTakeoverStatus,
 		// In-editor code editing
 		saveFileEdit,
+		// CF-OAuth: free build tier exhausted at creation
+		creationLimitExceeded,
+		clearCreationLimit,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
@@ -249,6 +252,23 @@ export default function Chat() {
 	// usage, so the pre-send check never blocks and the banner never renders.
 	const { data: limitsData, loading: limitsLoading } = useLimitsContext();
 	const [limitDialog, setLimitDialog] = useState<ReactElement | null>(null);
+
+	// Agent creation was blocked by the free-tier gate (429). Surface the
+	// connect/configure dialog from our own limitsData (getBackendLimitDialog
+	// returns no dialog for a connected user who merely hit the per-day cap, so it
+	// self-distinguishes). Gated on the flag → inert until ENABLE_CLOUDFLARE_LIMITS.
+	useEffect(() => {
+		if (!creationLimitExceeded) return;
+		if (limitsData?.cloudflareConnectEnabled) {
+			const { dialogComponent } = getBackendLimitDialog(
+				limitsData,
+				() => startCloudflareConnect(),
+				() => setLimitDialog(null),
+			);
+			setLimitDialog(dialogComponent ?? null);
+		}
+		clearCreationLimit();
+	}, [creationLimitExceeded, limitsData, clearCreationLimit]);
 	
 	// Word count utilities
 	const MAX_WORDS = 4000;
