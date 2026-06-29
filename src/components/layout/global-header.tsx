@@ -3,6 +3,8 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { AuthButton } from '../auth/auth-button';
 import { OrgSwitcher } from './org-switcher';
 import { ThemeToggle } from '../theme-toggle';
+import { UsageLimitsBadge } from '../usage-limits-badge';
+import { startCloudflareConnect } from '@/utils/cloudflare-connect';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/auth-context';
 import { ChevronRight, AlertCircle } from 'lucide-react';
@@ -96,6 +98,7 @@ export function GlobalHeader() {
 								variant="inline"
 							/>
 						)} */}
+							{user && <UsageLimitsBadge onConnect={() => startCloudflareConnect()} />}
 							{user && <OrgSwitcher />}
 							<ThemeToggle />
 							<AuthButton />
