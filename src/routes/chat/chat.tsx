@@ -5,6 +5,7 @@ import {
 	useRef,
 	useState,
 	type FormEvent,
+	type ReactElement,
 } from 'react';
 import { ArrowRight, Image as ImageIcon } from 'react-feather';
 import { useParams, useSearchParams, useNavigate } from 'react-router';
@@ -37,6 +38,10 @@ import { useImageUpload } from '@/hooks/use-image-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ImageAttachmentPreview } from '@/components/image-attachment-preview';
 import { createAIMessage } from './utils/message-helpers';
+import { useLimitsContext } from '@/contexts/limits-context';
+import { CreditsBanner } from '@/components/credits-banner';
+import { checkCanSendPrompt } from '@/utils/usage-limit-checker';
+import { startCloudflareConnect } from '@/utils/cloudflare-connect';
 
 export default function Chat() {
 	const { chatId: urlChatId } = useParams();
@@ -238,6 +243,12 @@ export default function Chat() {
 
 	const [newMessage, setNewMessage] = useState('');
 	const [showTooltip, setShowTooltip] = useState(false);
+
+	// CF-OAuth usage gating. Inert unless ENABLE_CLOUDFLARE_LIMITS is on — with the
+	// flag off the backend reports cloudflareConnectEnabled:false and unlimited
+	// usage, so the pre-send check never blocks and the banner never renders.
+	const { data: limitsData, loading: limitsLoading } = useLimitsContext();
+	const [limitDialog, setLimitDialog] = useState<ReactElement | null>(null);
 	
 	// Word count utilities
 	const MAX_WORDS = 4000;
@@ -542,6 +553,22 @@ export default function Chat() {
 				return;
 			}
 
+			// CF-OAuth: once the free tier is exhausted, surface the connect/configure
+			// dialog instead of sending. No-op until ENABLE_CLOUDFLARE_LIMITS is on
+			// (cloudflareConnectEnabled gates it; the backend also reports within-limits).
+			if (limitsData?.cloudflareConnectEnabled) {
+				const check = checkCanSendPrompt(
+					limitsData,
+					limitsLoading,
+					() => startCloudflareConnect(),
+					() => setLimitDialog(null),
+				);
+				if (!check.canProceed) {
+					setLimitDialog(check.dialogComponent ?? null);
+					return;
+				}
+			}
+
 			// When generation is active, send as conversational AI suggestion
 			websocket?.send(
 				JSON.stringify({
@@ -559,7 +586,7 @@ export default function Chat() {
 			// Ensure we scroll after sending our own message
 			requestAnimationFrame(() => scrollToBottom());
 		},
-		[newMessage, websocket, sendUserMessage, isChatDisabled, scrollToBottom, images, clearImages, isReadOnlyViewer, currentDriverName, setDrivingBlockedBy],
+		[newMessage, websocket, sendUserMessage, isChatDisabled, scrollToBottom, images, clearImages, isReadOnlyViewer, currentDriverName, setDrivingBlockedBy, limitsData, limitsLoading],
 	);
 
 	const [progress, total] = useMemo((): [number, number] => {
@@ -787,6 +814,16 @@ export default function Chat() {
 					</div>
 
 					<TakeoverConsentModal request={takeoverRequest} onRespond={respondToTakeover} />
+
+					{limitDialog}
+
+					{limitsData?.cloudflareConnectEnabled && (
+						<CreditsBanner
+							limitsData={limitsData}
+							onConnectCloudflare={() => startCloudflareConnect()}
+							className="mx-4 mb-1"
+						/>
+					)}
 
 					<form
                         ref={chatFormRef}

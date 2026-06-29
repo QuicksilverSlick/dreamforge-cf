@@ -14,6 +14,7 @@ import { apiClient } from '@/lib/api-client';
 import CloudflareLogo from '@/assets/provider-logos/cloudflare.svg?react';
 import { Loader2, CheckCircle2, AlertCircle, MoreVertical, ExternalLink, LogOut } from 'lucide-react';
 import { useLimitsContext } from '@/contexts/limits-context';
+import { startCloudflareConnect } from '@/utils/cloudflare-connect';
 
 interface CloudflareAccount {
 	id: string;
@@ -205,11 +206,7 @@ export function CloudflareAccountSelector() {
 	const selectedAccount = accounts.find(a => a.id === selectedAccountId);
 	const selectedGateway = availableGateways.find(g => g.id === selectedGatewayId);
 
-	const handleReconnect = () => {
-		const url = new URL('/oauth/login', window.location.origin);
-		url.searchParams.set('return_url', window.location.pathname + window.location.search);
-		window.location.href = url.toString();
-	};
+	const handleReconnect = () => startCloudflareConnect();
 
 	const gatewayDashUrl = selectedAccount && selectedGateway
 		? `https://dash.cloudflare.com/${selectedAccount.accountId}/ai/ai-gateway/gateways/${selectedGateway.gatewaySlug}`

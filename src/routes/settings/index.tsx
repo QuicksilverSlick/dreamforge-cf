@@ -59,6 +59,9 @@ import {
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api-client';
 import { ByokApiKeysModal } from '@/components/byok-api-keys-modal';
+import { CloudflareAccountSelector } from '@/components/cloudflare-account-selector';
+import { useLimitsContext } from '@/contexts/limits-context';
+import { useSearchParams } from 'react-router';
 
 // Import provider logos (reusing existing pattern from BYOK modal)
 import OpenAILogo from '@/assets/provider-logos/openai.svg?react';
@@ -69,6 +72,19 @@ import CloudflareLogo from '@/assets/provider-logos/cloudflare.svg?react';
 
 export default function SettingsPage() {
 	const { user } = useAuth();
+	const { data: limitsData } = useLimitsContext();
+	const [searchParams] = useSearchParams();
+	const cloudflareConnectEnabled = !!limitsData?.cloudflareConnectEnabled;
+
+	// When the limit dialog sends the user here to pick a gateway
+	// (/settings?config_needed=true), bring the Cloudflare card into view.
+	React.useEffect(() => {
+		if (cloudflareConnectEnabled && searchParams.get('config_needed') === 'true') {
+			document
+				.getElementById('cloudflare-gateway')
+				?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		}
+	}, [cloudflareConnectEnabled, searchParams]);
 	// Active sessions state
 	const [activeSessions, setActiveSessions] = useState<
 		ActiveSessionsData & { loading: boolean }
@@ -529,6 +545,13 @@ export default function SettingsPage() {
 							Manage your account settings and preferences
 						</p>
 					</div>
+
+					{/* Cloudflare AI Gateway — only when unified-billing/credits is enabled */}
+					{cloudflareConnectEnabled && (
+						<div id="cloudflare-gateway">
+							<CloudflareAccountSelector />
+						</div>
+					)}
 
 					{/* Integrations Section */}
 					{/* <Card id="integrations">
