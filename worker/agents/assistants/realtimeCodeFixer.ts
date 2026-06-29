@@ -492,6 +492,12 @@ ${block.error}
             const llmResponse = await infer({
                 env: this.env,
                 metadata: this.inferenceContext,
+                // Route through the user's gateway on their credits when applicable
+                // (review B3). Dormant today (enableRealtimeCodeFix:false), but keep
+                // the wiring complete so it can't leak when that toggle is flipped.
+                shouldUseUserKey: this.inferenceContext.shouldUseUserKey,
+                userApiToken: this.inferenceContext.userApiToken,
+                userGateway: this.inferenceContext.userGateway,
                 modelName: AIModels.GEMINI_2_5_FLASH,
                 reasoning_effort: 'low',
                 temperature: 0.0,
