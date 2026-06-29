@@ -4,9 +4,17 @@
  * constructs the user's gateway base URL exactly, and that an absent userGateway
  * never produces a user URL. The key↔URL coupling (cf-gateway keySource ⟺ user
  * gateway) is enforced in getConfigurationForModel; this locks the URL half.
+ *
+ * The first two suites only exercise the FALLBACK-to-platform branches (the
+ * test env has no encryption key, so the token never decrypts). The third suite
+ * encrypts a real blob so the POSITIVE branch is locked too: a decryptable,
+ * user-bound, non-expired token must yield keySource 'cf-gateway' paired with
+ * the user gateway URL — and the rejection paths (wrong user, expired) must fall
+ * cleanly back to a platform key on the platform URL.
  */
 import { describe, it, expect } from 'vitest';
 import { buildGatewayUrl, getConfigurationForModel } from './core';
+import { encryptTokens } from '../../utils/tokenEncryption';
 import type { AIGatewayProviders } from './config.types';
 
 /** Minimal env: a configured platform gateway URL + token, no D1/CF-encryption key. */
@@ -65,6 +73,51 @@ describe('getConfigurationForModel — key↔URL coupling (review B1/B2)', () =>
         // The load-bearing invariant: a platform key must NEVER be paired with the
         // user's gateway URL.
         expect(cfg.baseURL).not.toContain(USER_GW_HOST);
+        expect(cfg.baseURL).toBe('https://gw.example.com/plat/compat');
+    });
+});
+
+describe('getConfigurationForModel — positive coupling (decryptable token)', () => {
+    const gateway = { accountId: 'acct123', gatewaySlug: 'my-gw' };
+    // Same platform env as above PLUS an encryption key, so an encrypted token
+    // blob actually decrypts and the cf-gateway branch can be reached.
+    const cfEnv = {
+        ...platformEnv,
+        CF_OAUTH_ENCRYPTION_KEY: 'test-cf-oauth-encryption-key-0123456789abcdef',
+    } as unknown as Env;
+    const USER_GW_URL = 'https://gateway.ai.cloudflare.com/v1/acct123/my-gw/compat';
+
+    async function blobFor(userId: string, expiresAt: number): Promise<string> {
+        return encryptTokens(
+            { accessToken: 'cf-user-access-token-abcdef123456', expiresAt, userId },
+            cfEnv,
+        );
+    }
+
+    it('decryptable, user-bound, live token + gateway → cf-gateway key ON the user gateway URL', async () => {
+        const blob = await blobFor('u1', Date.now() + 3_600_000);
+        const cfg = await getConfigurationForModel('openai/gpt-4o', cfEnv, 'u1', undefined, true, blob, gateway);
+        // The positive half of the coupling: key and URL agree on the user gateway.
+        expect(cfg.keySource).toBe('cf-gateway');
+        expect(cfg.baseURL).toBe(USER_GW_URL);
+        // The user's gateway authenticates with the user token, so the platform
+        // wholesaling header must NOT ride along.
+        expect(cfg.defaultHeaders?.['cf-aig-authorization']).toBeUndefined();
+    });
+
+    it('token bound to a DIFFERENT user → rejected → platform key + platform URL', async () => {
+        // getAccessTokenFromBlob enforces the userId binding (anti-replay).
+        const blob = await blobFor('someone-else', Date.now() + 3_600_000);
+        const cfg = await getConfigurationForModel('openai/gpt-4o', cfEnv, 'u1', undefined, true, blob, gateway);
+        expect(cfg.keySource).not.toBe('cf-gateway');
+        expect(cfg.baseURL).not.toContain(USER_GW_HOST);
+        expect(cfg.baseURL).toBe('https://gw.example.com/plat/compat');
+    });
+
+    it('expired token → rejected → platform key + platform URL (no user token on a user URL)', async () => {
+        const blob = await blobFor('u1', Date.now() - 1_000);
+        const cfg = await getConfigurationForModel('openai/gpt-4o', cfEnv, 'u1', undefined, true, blob, gateway);
+        expect(cfg.keySource).toBe('platform');
         expect(cfg.baseURL).toBe('https://gw.example.com/plat/compat');
     });
 });
