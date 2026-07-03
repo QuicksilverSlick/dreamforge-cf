@@ -61,10 +61,18 @@ export function createApp(env: Env): Hono<AppEnv> {
     // CSRF protection using double-submit cookie pattern with proper GET handling
     app.use('*', async (c, next) => {
         const method = c.req.method.toUpperCase();
-        
+
         // Skip for WebSocket upgrades
         const upgradeHeader = c.req.header('upgrade');
         if (upgradeHeader?.toLowerCase() === 'websocket') {
+            return next();
+        }
+
+        // Skip for the Stripe webhook: server-to-server POST where the Stripe
+        // signature IS the authentication (verified in the handler before any
+        // work). Without this escape hatch the double-submit check would 403
+        // every delivery before verification runs (billing spec §9.1-F2).
+        if (c.req.path === '/api/billing/webhook') {
             return next();
         }
         
@@ -109,7 +117,11 @@ export function createApp(env: Env): Hono<AppEnv> {
         // /api/generated/*) must NOT be subject to the API rate limiter: an
         // image-heavy generated app fires a burst of these on every page load,
         // which otherwise trips the limiter and returns 503 for the images.
-        if (!c.req.path.startsWith('/api/generated/')) {
+        // The Stripe webhook is also excluded: Stripe retries on any non-2xx,
+        // so a 503 from the IP-keyed limiter would turn a legitimate delivery
+        // burst into a retry storm. Signature verification is the abuse gate
+        // there (billing spec §9.1-F3).
+        if (!c.req.path.startsWith('/api/generated/') && c.req.path !== '/api/billing/webhook') {
             // Apply global rate limit middleware. Should this be moved after setupRoutes so that maybe 'user' is available?
             await RateLimitService.enforceGlobalApiRateLimit(env, c.get('config').security.rateLimit, null, c.req.raw)
         }
