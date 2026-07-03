@@ -1,6 +1,9 @@
 import { sql } from 'drizzle-orm';
 import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { Acquisition } from '../types/acquisition';
+// Relative import (not the `shared/` alias) so drizzle-kit can resolve it when
+// generating migrations outside the app bundler.
+import { SPARK_ACTION_TYPES } from '../../shared/constants/sparks';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -46,6 +49,14 @@ export const users = sqliteTable('users', {
     // Account Status
     isActive: integer('is_active', { mode: 'boolean' }).default(true),
     isSuspended: integer('is_suspended', { mode: 'boolean' }).default(false),
+
+    // BYO-Cloudflare opt-in (billing spec §7.3). Only when true (AND the user
+    // has a connected + funded gateway) do over-tier builds route to the
+    // user's own Cloudflare credits instead of platform billing. Backfilled
+    // true in migration 0014 for users already routing through a connected
+    // gateway, so the CF-OAuth demotion doesn't silently move them onto
+    // platform billing (spec §7.6).
+    useOwnCloudflareCredits: integer('use_own_cloudflare_credits', { mode: 'boolean' }).notNull().default(false),
 
     // Platform authorization role. 'user' = normal end user. 'admin' is the
     // org-admin role (org scoping activates in Phase 2). 'superadmin' is the
@@ -906,6 +917,166 @@ export const systemSettings = sqliteTable('system_settings', {
 }));
 
 // ========================================
+// BILLING & CREDITS (SPARKS)
+// ========================================
+// Architecture (docs/handoff/PLATFORM-BILLING-SPEC.md): Stripe is the source
+// of truth for MONEY; the per-org BillingBalanceDO is the real-time
+// ENTITLEMENT authority (atomic check-and-decrement); these D1 tables are the
+// append-only AUDIT ledger + money-reconciliation surface, reconciled nightly.
+// The billing owner is always the ORG (personal-org-per-user covers solo
+// accounts); user ids on ledger rows are provenance only.
+
+/** Every way Sparks enter or leave an org's balance. Grants > 0; consume/clawback/expiry < 0. */
+const LEDGER_ENTRY_KINDS = [
+    'welcome_grant',        // one-time signup grant (WELCOME_GRANT_SPARKS)
+    'free_grant',           // monthly free-tier allowance (non-rolling)
+    'subscription_grant',   // monthly paid-tier allotment (recurring period grant)
+    'subscription_upgrade', // mid-period upgrade delta (distinct key, always applied)
+    'topup_grant',          // one-time prepaid pack
+    'promo_grant',          // manual / marketing credit
+    'consume',              // metered spend (build/edit/image/deploy)
+    'refund_clawback',      // charge.refunded → remove credits (may drive balance negative)
+    'dispute_clawback',     // charge.dispute.created → freeze + remove (may go negative)
+    'dispute_reversal',     // dispute won → restore
+    'expiry',               // grant lot lapses (unspent remainder)
+    'adjustment',           // operator/admin correction (audited)
+] as const;
+
+/** Mirror of the Stripe subscription lifecycle. */
+const SUBSCRIPTION_STATUSES = [
+    'trialing', 'active', 'past_due', 'canceled',
+    'unpaid', 'incomplete', 'incomplete_expired', 'paused',
+] as const;
+
+/** Grant-lot families for expiry ordering (FIFO by soonest expiry; spec §8.5). */
+const LEDGER_LOT_KINDS = ['welcome', 'free', 'subscription', 'topup', 'promo'] as const;
+
+/**
+ * Billing customers — 1:1 with the billing-owner org; maps tenant → Stripe
+ * Customer. Card/PAN data never stored (Stripe holds it).
+ */
+export const billingCustomers = sqliteTable('billing_customers', {
+    id: text('id').primaryKey(),
+    orgId: text('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+    // Provenance/operator lookup only — the org owns the balance.
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    stripeCustomerId: text('stripe_customer_id').notNull(),
+    email: text('email'),
+    // Pinned to USD for v1; non-USD prices are rejected at checkout creation (spec §8.7).
+    currency: text('currency').notNull().default('usd'),
+    delinquent: integer('delinquent', { mode: 'boolean' }).notNull().default(false),
+    // Set on charge.dispute.created; blocks builds AND new top-ups until the
+    // dispute closes (spec §8.1 / §9.1-F8 — no self-curing a frozen balance).
+    disputeFrozen: integer('dispute_frozen', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    orgUnique: uniqueIndex('billing_customers_org_unique').on(table.orgId),
+    stripeCustomerUnique: uniqueIndex('billing_customers_stripe_customer_unique').on(table.stripeCustomerId),
+    userIdx: index('billing_customers_user_idx').on(table.userId),
+}));
+
+/**
+ * Subscriptions — denormalized read-cache mirror of the active Stripe
+ * Subscription. Status + period drive entitlement and the grant scheduler;
+ * Stripe remains authoritative (thin-event re-fetch on every money-critical
+ * webhook, nightly drift reconciliation).
+ */
+export const subscriptions = sqliteTable('subscriptions', {
+    id: text('id').primaryKey(),
+    orgId: text('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+    billingCustomerId: text('billing_customer_id').notNull().references(() => billingCustomers.id, { onDelete: 'cascade' }),
+    stripeSubscriptionId: text('stripe_subscription_id').notNull(),
+    stripePriceId: text('stripe_price_id').notNull(),
+    // Server catalog key (shared/constants/sparks.ts PlanKey) — decoupled from Stripe ids.
+    planKey: text('plan_key').notNull(),
+    status: text('status', { enum: SUBSCRIPTION_STATUSES }).notNull(),
+    monthlyCreditAllotment: integer('monthly_credit_allotment').notNull().default(0),
+    cancelAtPeriodEnd: integer('cancel_at_period_end', { mode: 'boolean' }).notNull().default(false),
+    currentPeriodStart: integer('current_period_start', { mode: 'timestamp' }),
+    currentPeriodEnd: integer('current_period_end', { mode: 'timestamp' }),
+    canceledAt: integer('canceled_at', { mode: 'timestamp' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    stripeSubUnique: uniqueIndex('subscriptions_stripe_sub_unique').on(table.stripeSubscriptionId),
+    orgIdx: index('subscriptions_org_idx').on(table.orgId),
+    customerIdx: index('subscriptions_customer_idx').on(table.billingCustomerId),
+    statusIdx: index('subscriptions_status_idx').on(table.status),
+    periodEndIdx: index('subscriptions_period_end_idx').on(table.currentPeriodEnd),
+}));
+
+/**
+ * Credit ledger — APPEND-ONLY signed log of every Spark movement. Rows are
+ * only ever INSERTed (no UPDATE/DELETE; corrections are new `adjustment`
+ * rows). Audit + reconciliation surface — NOT the concurrent real-time gate
+ * (that is the BillingBalanceDO). Reconciliation balance = SUM(delta) per org.
+ */
+export const creditLedger = sqliteTable('credit_ledger', {
+    id: text('id').primaryKey(),
+    // SCOPE — the balance owner.
+    orgId: text('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+    // Provenance only (who triggered it); nullable so deleting a member
+    // account never erases the org's financial audit history.
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    kind: text('kind', { enum: LEDGER_ENTRY_KINDS }).notNull(),
+    // Which metered action a `consume` row paid for (analytics + support).
+    actionType: text('action_type', { enum: SPARK_ACTION_TYPES }),
+    // Signed Sparks; grants > 0, consume/clawback/expiry < 0. Integer only.
+    delta: integer('delta').notNull(),
+    // Audit/debug snapshot; the authoritative live balance is the Billing DO.
+    balanceAfter: integer('balance_after').notNull(),
+
+    // Exactly-once key. Funding: stripe event id (or canonical period key).
+    // Consume: `${orgId}:${agentId}:${callId}`. UNIQUE index enforces it; on
+    // conflict the caller must verify the existing row's orgId matches before
+    // treating it as already-processed (spec §9.1-F6 cross-tenant guard).
+    idempotencyKey: text('idempotency_key').notNull(),
+
+    // Lot accounting (spec §8.5): grant rows seed a lot (lotKind + expiresAt);
+    // consume rows record which lot they drew from (FIFO by soonest expiry).
+    lotKind: text('lot_kind', { enum: LEDGER_LOT_KINDS }),
+    drawsFromLotId: text('draws_from_lot_id'),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }),
+
+    // Provenance links (nullable by kind).
+    stripeEventId: text('stripe_event_id'),
+    stripeInvoiceId: text('stripe_invoice_id'),
+    stripeChargeId: text('stripe_charge_id'),
+    subscriptionId: text('subscription_id').references(() => subscriptions.id, { onDelete: 'set null' }),
+    agentId: text('agent_id'),      // build session for consume entries
+    modelName: text('model_name'),  // model that drove a consume
+    reason: text('reason'),         // human-readable context (required for `adjustment`)
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    idempotencyUnique: uniqueIndex('credit_ledger_idempotency_unique').on(table.idempotencyKey),
+    orgCreatedIdx: index('credit_ledger_org_created_idx').on(table.orgId, table.createdAt),
+    orgKindIdx: index('credit_ledger_org_kind_idx').on(table.orgId, table.kind),
+    lotIdx: index('credit_ledger_lot_idx').on(table.drawsFromLotId),
+    expiresAtIdx: index('credit_ledger_expires_at_idx').on(table.expiresAt),
+    stripeEventIdx: index('credit_ledger_stripe_event_idx').on(table.stripeEventId),
+}));
+
+/**
+ * Stripe webhook events — dedup table for at-least-once delivery. The Stripe
+ * `event.id` is the natural PK: INSERT ... ON CONFLICT DO NOTHING, and a
+ * conflict short-circuits processing (spec §5.3). Inserted as 'received'
+ * before the 200; the async handler settles the final status.
+ */
+export const stripeWebhookEvents = sqliteTable('stripe_webhook_events', {
+    id: text('id').primaryKey(), // evt_… natural PK
+    type: text('type').notNull(),
+    apiVersion: text('api_version'),
+    status: text('status', { enum: ['received', 'processed', 'ignored', 'failed'] }).notNull().default('received'),
+    error: text('error'),
+    receivedAt: integer('received_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    processedAt: integer('processed_at', { mode: 'timestamp' }),
+}, (table) => ({
+    typeIdx: index('stripe_webhook_events_type_idx').on(table.type),
+    statusIdx: index('stripe_webhook_events_status_idx').on(table.status),
+}));
+
+// ========================================
 // TYPE EXPORTS FOR APPLICATION USE
 // ========================================
 
@@ -986,3 +1157,21 @@ export type NewGitHubToken = typeof githubTokens.$inferInsert;
 
 export type BlueprintCache = typeof blueprintCache.$inferSelect;
 export type NewBlueprintCache = typeof blueprintCache.$inferInsert;
+
+// Billing & credits (Sparks) types
+export type BillingCustomer = typeof billingCustomers.$inferSelect;
+export type NewBillingCustomer = typeof billingCustomers.$inferInsert;
+
+export type Subscription = typeof subscriptions.$inferSelect;
+export type NewSubscription = typeof subscriptions.$inferInsert;
+
+export type CreditLedgerEntry = typeof creditLedger.$inferSelect;
+export type NewCreditLedgerEntry = typeof creditLedger.$inferInsert;
+
+export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
+export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
+
+/** Every way Sparks enter or leave an org's balance (credit_ledger.kind). */
+export type LedgerEntryKind = CreditLedgerEntry['kind'];
+/** Grant-lot families for expiry ordering (credit_ledger.lot_kind). */
+export type LedgerLotKind = NonNullable<CreditLedgerEntry['lotKind']>;
