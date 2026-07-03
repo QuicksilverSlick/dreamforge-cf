@@ -124,6 +124,10 @@
                 "name": "DORateLimitStore"
             },
             {
+                "class_name": "BillingBalanceDO",
+                "name": "BillingBalanceDO"
+            },
+            {
                 "class_name": "CodebaseAnalyzer",
                 "name": "CodebaseAnalyzerObject",
                 "limits": {
@@ -244,6 +248,16 @@
                 "CodebaseAnalyzer"
             ],
             "tag": "v6"
+        },
+        // v7 adds BillingBalanceDO — the per-org real-time Spark balance
+        // authority for the credits system (docs/handoff/PLATFORM-BILLING-SPEC.md
+        // §4.2). One instance per billing-owner org (`billing:${orgId}`);
+        // atomic check-and-decrement, mirroring the DORateLimitStore pattern.
+        {
+            "new_sqlite_classes": [
+                "BillingBalanceDO"
+            ],
+            "tag": "v7"
         }
     ],
 	"vars": {
