@@ -7,6 +7,7 @@ import { createApp } from './app';
 import * as Sentry from '@sentry/cloudflare';
 import { sentryOptions } from './observability/sentry';
 import { DORateLimitStore as BaseDORateLimitStore } from './services/rate-limit/DORateLimitStore';
+import { BillingBalanceDO as BaseBillingBalanceDO } from './services/billing/BillingBalanceDO';
 import { CodebaseAnalyzer as BaseCodebaseAnalyzer } from './agents/analyzer/codebaseAnalyzer';
 import { getPreviewDomain, isPreviewOrigin } from './utils/urls';
 import { proxyToAiGateway } from './services/aigateway-proxy/controller';
@@ -17,6 +18,7 @@ export { UserAppSandboxService, DeployerService } from './services/sandbox/sandb
 
 export const CodeGeneratorAgent = Sentry.instrumentDurableObjectWithSentry(sentryOptions, CodeGeneratorAgentDO);
 export const DORateLimitStore = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseDORateLimitStore);
+export const BillingBalanceDO = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseBillingBalanceDO);
 export const CodebaseAnalyzer = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseCodebaseAnalyzer);
 
 // Logger for the main application and handlers
