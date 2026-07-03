@@ -12,6 +12,7 @@ import { CodebaseAnalyzer as BaseCodebaseAnalyzer } from './agents/analyzer/code
 import { getPreviewDomain, isPreviewOrigin } from './utils/urls';
 import { proxyToAiGateway } from './services/aigateway-proxy/controller';
 import { isOriginAllowed } from './config/security';
+import { reconcileBilling } from './services/billing/reconciler';
 
 // Durable Object and Service exports
 export { UserAppSandboxService, DeployerService } from './services/sandbox/sandboxSdkClient';
@@ -285,6 +286,13 @@ const worker = {
 		}
 
 		return new Response('Not Found', { status: 404 });
+	},
+
+	// Nightly billing reconciliation: grant-lot expiry + Stripe subscription
+	// drift/backfill (billing spec §5.7). Schedule lives in wrangler.jsonc
+	// `triggers.crons`; Sentry.withSentry instruments this handler too.
+	async scheduled(_controller, env, ctx) {
+		ctx.waitUntil(reconcileBilling(env));
 	},
 } satisfies ExportedHandler<Env>;
 

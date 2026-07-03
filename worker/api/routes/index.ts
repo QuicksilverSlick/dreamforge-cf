@@ -19,6 +19,7 @@ import { setupInterviewRoutes } from './interviewRoutes';
 import { setupAdminRoutes } from './adminRoutes';
 import { setupImpersonationRoutes } from './impersonationRoutes';
 import { setupOrgRoutes } from './orgRoutes';
+import { setupBillingRoutes } from './billingRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
 import { setupStatusRoutes } from './statusRoutes';
@@ -95,4 +96,8 @@ export function setupRoutes(app: Hono<AppEnv>): void {
     // Organization management & teams (Phase 2.2) — active-org context,
     // invitations, member management (orgAdminOnly), org-switcher backend.
     setupOrgRoutes(app);
+
+    // Sparks billing: checkout/portal (org-admin), summary (member), Stripe
+    // webhook (public, signature-authenticated).
+    setupBillingRoutes(app);
 }
