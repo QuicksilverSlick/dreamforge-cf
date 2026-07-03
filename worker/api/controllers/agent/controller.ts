@@ -11,6 +11,7 @@ import { ModelConfigService } from '../../../database';
 import { ModelConfig } from '../../../agents/inferutils/config.types';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { checkUsageAndBalance, getUserGateway } from '../../../services/rate-limit/usageChecker';
+import { meterSparkAction } from '../../../services/billing/metering';
 import { readTokenCookie } from '../../../utils/oauthCookie';
 import { InterviewSessionService } from '../../../database/services/InterviewSessionService';
 import { extractUrlFromText } from '../../../services/referenceSite/urlSafety';
@@ -99,6 +100,29 @@ export class CodingAgentController extends BaseController {
             const userGateway = shouldUseUserKey ? await getUserGateway(env, user.id) : null;
 
             const agentId = generateId();
+
+            // Sparks metering: a FULL BUILD debits once per agent session
+            // (spec §0.2 — build = 200 Sparks), keyed `${orgId}:${agentId}:build`
+            // so retries/regenerations inside this session never double-charge.
+            // Skipped for BYO-Cloudflare builds (their credits fund it), exempt
+            // operators, and when the platform-limits flag is off. Fails closed
+            // on insufficient balance — the atomic Billing DO debit IS the gate
+            // (no check-then-spend race).
+            const buildMeter = await meterSparkAction(env, {
+                orgId: user.orgId,
+                userId: user.id,
+                actionType: 'build',
+                agentId,
+                callId: 'build',
+                shouldUseUserKey,
+            });
+            if (!buildMeter.ok) {
+                return CodingAgentController.createErrorResponse(
+                    buildMeter.reason ?? 'You are out of Sparks. Upgrade your plan to keep building.',
+                    429,
+                );
+            }
+
             const modelConfigService = new ModelConfigService(env);
                                 
             // Fetch all user model configs, api keys and agent instance at once

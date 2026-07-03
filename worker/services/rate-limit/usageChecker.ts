@@ -10,6 +10,9 @@ import { CloudflareAccountService } from '../cloudflare/CloudflareAccountService
 import { readTokenCookie, buildTokenCookie, buildClearTokenCookie } from '../../utils/oauthCookie';
 import { CloudflareConnectOAuthProvider } from '../oauth/cloudflare-connect';
 import { createLogger } from '../../logger';
+import { eq } from 'drizzle-orm';
+import { createDatabaseService } from '../../database/database';
+import { users } from '../../database/schema';
 
 const logger = createLogger('UsageChecker');
 
@@ -135,9 +138,13 @@ export async function checkUsageAndBalance(
 		cloudflareBalance = await getCloudflareBalance(env, userId, activeAccessToken, ctx);
 	}
 
-	// If the user has connected Cloudflare AND the LLM config excludes connected users, bypass limits entirely.
+	// If the user has connected Cloudflare AND the LLM config excludes connected
+	// users AND they have explicitly opted in to billing builds to their own
+	// Cloudflare credits, bypass limits entirely. The opt-in gate (billing spec
+	// §7.3 / §9.1-F7) is what stops a merely-connected user from bypassing BOTH
+	// the free tier and platform billing — connecting no longer auto-routes.
 	const hasCfConnected = await hasCloudflareConfigured(env, userId);
-	if (hasCfConnected && llmConfig.excludeCloudflareConnected) {
+	if (hasCfConnected && llmConfig.excludeCloudflareConnected && (await hasByoOptIn(env, userId))) {
 		return {
 			allowed: true,
 			shouldUseByok: hasUserToken,
@@ -330,6 +337,29 @@ export async function getUserGateway(
 	} catch (error) {
 		logger.error('Error fetching user gateway', error);
 		return null;
+	}
+}
+
+/**
+ * Direct D1 read of the BYO-Cloudflare opt-in (billing spec §7.3): only users
+ * who explicitly flipped "bill builds to my Cloudflare account" take the BYO
+ * route. Deliberately NOT read via getUserConfigurableSettings (KV-backed
+ * platform config — the wrong layer for a per-user D1 preference). Fails
+ * closed: any error reads as not-opted-in, landing the user on platform
+ * billing rather than an unmetered bypass.
+ */
+async function hasByoOptIn(env: Env, userId: string): Promise<boolean> {
+	try {
+		const db = createDatabaseService(env).db;
+		const rows = await db
+			.select({ optIn: users.useOwnCloudflareCredits })
+			.from(users)
+			.where(eq(users.id, userId))
+			.limit(1);
+		return rows[0]?.optIn === true;
+	} catch (error) {
+		logger.error('Failed to read BYO opt-in; treating as not opted in', error);
+		return false;
 	}
 }
 

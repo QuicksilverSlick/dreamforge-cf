@@ -148,6 +148,8 @@ async function runOpenAIImage(
             'Content-Type': 'application/json',
             'cf-aig-authorization': `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`,
             'cf-aig-byok-alias': OPENAI_BYOK_ALIAS,
+            // Per-user spend-limit dimension on the gateway (billing spec §6.7).
+            'cf-aig-metadata': JSON.stringify({ user_id: params.userId }),
         },
         body: JSON.stringify({
             model,
@@ -192,6 +194,8 @@ async function runGeminiImage(
                 'Content-Type': 'application/json',
                 'cf-aig-authorization': `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`,
                 'x-goog-api-key': env.GOOGLE_AI_STUDIO_API_KEY,
+                // Per-user spend-limit dimension on the gateway (billing spec §6.7).
+                'cf-aig-metadata': JSON.stringify({ user_id: params.userId }),
             },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: params.prompt }] }],
