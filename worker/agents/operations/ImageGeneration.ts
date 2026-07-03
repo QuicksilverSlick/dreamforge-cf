@@ -9,6 +9,7 @@ import {
 } from '../inferutils/imageGeneration';
 import { uploadImageToR2, ImageType } from '../../utils/images';
 import { generateNanoId } from '../../utils/idGenerator';
+import { meterSparkAction } from '../../services/billing/metering';
 
 /**
  * Per-image provider-call timeout. A hung provider request (network/gateway
@@ -85,7 +86,11 @@ export class ImageGenerationOperation extends AgentOperation<ImageGenerationInpu
         const settled = await Promise.all(
             inputs.assets.map(async (asset) => {
                 try {
-                    const result = await this.generateAndStore(env, asset, promptContext, userId, quality);
+                    const result = await this.generateAndStore(env, asset, promptContext, userId, quality, {
+                        orgId: inferenceContext.orgId,
+                        agentId: options.agentId,
+                        shouldUseUserKey: inferenceContext.shouldUseUserKey,
+                    });
                     completed += 1;
                     inputs.onImageGenerated?.(result, completed, total);
                     logger.info('Generated image asset', {
@@ -116,8 +121,26 @@ export class ImageGenerationOperation extends AgentOperation<ImageGenerationInpu
         promptContext: { colorPalette?: string[]; projectDescriptor?: string },
         userId: string,
         quality: ImageQuality,
+        meter: { orgId?: string; agentId: string; shouldUseUserKey?: boolean },
     ): Promise<GeneratedImageResult> {
         const size = sizeForAsset(asset);
+
+        // Sparks metering: each generated image = 65 Sparks (spec §0.2 +
+        // §6.4 leak fix). Debited ONCE per asset, before the provider loop,
+        // so provider-fallback retries never double-charge. Fails closed —
+        // the thrown error is caught by the caller and the asset is skipped
+        // non-fatally (the build continues without it).
+        const imageMeter = await meterSparkAction(env, {
+            orgId: meter.orgId,
+            userId,
+            actionType: 'image',
+            agentId: meter.agentId,
+            callId: `image:${generateNanoId()}`,
+            shouldUseUserKey: meter.shouldUseUserKey,
+        });
+        if (!imageMeter.ok) {
+            throw new Error(imageMeter.reason ?? 'Out of Sparks for image generation');
+        }
 
         let lastError: unknown;
         for (const provider of IMAGE_PROVIDER_ORDER) {

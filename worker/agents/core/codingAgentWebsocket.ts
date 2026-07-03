@@ -23,6 +23,8 @@ import { createLogger } from '../../logger';
 import { WebSocketMessageRequests, WebSocketMessageResponses } from '../constants';
 import { MAX_IMAGES_PER_MESSAGE, MAX_IMAGE_SIZE_BYTES, type ImageAttachment } from '../../types/image-attachment';
 import { checkUsageAndBalance } from '../../services/rate-limit';
+import { meterSparkAction } from '../../services/billing/metering';
+import { generateId } from '../../utils/idGenerator';
 import type { CodeGeneratorAgent } from './codingAgent';
 import { sendToConnection, sendError } from './websocketHelpers';
 import {
@@ -478,7 +480,27 @@ export async function handleWebSocketMessage(
                         }
                     });
                 break;
-            case WebSocketMessageRequests.DEPLOY:
+            case WebSocketMessageRequests.DEPLOY: {
+                // Sparks metering: deploy-to-production = 10 Sparks
+                // (spec §0.2), keyed per attempt. Fails closed BEFORE the
+                // deploy runs; BYO/exempt/flag-off ride free inside
+                // meterSparkAction.
+                const deployMeter = await meterSparkAction(agent.env, {
+                    orgId: agent.state.metadata.orgId,
+                    userId: agent.state.metadata.userId,
+                    actionType: 'deploy',
+                    agentId: agent.state.metadata.agentId,
+                    callId: `deploy:${generateId()}`,
+                    shouldUseUserKey: agent.state.metadata.shouldUseUserKey,
+                });
+                if (!deployMeter.ok) {
+                    sendToConnection(connection, WebSocketMessageResponses.ERROR, {
+                        error: deployMeter.reason,
+                        code: 'USAGE_LIMIT_EXCEEDED',
+                        showAsPopup: true,
+                    });
+                    break;
+                }
                 agent
                     .deployProject()
                     .then((deploymentResult) => {
@@ -492,6 +514,7 @@ export async function handleWebSocketMessage(
                         logger.error('Error during deployment:', error);
                     });
                 break;
+            }
             case WebSocketMessageRequests.PREVIEW:
                 logger.info('Deploying for preview');
                 agent
@@ -632,6 +655,28 @@ export async function handleWebSocketMessage(
 
                         sendToConnection(connection, WebSocketMessageResponses.ERROR, {
                             error: limitResult.reason,
+                            code: 'USAGE_LIMIT_EXCEEDED',
+                            showAsPopup: true,
+                        });
+                        return;
+                    }
+
+                    // Sparks metering: a follow-up revision = one EDIT
+                    // (30 Sparks, spec §0.2), keyed per message so every
+                    // revision charges exactly once. Fails closed;
+                    // BYO/exempt/flag-off cases ride free inside
+                    // meterSparkAction.
+                    const editMeter = await meterSparkAction(env, {
+                        orgId: agent.state.metadata.orgId,
+                        userId,
+                        actionType: 'edit',
+                        agentId: agent.state.metadata.agentId,
+                        callId: `edit:${generateId()}`,
+                        shouldUseUserKey: agent.state.metadata.shouldUseUserKey,
+                    });
+                    if (!editMeter.ok) {
+                        sendToConnection(connection, WebSocketMessageResponses.ERROR, {
+                            error: editMeter.reason,
                             code: 'USAGE_LIMIT_EXCEEDED',
                             showAsPopup: true,
                         });
