@@ -83,7 +83,7 @@ declare namespace Cloudflare {
 
         // Stripe (GrayMatter account) — optional: billing endpoints return
         // 503 until both are set, so the worker boots without them.
-        STRIPE_API_KEY?: string;
+        STRIPE_SECRET_KEY?: string;
         STRIPE_WEBHOOK_SECRET?: string;
 
         // Auth + crypto
@@ -155,7 +155,7 @@ interface Env {
     CLOUDFLARE_OAUTH_SCOPES?: string;
     CF_OAUTH_ENCRYPTION_KEY?: string;
 
-    STRIPE_API_KEY?: string;
+    STRIPE_SECRET_KEY?: string;
     STRIPE_WEBHOOK_SECRET?: string;
 
     JWT_SECRET: string;

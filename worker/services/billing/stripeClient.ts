@@ -18,12 +18,12 @@ import Stripe from 'stripe';
 export const stripeCryptoProvider = Stripe.createSubtleCryptoProvider();
 
 export function isStripeConfigured(env: Env): boolean {
-	return Boolean(env.STRIPE_API_KEY && env.STRIPE_WEBHOOK_SECRET);
+	return Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET);
 }
 
 export function createStripeClient(env: Env): Stripe | null {
-	if (!env.STRIPE_API_KEY) return null;
-	return new Stripe(env.STRIPE_API_KEY, {
+	if (!env.STRIPE_SECRET_KEY) return null;
+	return new Stripe(env.STRIPE_SECRET_KEY, {
 		httpClient: Stripe.createFetchHttpClient(),
 		// Never retry inside the worker — callers use idempotency keys and
 		// Stripe/webhook retries provide the at-least-once semantics.
