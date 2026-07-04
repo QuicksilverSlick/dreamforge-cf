@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/auth-context';
 import { AuthModalProvider } from './components/auth/AuthModalProvider';
 import { ThemeProvider } from './contexts/theme-context';
 import { LimitsProvider } from './contexts/limits-context';
+import { BillingProvider } from './contexts/billing-context';
 import { Toaster } from './components/ui/sonner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FeatureProvider } from './features';
@@ -20,6 +21,7 @@ export default function App() {
         <FeatureProvider>
           <AuthProvider>
             <LimitsProvider>
+              <BillingProvider>
               <AuthModalProvider>
                 {/* Providers wrap the Outlet directly; the AppLayout chrome is a
                     nested layout route (AppShell), so chrome-less routes like
@@ -28,6 +30,7 @@ export default function App() {
                 <Outlet />
                 <Toaster richColors position="top-right" />
               </AuthModalProvider>
+              </BillingProvider>
             </LimitsProvider>
           </AuthProvider>
         </FeatureProvider>

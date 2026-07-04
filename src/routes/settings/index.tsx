@@ -60,6 +60,8 @@ import { toast } from 'sonner';
 import { apiClient } from '@/lib/api-client';
 import { ByokApiKeysModal } from '@/components/byok-api-keys-modal';
 import { CloudflareAccountSelector } from '@/components/cloudflare-account-selector';
+import { SparksBillingCard } from '@/components/billing/sparks-billing-card';
+import { useBillingContext } from '@/contexts/billing-context';
 import { useLimitsContext } from '@/contexts/limits-context';
 import { useSearchParams } from 'react-router';
 
@@ -73,8 +75,23 @@ import CloudflareLogo from '@/assets/provider-logos/cloudflare.svg?react';
 export default function SettingsPage() {
 	const { user } = useAuth();
 	const { data: limitsData } = useLimitsContext();
+	const { data: billingData, refetch: refetchBilling } = useBillingContext();
 	const [searchParams] = useSearchParams();
 	const cloudflareConnectEnabled = !!limitsData?.cloudflareConnectEnabled;
+
+	// Stripe Checkout returns here (?billing=success|cancelled). Confirm, then
+	// refetch — the webhook grants Sparks within seconds of the redirect.
+	React.useEffect(() => {
+		const billingResult = searchParams.get('billing');
+		if (billingResult === 'success') {
+			toast.success('Subscription active — your Sparks are on the way (a few seconds).');
+			refetchBilling();
+			window.setTimeout(() => refetchBilling(), 6000);
+		} else if (billingResult === 'cancelled') {
+			toast.info('Checkout cancelled — no changes made.');
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	// When the limit dialog sends the user here to pick a gateway
 	// (/settings?config_needed=true), bring the Cloudflare card into view.
@@ -546,9 +563,23 @@ export default function SettingsPage() {
 						</p>
 					</div>
 
-					{/* Cloudflare AI Gateway — only when unified-billing/credits is enabled */}
+					{/* Sparks balance + plan — the primary billing surface (spec §7.4) */}
+					{billingData?.meteringEnabled && <SparksBillingCard />}
+
+					{/* Cloudflare AI Gateway. With Sparks metering live this is a
+					    power-user ADVANCED option (bring your own Cloudflare); on
+					    BYO-era deployments it remains the primary surface. */}
 					{cloudflareConnectEnabled && (
 						<div id="cloudflare-gateway">
+							{billingData?.meteringEnabled && (
+								<div className="mb-2 mt-4">
+									<h3 className="text-sm font-semibold text-text-secondary">Advanced — bring your own Cloudflare</h3>
+									<p className="text-xs text-text-tertiary">
+										Optional: connect your own Cloudflare account and AI Gateway to run builds on
+										your own credits instead of Sparks.
+									</p>
+								</div>
+							)}
 							<CloudflareAccountSelector />
 						</div>
 					)}

@@ -39,6 +39,8 @@ import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ImageAttachmentPreview } from '@/components/image-attachment-preview';
 import { createAIMessage } from './utils/message-helpers';
 import { useLimitsContext } from '@/contexts/limits-context';
+import { useBillingContext } from '@/contexts/billing-context';
+import { SparksUpgradeDialog } from '@/components/billing/sparks-upgrade-dialog';
 import { CreditsBanner } from '@/components/credits-banner';
 import { checkCanSendPrompt, getBackendLimitDialog } from '@/utils/usage-limit-checker';
 import { startCloudflareConnect } from '@/utils/cloudflare-connect';
@@ -252,6 +254,10 @@ export default function Chat() {
 	// usage, so the pre-send check never blocks and the banner never renders.
 	const { data: limitsData, loading: limitsLoading } = useLimitsContext();
 	const [limitDialog, setLimitDialog] = useState<ReactElement | null>(null);
+	// Sparks metering (billing spec §7.4): when live, the out-of-Sparks upgrade
+	// dialog replaces every legacy connect-Cloudflare surface below.
+	const { data: billingData } = useBillingContext();
+	const [sparksDialogOpen, setSparksDialogOpen] = useState(false);
 
 	// Agent creation was blocked by the free-tier gate (429). Surface the
 	// connect/configure dialog from our own limitsData (getBackendLimitDialog
@@ -259,7 +265,10 @@ export default function Chat() {
 	// self-distinguishes). Gated on the flag → inert until ENABLE_CLOUDFLARE_LIMITS.
 	useEffect(() => {
 		if (!creationLimitExceeded) return;
-		if (limitsData?.cloudflareConnectEnabled) {
+		if (billingData?.meteringEnabled) {
+			// Platform billing: the 429 means the Spark debit failed — upsell.
+			setSparksDialogOpen(true);
+		} else if (limitsData?.cloudflareConnectEnabled) {
 			const { dialogComponent } = getBackendLimitDialog(
 				limitsData,
 				() => startCloudflareConnect(),
@@ -268,7 +277,7 @@ export default function Chat() {
 			setLimitDialog(dialogComponent ?? null);
 		}
 		clearCreationLimit();
-	}, [creationLimitExceeded, limitsData, clearCreationLimit]);
+	}, [creationLimitExceeded, limitsData, billingData, clearCreationLimit]);
 	
 	// Word count utilities
 	const MAX_WORDS = 4000;
@@ -576,7 +585,10 @@ export default function Chat() {
 			// CF-OAuth: once the free tier is exhausted, surface the connect/configure
 			// dialog instead of sending. No-op until ENABLE_CLOUDFLARE_LIMITS is on
 			// (cloudflareConnectEnabled gates it; the backend also reports within-limits).
-			if (limitsData?.cloudflareConnectEnabled) {
+			// Under Sparks metering the server-side atomic debit is the gate; the
+			// WS USAGE_LIMIT_EXCEEDED error surfaces the block. The legacy
+			// client-side CF gate only runs on BYO-era deployments.
+			if (!billingData?.meteringEnabled && limitsData?.cloudflareConnectEnabled) {
 				const check = checkCanSendPrompt(
 					limitsData,
 					limitsLoading,
@@ -606,7 +618,7 @@ export default function Chat() {
 			// Ensure we scroll after sending our own message
 			requestAnimationFrame(() => scrollToBottom());
 		},
-		[newMessage, websocket, sendUserMessage, isChatDisabled, scrollToBottom, images, clearImages, isReadOnlyViewer, currentDriverName, setDrivingBlockedBy, limitsData, limitsLoading],
+		[newMessage, websocket, sendUserMessage, isChatDisabled, scrollToBottom, images, clearImages, isReadOnlyViewer, currentDriverName, setDrivingBlockedBy, limitsData, limitsLoading, billingData?.meteringEnabled],
 	);
 
 	const [progress, total] = useMemo((): [number, number] => {
@@ -837,7 +849,16 @@ export default function Chat() {
 
 					{limitDialog}
 
-					{limitsData?.cloudflareConnectEnabled && (
+					{billingData?.meteringEnabled && sparksDialogOpen && (
+						<SparksUpgradeDialog
+							billing={billingData}
+							open={sparksDialogOpen}
+							onClose={() => setSparksDialogOpen(false)}
+							reason="You're out of Sparks for this build"
+						/>
+					)}
+
+					{!billingData?.meteringEnabled && limitsData?.cloudflareConnectEnabled && (
 						<CreditsBanner
 							limitsData={limitsData}
 							onConnectCloudflare={() => startCloudflareConnect()}
