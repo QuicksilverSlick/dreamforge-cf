@@ -196,8 +196,17 @@ export function CloudflareAccountSelector() {
 				</CardHeader>
 				<CardContent className="px-6 mt-6">
 					<p className="text-sm text-muted-foreground mb-4">
-						You haven't connected any Cloudflare accounts yet. Click the Cloudflare button in the top bar to connect your account.
+						Connect your own Cloudflare account and AI Gateway to run builds on your own
+						credits instead of Sparks.
 					</p>
+					<Button
+						onClick={() => startCloudflareConnect()}
+						variant="outline"
+						className="gap-2 border-[#f48120] text-[#f48120] bg-white dark:bg-transparent hover:bg-[#f48120]/10"
+					>
+						<CloudflareLogo className="w-4 h-4" />
+						Connect Cloudflare
+					</Button>
 				</CardContent>
 			</Card>
 		);

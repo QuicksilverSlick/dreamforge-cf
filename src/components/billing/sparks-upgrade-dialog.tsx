@@ -72,7 +72,7 @@ export function SparksUpgradeDialog({ billing, open, onClose, reason }: SparksUp
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
 					<div className="mb-2 flex items-center gap-2">
-						<Zap className="h-8 w-8 text-amber-500" />
+						<Zap className="h-8 w-8 text-accent" />
 						<span className="text-2xl font-semibold tabular-nums">
 							{Math.max(0, billing.balance).toLocaleString()}
 						</span>
@@ -104,7 +104,7 @@ export function SparksUpgradeDialog({ billing, open, onClose, reason }: SparksUp
 									</span>
 								</div>
 								<div className="flex items-center gap-1 text-sm text-text-secondary">
-									<Zap className="h-3.5 w-3.5 text-amber-500" />
+									<Zap className="h-3.5 w-3.5 text-accent" />
 									{plan.monthlySparks.toLocaleString()} Sparks / month
 								</div>
 								<p className="text-xs text-text-tertiary">
