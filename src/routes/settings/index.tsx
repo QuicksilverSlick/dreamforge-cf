@@ -30,6 +30,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/auth-context';
 // import { useTheme } from '@/contexts/theme-context';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -153,6 +154,26 @@ export default function SettingsPage() {
 
 	// BYOK modal state
 	const [byokModalOpen, setByokModalOpen] = useState(false);
+	// Inline BYOK key management (pause/resume lives here, not in the modal)
+	const [togglingSecretId, setTogglingSecretId] = useState<string | null>(null);
+	const handleToggleByokSecret = async (secretId: string) => {
+		setTogglingSecretId(secretId);
+		try {
+			const response = await apiClient.toggleSecret(secretId);
+			if (response.success && response.data) {
+				toast.success(response.data.message);
+			} else {
+				toast.error('Failed to update key status');
+			}
+			loadUserSecrets();
+			loadModelConfigs();
+		} catch (error) {
+			console.error('Failed to toggle BYOK key:', error);
+			toast.error('Failed to update key status');
+		} finally {
+			setTogglingSecretId(null);
+		}
+	};
 
 	// Handle BYOK key added/removed - refresh both secrets and model configs
 	const handleByokKeyAdded = () => {
@@ -951,7 +972,7 @@ export default function SettingsPage() {
 										className="gap-2"
 									>
 										<Key className="h-4 w-4" />
-										Add / Manage Keys
+										Add Keys
 									</Button>
 								</div>
 
@@ -969,7 +990,7 @@ export default function SettingsPage() {
 
 												<p className="text-sm text-text-tertiary">
 													Add your own LLM provider keys to run builds on your own provider
-													billing. Click "Add / Manage Keys" to get started.
+													billing. Click "Add Keys" to get started.
 												</p>
 											</div>
 										);
@@ -1012,15 +1033,15 @@ export default function SettingsPage() {
 															key={secret.id}
 															className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
 																secret.isActive
-																	? 'bg-white/50 dark:bg-gray-800/50'
+																	? 'bg-bg-3 border-border-primary'
 																	: 'bg-bg-3/20 border-dashed opacity-70'
 															}`}
 														>
 															<div className="flex items-center gap-3">
 																<div
-																	className={`flex items-center justify-center w-8 h-8 rounded-md border shadow-sm ${
+																	className={`flex items-center justify-center w-8 h-8 rounded-md border border-border-primary ${
 																		secret.isActive
-																			? 'bg-white'
+																			? 'bg-bg-4'
 																			: 'bg-bg-3 border-dashed opacity-60'
 																	}`}
 																>
@@ -1047,6 +1068,11 @@ export default function SettingsPage() {
 																</div>
 															</div>
 															<div className="flex items-center gap-2">
+																<Switch
+																	checked={secret.isActive ?? false}
+																	onCheckedChange={() => handleToggleByokSecret(secret.id)}
+																	disabled={togglingSecretId === secret.id}
+																/>
 																<Badge
 																	variant={
 																		secret.isActive
