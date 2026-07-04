@@ -4,6 +4,8 @@ import { AuthButton } from '../auth/auth-button';
 import { OrgSwitcher } from './org-switcher';
 import { ThemeToggle } from '../theme-toggle';
 import { UsageLimitsBadge } from '../usage-limits-badge';
+import { SparksBalanceBadge } from '@/components/billing/sparks-balance-badge';
+import { useBillingContext } from '@/contexts/billing-context';
 import { startCloudflareConnect } from '@/utils/cloudflare-connect';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/auth-context';
@@ -17,6 +19,7 @@ import clsx from 'clsx';
 
 export function GlobalHeader() {
 	const { user } = useAuth();
+	const { data: billingData } = useBillingContext();
 	const { status } = usePlatformStatus();
 	const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 	const hasMaintenanceMessage = Boolean(status.hasActiveMessage && status.globalUserMessage.trim().length > 0);
@@ -98,7 +101,14 @@ export function GlobalHeader() {
 								variant="inline"
 							/>
 						)} */}
-							{user && <UsageLimitsBadge onConnect={() => startCloudflareConnect()} />}
+							{/* Sparks metering live => platform balance badge; legacy
+							    Cloudflare credits badge only for BYO-era deployments
+							    (billing spec §7.4). */}
+							{user && (billingData?.meteringEnabled ? (
+								<SparksBalanceBadge />
+							) : (
+								<UsageLimitsBadge onConnect={() => startCloudflareConnect()} />
+							))}
 							{user && <OrgSwitcher />}
 							<ThemeToggle />
 							<AuthButton />

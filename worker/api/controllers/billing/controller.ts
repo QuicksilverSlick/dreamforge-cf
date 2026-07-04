@@ -28,6 +28,7 @@ import {
 	resolvePriceIdByLookupKey,
 } from '../../../services/billing/stripeClient';
 import { processStripeWebhook } from '../../../services/billing/stripeWebhooks';
+import { isCloudflareGatewayLimitsEnabled } from '../../../services/rate-limit/usageChecker';
 import { EXPLORE_PLANS, SPARK_ACTION_COSTS, getExplorePlan } from 'shared/constants/sparks';
 
 interface CheckoutRequestBody {
@@ -182,6 +183,11 @@ export class BillingController extends BaseController {
 			sparkCosts: SPARK_ACTION_COSTS,
 			plans: EXPLORE_PLANS,
 			stripeConfigured: isStripeConfigured(env),
+			// Sparks metering live on this deployment (self-hosted => false, UI stays dark).
+			meteringEnabled: isCloudflareGatewayLimitsEnabled(env),
+			// Only an org owner/admin can start checkout / open the portal (§9.1-F1);
+			// the UI uses this to route members to their admin instead of a 403.
+			canManageBilling: user.orgRole === 'owner' || user.orgRole === 'admin',
 		});
 	}
 

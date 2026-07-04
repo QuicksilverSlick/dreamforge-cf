@@ -97,6 +97,29 @@ import type {
     StartBuildingResponse,
 } from '@/api-types-byop';
 import type { UsageSummary } from '@/hooks/use-limits';
+import type { ExplorePlan, SparkActionType } from '../../shared/constants/sparks';
+
+/** Mirror of GET /api/billing/summary (BillingController.getSummary). */
+export interface BillingSubscriptionSummary {
+	planKey: string;
+	status: string;
+	currentPeriodEnd: string | null;
+}
+
+export interface BillingSummary {
+	orgId: string;
+	/** Usable Sparks right now (negative = clawback debt outstanding). */
+	balance: number;
+	debt: number;
+	subscription: BillingSubscriptionSummary | null;
+	sparkCosts: Record<Exclude<SparkActionType, 'llm_call'>, number>;
+	plans: readonly ExplorePlan[];
+	stripeConfigured: boolean;
+	/** Sparks metering live on this deployment (false on self-hosted). */
+	meteringEnabled: boolean;
+	/** Caller is org owner/admin — may start checkout / open the portal. */
+	canManageBilling: boolean;
+}
 import { toast } from 'sonner';
 
 /**
@@ -1222,6 +1245,29 @@ class ApiClient {
 	 */
 	async getLimitsUsage(): Promise<ApiResponse<UsageSummary>> {
 		return this.request<UsageSummary>('/api/limits/usage');
+	}
+
+	// ---- Sparks billing (PR F) ----
+
+	/** Org balance + plan + EXPLORE catalog; also materializes baseline grants. */
+	async getBillingSummary(): Promise<ApiResponse<BillingSummary>> {
+		return this.request<BillingSummary>('/api/billing/summary');
+	}
+
+	/** Start Stripe Checkout for an EXPLORE plan (org owner/admin only). */
+	async createCheckoutSession(orgId: string, planKey: string): Promise<ApiResponse<{ url: string }>> {
+		return this.request<{ url: string }>(`/api/orgs/${orgId}/billing/checkout-session`, {
+			method: 'POST',
+			body: JSON.stringify({ planKey }),
+		});
+	}
+
+	/** Open the Stripe customer portal (plan change / cancel / invoices). */
+	async createPortalSession(orgId: string): Promise<ApiResponse<{ url: string }>> {
+		return this.request<{ url: string }>(`/api/orgs/${orgId}/billing/portal-session`, {
+			method: 'POST',
+			body: JSON.stringify({}),
+		});
 	}
 
 	// ===============================
