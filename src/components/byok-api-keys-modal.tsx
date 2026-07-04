@@ -311,7 +311,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Key className="h-5 w-5" />
@@ -345,9 +345,9 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                 {isLoading ? (
                   <div className="space-y-2">
                     {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="w-full flex items-center gap-3 p-3 rounded-lg border-2 border-gray-200">
-                        <div className="w-8 h-8 bg-gray-200 rounded-md animate-pulse" />
-                        <div className="h-4 bg-gray-200 rounded animate-pulse flex-1" />
+                      <div key={i} className="w-full flex items-center gap-3 p-3 rounded-lg border border-border-primary">
+                        <div className="w-8 h-8 bg-bg-4 rounded-md animate-pulse" />
+                        <div className="h-4 bg-bg-4 rounded animate-pulse flex-1" />
                       </div>
                     ))}
                   </div>
@@ -360,13 +360,13 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                         <button
                           key={providerOption.id}
                           onClick={() => handleProviderSelect(providerOption.id)}
-                          className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all duration-200 text-left ${
+                          className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 text-left ${
                             isSelected
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                              ? 'border-accent bg-accent/10'
+                              : 'border-border-primary bg-bg-3 hover:border-accent/50 hover:bg-bg-4'
                           }`}
                         >
-                          <div className="flex items-center justify-center w-8 h-8 bg-white rounded-md border shadow-sm">
+                          <div className="flex items-center justify-center w-8 h-8 bg-bg-4 rounded-md border border-border-primary">
                             <LogoComponent className="h-5 w-5" />
                           </div>
                           <span className="font-medium">{providerOption.name}</span>
@@ -423,12 +423,12 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                 <div className="space-y-4">
                   {[1, 2, 3].map((i) => (
                     <div key={i} className="flex items-center gap-4 p-4 rounded-lg border">
-                      <div className="w-8 h-8 bg-gray-200 rounded-md animate-pulse" />
+                      <div className="w-8 h-8 bg-bg-4 rounded-md animate-pulse" />
                       <div className="flex-1 space-y-2">
                         <div className="h-4 bg-gray-200 rounded animate-pulse w-1/3" />
                         <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
                       </div>
-                      <div className="w-12 h-6 bg-gray-200 rounded animate-pulse" />
+                      <div className="w-12 h-6 bg-bg-4 rounded animate-pulse" />
                     </div>
                   ))}
                 </div>
@@ -459,16 +459,16 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                             : 'bg-bg-3/20 border-dashed hover:bg-bg-3/30'
                         }`}>
                           {/* Provider Logo */}
-                          <div className={`flex items-center justify-center w-8 h-8 rounded-md border shadow-sm ${
+                          <div className={`flex items-center justify-center w-8 h-8 shrink-0 rounded-md border border-border-primary ${
                             secret.isActive 
-                              ? 'bg-white' 
+                              ? 'bg-bg-4' 
                               : 'bg-bg-3 border-dashed opacity-60'
                           }`}>
                             <LogoComponent className={`h-5 w-5 ${secret.isActive ? '' : 'opacity-60'}`} />
                           </div>
                           
                           {/* Key Info */}
-                          <div className="flex-1 space-y-1">
+                          <div className="min-w-0 flex-1 space-y-1">
                             <div className="flex items-center gap-2">
                               <span className={`font-medium capitalize ${
                                 secret.isActive ? '' : 'opacity-60'
@@ -482,10 +482,10 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                                 {secret.isActive ? "Active" : "Inactive"}
                               </Badge>
                             </div>
-                            <div className="flex items-center gap-3 text-xs text-text-tertiary">
-                              <div className="flex items-center gap-1">
-                                <Eye className="h-3 w-3" />
-                                <span>{secret.keyPreview}</span>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-tertiary">
+                              <div className="flex min-w-0 items-center gap-1">
+                                <Eye className="h-3 w-3 shrink-0" />
+                                <span className="truncate max-w-[180px] sm:max-w-[240px]">{secret.keyPreview}</span>
                               </div>
                               <Separator orientation="vertical" className="h-3" />
                               <span>Added {formatDate(secret.createdAt)}</span>
@@ -499,7 +499,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                           </div>
                           
                           {/* Controls */}
-                          <div className="flex items-center gap-3">
+                          <div className="flex shrink-0 items-center gap-3">
                             <div className="flex items-center gap-2">
                               <Switch 
                                 checked={secret.isActive}
@@ -515,7 +515,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                               variant="ghost"
                               size="sm"
                               onClick={() => openDeleteDialog(secret)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>

@@ -601,7 +601,10 @@ export default function Chat() {
 				}
 			}
 
-			// When generation is active, send as conversational AI suggestion
+			// When generation is active, send as conversational AI suggestion.
+			// The server debits the 30-Spark edit on receipt — nudge the balance
+			// badge shortly after so the drain is visible without a refresh.
+			window.setTimeout(() => window.dispatchEvent(new Event('billing-updated')), 2000);
 			websocket?.send(
 				JSON.stringify({
 					type: 'user_suggestion',
