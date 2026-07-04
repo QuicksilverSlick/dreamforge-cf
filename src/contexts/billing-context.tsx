@@ -71,6 +71,17 @@ export function BillingProvider({ children }: { children: ReactNode }) {
 		};
 	}, [fetchSummary]);
 
+	// Near-real-time drain: debits happen server-side mid-build (edits, images,
+	// deploys), so poll while the tab is visible. 30s keeps the header honest
+	// without hammering the API; event dispatches above cover the big moments.
+	useEffect(() => {
+		if (!user?.id) return;
+		const id = window.setInterval(() => {
+			if (!document.hidden) fetchSummary();
+		}, 30_000);
+		return () => window.clearInterval(id);
+	}, [fetchSummary, user?.id]);
+
 	return (
 		<BillingContext.Provider value={{ data, loading, refetch: fetchSummary }}>
 			{children}

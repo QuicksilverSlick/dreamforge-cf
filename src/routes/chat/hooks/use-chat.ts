@@ -471,10 +471,25 @@ export function useChat({
 					};
 
 					let startedBlueprintStream = false;
+					let creationFailed = false;
 					sendMessage(createAIMessage('main', "Sure, let's get started. Bootstrapping the project first...", true));
 
 					for await (const obj of ndjsonStream(response.stream)) {
                         logger.debug('Received chunk from server:', obj);
+						// Server-reported initialization failure (e.g. the blueprint
+						// model returned 429). Without this branch the error line was
+						// silently ignored and the UI froze at "Blueprint is being
+						// generated..." while the WS layer reconnect-looped forever.
+						if (obj.error) {
+							creationFailed = true;
+							logger.error('Code generation failed to start:', obj.error);
+							setIsBootstrapping(false);
+							setIsGeneratingBlueprint(false);
+							updateStage('blueprint', { status: 'error' });
+							sendMessage(createAIMessage('main', `Build failed to start: ${String(obj.error)}. If you brought your own LLM key, check its rate limits/billing — otherwise please try again.`));
+							toast.error(String(obj.error));
+							continue;
+						}
 						if (obj.chunk) {
 							if (!startedBlueprintStream) {
 								sendMessage(createAIMessage('main', 'Blueprint is being generated...', true));
@@ -510,6 +525,16 @@ export function useChat({
 								loadBootstrapFiles(obj.template.files);
 							}
 						}
+					}
+
+					// Refresh the Sparks balance — the build debit happened server-side
+					// at agent creation, whether or not the build then succeeded.
+					window.dispatchEvent(new Event('billing-updated'));
+
+					if (creationFailed) {
+						// Do NOT connect the WebSocket or mark stages complete —
+						// the agent never initialized.
+						return;
 					}
 
 					if (startedBlueprintStream) {

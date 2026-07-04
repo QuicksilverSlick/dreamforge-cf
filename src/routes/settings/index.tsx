@@ -947,12 +947,11 @@ export default function SettingsPage() {
 									</h4>
 									<Button
 										size="sm"
-										variant="outline"
 										onClick={() => setByokModalOpen(true)}
 										className="gap-2"
 									>
 										<Key className="h-4 w-4" />
-										Manage Keys
+										Add / Manage Keys
 									</Button>
 								</div>
 
@@ -969,8 +968,8 @@ export default function SettingsPage() {
 												<Key className="h-8 w-8 text-text-tertiary mx-auto mb-2" />
 
 												<p className="text-sm text-text-tertiary">
-													Add your own LLM provider keys to build on your own billing and
-													skip Spark charges for inference.
+													Add your own LLM provider keys to run builds on your own provider
+													billing. Click "Add / Manage Keys" to get started.
 												</p>
 											</div>
 										);
