@@ -949,12 +949,10 @@ export default function SettingsPage() {
 										size="sm"
 										variant="outline"
 										onClick={() => setByokModalOpen(true)}
-                                        disabled // DISABLED: BYOK Disabled for security reasons
 										className="gap-2"
 									>
 										<Key className="h-4 w-4" />
-										{/* Manage BYOK Keys */}
-                                        Coming Soon
+										Manage Keys
 									</Button>
 								</div>
 
@@ -971,9 +969,8 @@ export default function SettingsPage() {
 												<Key className="h-8 w-8 text-text-tertiary mx-auto mb-2" />
 
 												<p className="text-sm text-text-tertiary">
-													{/* Add your LLM keys to use
-													your own billing */}
-                                                    Coming Soon: You would be able to add your own LLM keys to bypass rate limits from here.
+													Add your own LLM provider keys to build on your own billing and
+													skip Spark charges for inference.
 												</p>
 											</div>
 										);

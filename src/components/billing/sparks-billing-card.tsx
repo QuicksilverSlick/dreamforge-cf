@@ -55,7 +55,7 @@ export function SparksBillingCard() {
 		<Card>
 			<CardHeader>
 				<CardTitle className="flex items-center gap-2">
-					<Zap className="h-5 w-5 text-amber-500" />
+					<Zap className="h-5 w-5 text-accent" />
 					Sparks & billing
 				</CardTitle>
 				<CardDescription>
@@ -115,7 +115,7 @@ export function SparksBillingCard() {
 						<div key={row.label} className="flex flex-col">
 							<span className="text-xs text-text-tertiary">{row.label}</span>
 							<span className="flex items-center gap-1 font-medium tabular-nums">
-								<Zap className="h-3 w-3 text-amber-500" />
+								<Zap className="h-3 w-3 text-accent" />
 								{row.cost}
 							</span>
 						</div>
