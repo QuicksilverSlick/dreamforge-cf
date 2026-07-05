@@ -17,6 +17,7 @@ import { AppEnv } from '../../types/appenv';
 import { AuthConfig, setAuthLevel } from '../../middleware/auth/routeAuth';
 import { adaptController } from '../honoAdapter';
 import { AdminController } from '../controllers/admin/controller';
+import { AdminBillingController } from '../controllers/admin/billingController';
 import { ImpersonationController } from '../controllers/impersonation/controller';
 
 /** Read/mutation gate for the admin console. superadmin-only in Phase 1. */
@@ -41,6 +42,20 @@ const requireAdminConsole = createMiddleware<AppEnv>(async (c, next) => {
 
 export function setupAdminRoutes(app: Hono<AppEnv>): void {
     // ---- Read surfaces ----
+    // ---- Sparks billing controls (spec §0.5) ----
+    app.get(
+        '/api/admin/billing/summary',
+        requireAdminConsole,
+        setAuthLevel(ADMIN_AUTH),
+        adaptController(AdminBillingController, AdminBillingController.getBillingSummary),
+    );
+    app.post(
+        '/api/admin/billing/adjust',
+        requireAdminConsole,
+        setAuthLevel(ADMIN_AUTH),
+        adaptController(AdminBillingController, AdminBillingController.adjustCredits),
+    );
+
     app.get(
         '/api/admin/overview',
         requireAdminConsole,

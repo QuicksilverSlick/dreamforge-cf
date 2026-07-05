@@ -60,3 +60,37 @@ export interface AdminScreenshotBackfillData {
     /** Per-app failures (best-effort — one bad URL never aborts the batch). */
     failed: Array<{ appId: string; error: string }>;
 }
+
+// ---- Sparks billing operator controls (spec §0.5) ----
+
+export interface AdminBillingLedgerRow {
+	id: string;
+	kind: string;
+	actionType: string | null;
+	delta: number;
+	balanceAfter: number;
+	reason: string | null;
+	userId: string | null;
+	createdAt: Date | string | null;
+}
+
+export interface AdminBillingSummaryData {
+	org: {
+		id: string;
+		name: string;
+		slug: string;
+		isPersonal: boolean;
+		ownerEmail: string | null;
+	};
+	matchedUser: { id: string; email: string } | null;
+	balance: number;
+	debt: number;
+	subscription: { planKey: string; status: string; currentPeriodEnd: Date | string | null } | null;
+	ledger: AdminBillingLedgerRow[];
+}
+
+export interface AdminBillingAdjustData {
+	orgId: string;
+	delta: number;
+	balanceAfter: number;
+}

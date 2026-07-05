@@ -60,6 +60,8 @@ import type{
     InterviewStateData,
     InterviewAnswer,
     AdminOverviewData,
+    AdminBillingSummaryData,
+    AdminBillingAdjustData,
     AdminUsersListData,
     AdminAppsListData,
     AdminUserDetailData,
@@ -1435,6 +1437,24 @@ class ApiClient {
 
 	async getAdminOverview(): Promise<ApiResponse<AdminOverviewData>> {
 		return this.request<AdminOverviewData>('/api/admin/overview');
+	}
+
+	/** Resolve a user email / user id / org id|slug to its billing org + ledger. */
+	async getAdminBillingSummary(q: string): Promise<ApiResponse<AdminBillingSummaryData>> {
+		return this.request<AdminBillingSummaryData>(`/api/admin/billing/summary?q=${encodeURIComponent(q)}`);
+	}
+
+	/** Grant/deduct (delta) or set (setTo) an org's Spark balance. Audited. */
+	async postAdminBillingAdjust(payload: {
+		orgId: string;
+		delta?: number;
+		setTo?: number;
+		reason: string;
+	}): Promise<ApiResponse<AdminBillingAdjustData>> {
+		return this.request<AdminBillingAdjustData>('/api/admin/billing/adjust', {
+			method: 'POST',
+			body: JSON.stringify(payload),
+		});
 	}
 
 	async getAdminUsers(
