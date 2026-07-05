@@ -558,35 +558,56 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             files: files.map((f) => ({ filePath: f.filePath })),
         });
 
-        try {
-            const result = await this.raceDeployTimeout(
-                this.deploymentManager.deployToSandbox({
-                    files: filesToDeploy,
-                    redeploy,
-                    commitMessage,
-                    clearLogs,
-                }),
-            );
+        // Two attempts: if the sandbox DO itself is permanently unreachable
+        // (container killed by a rollout and wedged — every call, including
+        // self-heal createInstance, fails "Network connection lost"), rotate
+        // to a FRESH sandbox Durable Object and try once more. Without this,
+        // an app whose sandbox died could never serve a preview again.
+        for (let attempt = 0; ; attempt++) {
+            try {
+                const result = await this.raceDeployTimeout(
+                    this.deploymentManager.deployToSandbox({
+                        files: filesToDeploy,
+                        redeploy,
+                        commitMessage,
+                        clearLogs,
+                    }),
+                );
 
-            const preview: PreviewType = {
-                runId: result.deploymentId,
-                previewURL: result.previewURL,
-                tunnelURL: result.tunnelURL,
-            };
+                const preview: PreviewType = {
+                    runId: result.deploymentId,
+                    previewURL: result.previewURL,
+                    tunnelURL: result.tunnelURL,
+                };
 
-            this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, {
-                message: 'Deployment completed',
-                ...preview,
-            });
-            this.markSandboxReady();
-            return preview;
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.logger.error('Error deploying to sandbox', { message });
-            this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, {
-                message: `Deployment failed: ${message}`,
-            });
-            throw error;
+                this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, {
+                    message: 'Deployment completed',
+                    ...preview,
+                });
+                this.markSandboxReady();
+                return preview;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                const sandboxDead =
+                    message.includes('SANDBOX_UNREACHABLE') ||
+                    /network connection lost/i.test(message);
+                if (attempt === 0 && sandboxDead && this.infrastructure.rotateSandboxSession) {
+                    this.logger.warn('Sandbox unreachable — rotating to a fresh sandbox and retrying deploy', {
+                        message,
+                    });
+                    this.broadcast(WebSocketMessageResponses.DEPLOYMENT_STARTED, {
+                        message: 'Build environment was unresponsive — provisioning a fresh one…',
+                        files: files.map((f) => ({ filePath: f.filePath })),
+                    });
+                    this.infrastructure.rotateSandboxSession();
+                    continue;
+                }
+                this.logger.error('Error deploying to sandbox', { message });
+                this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, {
+                    message: `Deployment failed: ${message}`,
+                });
+                throw error;
+            }
         }
     }
 

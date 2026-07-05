@@ -161,7 +161,13 @@ export class DeploymentManager implements IDeploymentManager {
                     tunnelURL: fresh.tunnelURL,
                 };
             }
-            logger?.error(`Self-heal createInstance failed: ${fresh.error ?? 'unknown error'}`);
+            // Do NOT fall through to returning the dead instance — that
+            // broadcast DEPLOYMENT_COMPLETED with a corpse previewURL and the
+            // UI 404-looped forever. Throw so the behavior can rotate the
+            // sandbox session and retry (or surface DEPLOYMENT_FAILED).
+            const reason = fresh.error ?? 'unknown error';
+            logger?.error(`Self-heal createInstance failed: ${reason}`);
+            throw new Error(`SANDBOX_UNREACHABLE: ${reason}`);
         }
 
         return {

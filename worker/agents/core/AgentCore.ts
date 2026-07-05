@@ -307,6 +307,14 @@ export interface AgentInfrastructure<TState extends BaseProjectState> {
     logger(): StructuredLogger;
     readonly env: Env;
 
+    /**
+     * Rotate to a FRESH sandbox Durable Object. Used when the current
+     * sandbox's container is permanently unreachable (e.g. killed by a code
+     * rollout and wedged) — every call fails "Network connection lost",
+     * including self-heal createInstance, so recovery requires a new DO.
+     */
+    rotateSandboxSession?(): void;
+
     // ---- Conversation accessors ----
     setConversationState(state: ConversationState): void;
     getConversationState(): ConversationState;
