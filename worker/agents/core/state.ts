@@ -142,6 +142,13 @@ export interface BaseProjectState {
     /** Persistent flag indicating generation should be active. */
     shouldBeGenerating: boolean;
 
+    /**
+     * Blueprint-image consent (spec: images debit Sparks, so they require an
+     * explicit user choice). undefined = never asked (legacy agents keep
+     * their old behavior); 'pending' = card shown, awaiting the user.
+     */
+    blueprintImageConsent?: 'pending' | 'approved' | 'declined';
+
     /** File state keyed by relative path. */
     generatedFilesMap: Record<string, FileState>;
 

@@ -515,6 +515,20 @@ export async function handleWebSocketMessage(
                     });
                 break;
             }
+            case WebSocketMessageRequests.APPROVE_BLUEPRINT_IMAGES:
+                // Consent granted — image generation meters per asset (the
+                // user just agreed to exactly that spend).
+                agent.approveBlueprintImages().catch((error: unknown) => {
+                    logger.error('Error generating approved blueprint images:', error);
+                    sendError(
+                        connection,
+                        `Error generating images: ${error instanceof Error ? error.message : String(error)}`,
+                    );
+                });
+                break;
+            case WebSocketMessageRequests.DECLINE_BLUEPRINT_IMAGES:
+                agent.declineBlueprintImages();
+                break;
             case WebSocketMessageRequests.PREVIEW:
                 logger.info('Deploying for preview');
                 agent

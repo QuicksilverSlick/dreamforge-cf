@@ -97,6 +97,8 @@ import { WebSocketMessageResponses } from '../../constants';
 import { BRAND_ASSETS_MODULE_PATH, renderBrandAssetsModule } from '../../assets/brandAssetsFile';
 import { ProjectSetupAssistant } from '../../assistants/projectsetup';
 import { UserConversationProcessor, type RenderToolCall } from '../../operations/UserConversationProcessor';
+import { SuggestionGenerationOperation, type SuggestionGenerationInputs } from '../../operations/SuggestionGeneration';
+import { SPARK_ACTION_COSTS } from 'shared/constants/sparks';
 import { DeepDebuggerOperation, type DeepDebuggerInputs } from '../../operations/DeepDebugger';
 import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 import { ScreenshotAnalysisOperation } from '../../operations/ScreenshotAnalysis';
@@ -888,7 +890,65 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 message: 'Code generation and review process completed.',
                 instanceId: this.state.sandboxInstanceId,
             });
+            // Post-build enhancement chips: propose (free), never impose.
+            // Fire-and-forget — suggestions must never delay or fail a build.
+            this.generateImprovementSuggestions().catch((error) => {
+                this.logger.warn('Improvement-suggestion generation failed (non-fatal)', error);
+            });
         }
+    }
+
+    /**
+     * Generate 3-5 post-build enhancement ideas and broadcast them as
+     * consent-priced chips. Proposing is free (our COGS, one cheap call);
+     * accepting a chip runs through the normal user_suggestion path with the
+     * standard edit debit — the user always chooses the spend.
+     */
+    /**
+     * Behavior-specific context for suggestion generation. The base class
+     * has no phase model — behaviors that do (phasic) override this; null
+     * skips suggestions entirely.
+     */
+    protected getSuggestionContext(): SuggestionGenerationInputs | null {
+        return null;
+    }
+
+    protected async generateImprovementSuggestions(): Promise<void> {
+        const context = this.getSuggestionContext();
+        if (!context) return;
+        const operation = new SuggestionGenerationOperation();
+        const result = await operation.execute(context, this.getOperationOptions());
+        this.broadcast(WebSocketMessageResponses.IMPROVEMENT_SUGGESTIONS, {
+            message: 'Want to take it further? Each idea runs as a normal request — your call.',
+            suggestions: result.suggestions.map((suggestion, index) => ({
+                id: `sugg-${index}`,
+                label: suggestion.label,
+                benefit: suggestion.benefit,
+                scope: suggestion.scope,
+                prompt: suggestion.prompt,
+                sparks: SPARK_ACTION_COSTS.edit,
+            })),
+        });
+    }
+
+    /**
+     * Ask the user to approve blueprint-image generation (each image debits
+     * Sparks). Re-broadcast on reconnect while still pending.
+     */
+    broadcastImageConsentRequest(): void {
+        const pending = (this.state.blueprint?.imageAssets ?? []).filter((asset) => !asset.url);
+        if (pending.length === 0) return;
+        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_CONSENT, {
+            message: `This design calls for ${pending.length} generated image${pending.length === 1 ? '' : 's'} (${pending.length * SPARK_ACTION_COSTS.image} Sparks total). Generate them, or keep building without images?`,
+            images: pending.map((asset) => ({ path: asset.path, purpose: asset.purpose ?? '' })),
+            count: pending.length,
+            totalSparks: pending.length * SPARK_ACTION_COSTS.image,
+        });
+    }
+
+    /** User consented: generate the blueprint images now (metered per image). */
+    async resumeBlueprintImages(): Promise<void> {
+        await this.generateBlueprintImages();
     }
 
     /**

@@ -8,11 +8,30 @@ export type ToolEvent = {
     timestamp: number;
 };
 
+export interface SuggestionChip {
+    id: string;
+    label: string;
+    benefit: string;
+    scope: string;
+    prompt: string;
+    sparks: number;
+}
+
+export interface ImageConsentCard {
+    images: Array<{ path: string; purpose: string }>;
+    count: number;
+    totalSparks: number;
+}
+
 export type ChatMessage = Omit<ConversationMessage, 'content'> & {
     content: string;
     ui?: {
         isThinking?: boolean;
         toolEvents?: ToolEvent[];
+        /** Post-build enhancement chips — accepting one sends a normal priced request. */
+        suggestions?: SuggestionChip[];
+        /** Blueprint-image consent card (images debit Sparks). */
+        imageConsent?: ImageConsentCard;
     };
 };
 
@@ -30,6 +49,8 @@ export function isConversationalMessage(messageId: string): boolean {
         'chat-welcome',
         'deployment-status',
         'code_reviewed',
+        'improvement-suggestions',
+        'image-consent',
     ];
     
     return conversationalIds.includes(messageId) || messageId.startsWith('conv-');

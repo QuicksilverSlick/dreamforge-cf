@@ -99,6 +99,7 @@ import {
 import { IdGenerator } from '../../utils/idGenerator';
 import { runPreDeploySafetyGate } from '../../utils/preDeploySafetyGate';
 import { CurrentDevState, MAX_PHASES, type PhasicState } from '../state';
+import type { SuggestionGenerationInputs } from '../../operations/SuggestionGeneration';
 import type {
     AgentInitArgs,
     AllIssues,
@@ -365,6 +366,19 @@ export class PhasicCodingBehavior
     // Phase-budget accounting
     // ==========================================
 
+    protected override getSuggestionContext(): SuggestionGenerationInputs | null {
+        const blueprint = this.state.blueprint;
+        if (!blueprint) return null;
+        return {
+            query: this.state.query,
+            blueprintTitle: this.state.projectName || 'the app',
+            blueprintDescription: blueprint.description ?? '',
+            completedPhaseNames: this.state.generatedPhases
+                .filter((phase) => phase.completed)
+                .map((phase) => phase.name),
+        };
+    }
+
     rechargePhasesCounter(max_phases: number = MAX_PHASES): void {
         if (this.getPhasesCounter() <= max_phases) {
             this.setState({
@@ -498,7 +512,25 @@ export class PhasicCodingBehavior
         // only touches `blueprint.imageAssets`, so it cannot race the phase
         // loop's state writes. Awaited at the end to keep the Durable Object
         // alive until generation finishes and to surface any failure.
-        const blueprintImagesPromise = this.generateBlueprintImages();
+        // Images debit the user's Sparks, so they never start without an
+        // explicit choice: first build with pending assets asks via a consent
+        // card and proceeds WITHOUT blocking the coding loop (asset URLs are
+        // deterministic, so code references them regardless; bytes stream in
+        // whenever the user approves — same merge path as before). Legacy
+        // agents that already approved (or old in-flight state) keep going.
+        const pendingImageAssets = (this.state.blueprint?.imageAssets ?? []).filter(
+            (asset) => !asset.url,
+        );
+        let blueprintImagesPromise: Promise<void> = Promise.resolve();
+        if (pendingImageAssets.length > 0) {
+            if (this.state.blueprintImageConsent === 'approved') {
+                blueprintImagesPromise = this.generateBlueprintImages();
+            } else if (this.state.blueprintImageConsent === undefined) {
+                this.setState({ ...this.state, blueprintImageConsent: 'pending' });
+                this.broadcastImageConsentRequest();
+            }
+            // 'pending' / 'declined': build proceeds without images.
+        }
         await this.launchStateMachine();
         await blueprintImagesPromise;
     }
