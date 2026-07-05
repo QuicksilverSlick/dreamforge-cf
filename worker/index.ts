@@ -186,16 +186,12 @@ const worker = {
 				// leak the internal /marketing/ path back to the user and
 				// trigger an infinite loop through the defensive guard above.
 				marketingPath = '/marketing/';
-			} else if (!pathname.slice(1).includes('.')) {
-				// Clean marketing routes (/pricing) map EXPLICITLY to their
-				// static page. Relying on the asset layer's auto-html
-				// resolution left a failure mode where a miss (e.g. mid-deploy
-				// rollout) fell into the SPA not-found fallback — serving the
-				// app's blank React shell on the marketing domain, which
-				// browsers then cache as a "dead" page.
-				marketingPath = `/marketing${pathname.replace(/\/+$/, '')}.html`;
 			} else {
-				// Asset paths under apex (e.g. /styles.css, /script.js).
+				// Other paths under apex (e.g. /pricing, /styles.css). Let the
+				// asset layer's auto-html resolution serve /marketing/pricing ->
+				// pricing.html. Do NOT rewrite to an explicit .html path: CF
+				// Assets 307-redirects .html URLs to their clean form, which
+				// both leaks the internal /marketing/ prefix and broke /pricing.
 				marketingPath = `/marketing${pathname}`;
 			}
 
