@@ -59,6 +59,11 @@ export const AdminAuditAction = {
     // mutation - actorId = operator, entityId = the org whose balance moved.
     BILLING_VIEW: 'admin.billing.view',
     BILLING_ADJUST: 'admin.billing.adjust',
+    // PRODUCE application pipeline (operator sales console). VIEW is a read
+    // audit over the applications list; STATUS is the pipeline-stage mutation
+    // — actorId = the operator, entityId = the application row.
+    PRODUCE_APPLICATIONS_VIEW: 'admin.produce.applications.view',
+    PRODUCE_APPLICATION_STATUS: 'admin.produce.application.status',
 } as const;
 
 export type AdminAuditActionType = (typeof AdminAuditAction)[keyof typeof AdminAuditAction];

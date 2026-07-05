@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { Users, ShieldAlert, ShieldCheck, LayoutGrid, Globe, ScrollText } from 'lucide-react';
+import { Users, ShieldAlert, ShieldCheck, LayoutGrid, Globe, ScrollText, Inbox } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -46,6 +46,9 @@ export default function AdminOverview() {
                     </Button>
                     <Button variant="outline" onClick={() => navigate('/admin/billing')}>
                         Billing
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate('/admin/applications')}>
+                        <Inbox className="h-4 w-4 mr-2" /> Applications
                     </Button>
                     <Button variant="outline" onClick={() => navigate('/admin/audit')}>
                         <ScrollText className="h-4 w-4 mr-2" /> Audit log

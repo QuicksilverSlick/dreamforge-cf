@@ -18,6 +18,7 @@ import { AuthConfig, setAuthLevel } from '../../middleware/auth/routeAuth';
 import { adaptController } from '../honoAdapter';
 import { AdminController } from '../controllers/admin/controller';
 import { AdminBillingController } from '../controllers/admin/billingController';
+import { AdminProduceApplicationsController } from '../controllers/admin/produceApplicationsController';
 import { ImpersonationController } from '../controllers/impersonation/controller';
 
 /** Read/mutation gate for the admin console. superadmin-only in Phase 1. */
@@ -54,6 +55,20 @@ export function setupAdminRoutes(app: Hono<AppEnv>): void {
         requireAdminConsole,
         setAuthLevel(ADMIN_AUTH),
         adaptController(AdminBillingController, AdminBillingController.adjustCredits),
+    );
+
+    // ---- PRODUCE application pipeline (sales console) ----
+    app.get(
+        '/api/admin/produce/applications',
+        requireAdminConsole,
+        setAuthLevel(ADMIN_AUTH),
+        adaptController(AdminProduceApplicationsController, AdminProduceApplicationsController.listApplications),
+    );
+    app.patch(
+        '/api/admin/produce/applications/:id',
+        requireAdminConsole,
+        setAuthLevel(AuthConfig.superadminOnly),
+        adaptController(AdminProduceApplicationsController, AdminProduceApplicationsController.updateApplicationStatus),
     );
 
     app.get(

@@ -16,6 +16,10 @@ import type {
     AdminSessionInfo,
 } from '../../../database/types';
 import type { AuditLog } from '../../../database/schema';
+import type {
+	ProduceApplicationTier,
+	ProduceApplicationStatus,
+} from 'shared/constants/produce';
 
 export type AdminOverviewData = AdminOverview;
 
@@ -93,4 +97,29 @@ export interface AdminBillingAdjustData {
 	orgId: string;
 	delta: number;
 	balanceAfter: number;
+}
+
+// ---- PRODUCE application pipeline (operator sales console) ----
+
+/** One application row as serialized over the API (createdAt is a JSON string on the wire). */
+export interface AdminProduceApplicationRow {
+	id: string;
+	name: string;
+	email: string;
+	company: string | null;
+	tier: ProduceApplicationTier;
+	projectDescription: string;
+	source: string | null;
+	status: ProduceApplicationStatus;
+	ackSent: boolean;
+	createdAt: Date | string | null;
+}
+
+export interface AdminProduceApplicationsListData extends PaginatedResult<AdminProduceApplicationRow> {
+	/** Whole-table counts per pipeline stage (independent of the active filter). */
+	statusCounts: Record<ProduceApplicationStatus, number>;
+}
+
+export interface AdminProduceApplicationStatusData {
+	application: AdminProduceApplicationRow;
 }

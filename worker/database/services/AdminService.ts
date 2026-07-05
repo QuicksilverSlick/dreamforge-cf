@@ -30,6 +30,7 @@ import type {
     AdminAppStatusFilter,
     AdminAppVisibilityFilter,
 } from '../types';
+import type { ProduceApplication, ProduceApplicationStatus } from '../schema';
 
 export type {
     AdminUserSummary,
@@ -63,6 +64,26 @@ export interface AdminMutationParams {
     actorRole?: UserRole;
     targetUserId: string;
     reason?: string | null;
+    metadata?: { ipAddress?: string; userAgent?: string };
+}
+
+export interface AdminListProduceApplicationsParams {
+    search?: string;
+    status?: ProduceApplicationStatus;
+    limit?: number;
+    offset?: number;
+}
+
+export interface AdminProduceApplicationsList extends PaginatedResult<ProduceApplication> {
+    /** Whole-table counts per pipeline stage (independent of the active filter). */
+    statusCounts: Record<ProduceApplicationStatus, number>;
+}
+
+export interface AdminProduceApplicationStatusParams {
+    actorId: string;
+    actorRole?: UserRole;
+    applicationId: string;
+    status: ProduceApplicationStatus;
     metadata?: { ipAddress?: string; userAgent?: string };
 }
 
@@ -356,6 +377,118 @@ export class AdminService extends BaseService {
         ]);
 
         return this.requireSummary(params.targetUserId);
+    }
+
+    /**
+     * Operator list of PRODUCE applications — the sales pipeline behind
+     * getdreamforge.com/apply. `search` is a parameterized contains-match
+     * across applicant name/email/company. `statusCounts` always covers the
+     * whole table so the stage tabs show true totals regardless of the
+     * active filter. Newest first.
+     */
+    async listProduceApplications(
+        params: AdminListProduceApplicationsParams = {},
+    ): Promise<AdminProduceApplicationsList> {
+        const limit = Math.min(Math.max(params.limit ?? 25, 1), 100);
+        const offset = Math.max(params.offset ?? 0, 0);
+
+        const search = params.search?.trim();
+        const searchCondition = search
+            ? or(
+                  like(schema.produceApplications.name, `%${search}%`),
+                  like(schema.produceApplications.email, `%${search}%`),
+                  like(schema.produceApplications.company, `%${search}%`),
+              )
+            : undefined;
+
+        const whereClause = this.buildWhereConditions([
+            params.status ? eq(schema.produceApplications.status, params.status) : undefined,
+            searchCondition,
+        ]);
+
+        // 'fresh' (primary) read: the pipeline's core interaction is a status
+        // flip followed by an immediate refetch, and an unbookmarked replica
+        // read could return the pre-mutation stage. Low-traffic operator
+        // surface, so the replica offload is worth trading away.
+        const readDb = this.getReadDb('fresh');
+        const [rows, totalResult, countRows] = await Promise.all([
+            readDb
+                .select()
+                .from(schema.produceApplications)
+                .where(whereClause)
+                .orderBy(desc(schema.produceApplications.createdAt))
+                .limit(limit)
+                .offset(offset),
+            readDb
+                .select({ count: sql<number>`COUNT(*)` })
+                .from(schema.produceApplications)
+                .where(whereClause)
+                .get(),
+            readDb
+                .select({
+                    status: schema.produceApplications.status,
+                    count: sql<number>`COUNT(*)`,
+                })
+                .from(schema.produceApplications)
+                .groupBy(schema.produceApplications.status),
+        ]);
+
+        const statusCounts = Object.fromEntries(
+            schema.APPLICATION_STATUSES.map((status) => [status, 0]),
+        ) as Record<ProduceApplicationStatus, number>;
+        for (const row of countRows) {
+            statusCounts[row.status] = Number(row.count);
+        }
+
+        const total = Number(totalResult?.count ?? 0);
+        return {
+            data: rows,
+            pagination: { limit, offset, total, hasMore: offset + rows.length < total },
+            statusCounts,
+        };
+    }
+
+    /**
+     * Move an application through the pipeline. Any stage → any stage so a
+     * mis-click is reversible; the transition history lives in the audit
+     * log. Status flip + audit row in one batch — fail-closed like every
+     * operator mutation.
+     */
+    async updateProduceApplicationStatus(
+        params: AdminProduceApplicationStatusParams,
+    ): Promise<ProduceApplication> {
+        const current = await this.database
+            .select()
+            .from(schema.produceApplications)
+            .where(eq(schema.produceApplications.id, params.applicationId))
+            .get();
+        if (!current) {
+            throw new AdminActionError('Application not found.', 404);
+        }
+        if (current.status === params.status) {
+            return current;
+        }
+
+        const auditRow = AuditLogService.buildRow({
+            actorId: params.actorId,
+            actorRole: params.actorRole,
+            entityType: 'produce_application',
+            entityId: params.applicationId,
+            action: AdminAuditAction.PRODUCE_APPLICATION_STATUS,
+            oldValues: { status: current.status },
+            newValues: { status: params.status, applicantEmail: current.email },
+            metadata: params.metadata,
+        });
+
+        await this.database.batch([
+            this.database
+                .update(schema.produceApplications)
+                .set({ status: params.status })
+                .where(eq(schema.produceApplications.id, params.applicationId)),
+            this.database.insert(schema.auditLogs).values(auditRow),
+        ]);
+
+        return { ...current, status: params.status };
     }
 
     private async requireTargetStatus(

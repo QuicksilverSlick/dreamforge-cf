@@ -13,6 +13,8 @@ import type {
     AdminUserStatusFilter,
     AdminAppStatusFilter,
     AdminAppVisibilityFilter,
+    AdminProduceApplicationsListData,
+    ProduceApplicationStatus,
     UserRole,
 } from '@/api-types';
 
@@ -107,6 +109,23 @@ export function useAdminApps(query: AdminAppsQuery): AsyncState<AdminAppsListDat
 
 export function useAdminUserApps(userId: string): AsyncState<AdminUserAppsData> {
     return useAsyncData<AdminUserAppsData>(() => apiClient.getAdminUserApps(userId, { limit: 50 }), [userId]);
+}
+
+export interface AdminProduceApplicationsQuery {
+    q?: string;
+    status?: ProduceApplicationStatus;
+    limit?: number;
+    offset?: number;
+}
+
+export function useAdminProduceApplications(
+    query: AdminProduceApplicationsQuery,
+): AsyncState<AdminProduceApplicationsListData> {
+    const { q, status, limit, offset } = query;
+    return useAsyncData<AdminProduceApplicationsListData>(
+        () => apiClient.getAdminProduceApplications({ q, status, limit, offset }),
+        [q, status, limit, offset],
+    );
 }
 
 export function useAdminUserSessions(userId: string): AsyncState<AdminUserSessionsData> {
