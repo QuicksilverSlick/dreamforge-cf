@@ -326,6 +326,35 @@ export class CodeGeneratorAgent
         // when HEAD is absent), so that one-time cost lands inside generation
         // rather than on the connect path. git.init() swallows its own errors.
         await this.git.init();
+
+        // Resume interrupted generation. Every deploy resets every Durable
+        // Object — an agent mid-build loses its in-memory generation loop
+        // while the persisted state still says `shouldBeGenerating`. Without
+        // this, each deploy bricks all in-flight builds (stuck at
+        // "implementing phase N" until a user manually nudges the chat).
+        // Mirrors the WS GENERATE_ALL semantics, fire-and-forget so wake-up
+        // is never delayed. The `.finally` flag-clear doubles as the
+        // crash-loop backstop: a resume that dies immediately drops the flag,
+        // so the NEXT wake does not retry forever.
+        if (
+            this.state.shouldBeGenerating &&
+            this.getAgentId() &&
+            !this.behavior.isCodeGenerating()
+        ) {
+            this.logger().info('Resuming interrupted generation after restart', {
+                agentId: this.getAgentId(),
+            });
+            this.behavior
+                .generateAllFiles()
+                .catch((error) => {
+                    this.logger().error('Error resuming generation after restart:', error);
+                })
+                .finally(() => {
+                    if (!this.behavior.isCodeGenerating()) {
+                        this.setState({ ...this.state, shouldBeGenerating: false });
+                    }
+                });
+        }
     }
 
     async onConnect(connection: Connection, ctx: ConnectionContext) {
