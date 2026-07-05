@@ -567,6 +567,7 @@ export default function SettingsPage() {
 			loadActiveSessions();
 			loadModelConfigs();
             loadSecretTemplates();
+			loadUserSecrets();
 		}
 	}, [user]);
 
