@@ -54,6 +54,9 @@ export class ProduceController extends BaseController {
 
         const db = createDatabaseService(env).db;
         const id = generateId();
+        // createdAt is set explicitly: the column's CURRENT_TIMESTAMP default
+        // stores TEXT in the INTEGER-affinity column, which drizzle's
+        // timestamp mode reads back as Invalid Date.
         await db.insert(schema.produceApplications).values({
             id,
             name: body.name,
@@ -62,6 +65,7 @@ export class ProduceController extends BaseController {
             tier: body.tier,
             projectDescription: body.projectDescription,
             source: body.source || null,
+            createdAt: new Date(),
         });
 
         const emailService = new EmailService(env);

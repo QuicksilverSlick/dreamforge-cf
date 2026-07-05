@@ -36,6 +36,8 @@ const ADMIN_ROUTES: Array<[string, string]> = [
     ['GET', '/api/admin/audit-logs'],
     ['POST', '/api/admin/users/u1/suspend'],
     ['POST', '/api/admin/users/u1/reactivate'],
+    ['GET', '/api/admin/produce/applications'],
+    ['PATCH', '/api/admin/produce/applications/x1'],
 ];
 
 function buildApp(): Hono<AppEnv> {

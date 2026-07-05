@@ -62,6 +62,9 @@ import type{
     AdminOverviewData,
     AdminBillingSummaryData,
     AdminBillingAdjustData,
+    AdminProduceApplicationsListData,
+    AdminProduceApplicationStatusData,
+    ProduceApplicationStatus,
     AdminUsersListData,
     AdminAppsListData,
     AdminUserDetailData,
@@ -1492,6 +1495,31 @@ class ApiClient {
 	): Promise<ApiResponse<AdminUserAppsData>> {
 		return this.request<AdminUserAppsData>(
 			`/api/admin/users/${encodeURIComponent(userId)}/apps${this.buildAdminQuery(params)}`,
+		);
+	}
+
+	/** PRODUCE sales pipeline: paginated application list + stage counts. */
+	async getAdminProduceApplications(
+		params: {
+			q?: string;
+			status?: ProduceApplicationStatus;
+			limit?: number;
+			offset?: number;
+		} = {},
+	): Promise<ApiResponse<AdminProduceApplicationsListData>> {
+		return this.request<AdminProduceApplicationsListData>(
+			`/api/admin/produce/applications${this.buildAdminQuery(params)}`,
+		);
+	}
+
+	/** Move a PRODUCE application to a pipeline stage. Audited. */
+	async patchAdminProduceApplicationStatus(
+		applicationId: string,
+		status: ProduceApplicationStatus,
+	): Promise<ApiResponse<AdminProduceApplicationStatusData>> {
+		return this.request<AdminProduceApplicationStatusData>(
+			`/api/admin/produce/applications/${encodeURIComponent(applicationId)}`,
+			{ method: 'PATCH', body: JSON.stringify({ status }) },
 		);
 	}
 

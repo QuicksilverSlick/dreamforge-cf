@@ -4,6 +4,7 @@ import type { Acquisition } from '../types/acquisition';
 // Relative import (not the `shared/` alias) so drizzle-kit can resolve it when
 // generating migrations outside the app bundler.
 import { SPARK_ACTION_TYPES } from '../../shared/constants/sparks';
+import { PRODUCE_APPLICATION_TIERS, PRODUCE_APPLICATION_STATUSES } from '../../shared/constants/produce';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -1082,8 +1083,8 @@ export const stripeWebhookEvents = sqliteTable('stripe_webhook_events', {
  * acknowledgment email and the produce@ inbox gets a notification. Status is
  * operator-managed as applications move through scoping.
  */
-export const PRODUCE_TIERS = ['traction_sprint', 'solo', 'team_studio', 'team_pro', 'enterprise', 'unsure'] as const;
-export const APPLICATION_STATUSES = ['new', 'contacted', 'scoping', 'won', 'lost'] as const;
+export const PRODUCE_TIERS = PRODUCE_APPLICATION_TIERS;
+export const APPLICATION_STATUSES = PRODUCE_APPLICATION_STATUSES;
 
 export const produceApplications = sqliteTable('produce_applications', {
     id: text('id').primaryKey(),
@@ -1199,6 +1200,7 @@ export type NewCreditLedgerEntry = typeof creditLedger.$inferInsert;
 export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
 export type ProduceApplication = typeof produceApplications.$inferSelect;
 export type ProduceTier = (typeof PRODUCE_TIERS)[number];
+export type ProduceApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
 
 /** Every way Sparks enter or leave an org's balance (credit_ledger.kind). */

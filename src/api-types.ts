@@ -344,7 +344,14 @@ export type {
   AdminBillingSummaryData,
   AdminBillingLedgerRow,
   AdminBillingAdjustData,
+  AdminProduceApplicationRow,
+  AdminProduceApplicationsListData,
+  AdminProduceApplicationStatusData,
 } from 'worker/api/controllers/admin/types';
+export type {
+  ProduceApplicationTier,
+  ProduceApplicationStatus,
+} from 'shared/constants/produce';
 export type {
   AdminUserSummary,
   AdminUserStatusFilter,

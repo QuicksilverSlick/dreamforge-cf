@@ -7,7 +7,8 @@
  */
 
 import { z } from 'zod';
-import { PRODUCE_TIERS, type ProduceTier } from '../../../database/schema';
+import { PRODUCE_TIERS } from '../../../database/schema';
+export { PRODUCE_TIER_LABELS } from 'shared/constants/produce';
 
 export const applyBodySchema = z.object({
     name: z.string().trim().min(1, 'Name is required').max(100, 'Name must be 100 characters or fewer'),
@@ -23,13 +24,3 @@ export const applyBodySchema = z.object({
     website: z.string().max(500).optional(),
 });
 export type ApplyBody = z.infer<typeof applyBodySchema>;
-
-/** Human-readable tier names used in emails and the admin view. */
-export const PRODUCE_TIER_LABELS: Record<ProduceTier, string> = {
-    traction_sprint: 'Traction Sprint',
-    solo: 'Solo',
-    team_studio: 'Team Studio',
-    team_pro: 'Team Pro',
-    enterprise: 'Enterprise',
-    unsure: 'Not sure yet',
-};
