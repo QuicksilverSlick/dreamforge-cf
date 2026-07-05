@@ -35,7 +35,7 @@ if (!existsSync(ASSETS_DIR)) {
 }
 mkdirSync(MARKETING_DIR, { recursive: true });
 
-const FILES = ['index.html', 'pricing.html', 'styles.css', 'script.js'] as const;
+const FILES = ['index.html', 'pricing.html', 'apply.html', 'styles.css', 'script.js'] as const;
 // Optional top-level files (copied only if present) and the shared image assets dir.
 const OPTIONAL_FILES = ['favicon.svg'] as const;
 

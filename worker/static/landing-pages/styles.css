@@ -591,3 +591,26 @@ a:not(.btn) { color: var(--accent-deep); }
 
 /* Dual final CTA */
 .cta-duo { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin-bottom: 0.6rem; }
+
+/* ===== PR G: /apply — PRODUCE application form ===== */
+.apply-hero { padding-bottom: clamp(2rem, 4vw, 3rem); }
+.apply-card { position: relative; max-width: 720px; margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: clamp(1.8rem, 4vw, 2.8rem); box-shadow: var(--shadow-sm); }
+.apply-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem 1.2rem; margin-bottom: 1.1rem; }
+@media (max-width: 640px) { .apply-grid { grid-template-columns: 1fr; } }
+.apply-field { display: flex; flex-direction: column; gap: 0.4rem; }
+.apply-field label { font-weight: 600; font-size: 0.92rem; color: var(--ink); }
+.apply-field label span { color: var(--muted); font-weight: 400; }
+.apply-field input, .apply-field select, .apply-field textarea { padding: 0.8rem 1rem; border: 1px solid var(--border-strong); border-radius: var(--radius); font-family: var(--font-body); font-size: 0.97rem; background: var(--surface); color: var(--ink); width: 100%; }
+.apply-field input:focus, .apply-field select:focus, .apply-field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+.apply-field textarea { resize: vertical; min-height: 140px; line-height: 1.55; }
+.apply-hp { position: absolute; left: -9999px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+.apply-error { color: #d92d20; font-size: 0.93rem; margin: 0.9rem 0 0; }
+#produceApplyForm .btn { margin-top: 1.3rem; width: 100%; }
+.apply-note { margin-top: 0.9rem; color: var(--muted); font-size: 0.9rem; line-height: 1.55; text-align: center; }
+.apply-note a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.apply-note a:hover { text-decoration: underline; }
+.apply-success { text-align: center; padding: 1rem 0; }
+.apply-success .g-icon { color: var(--accent); }
+.apply-success h2 { font-family: var(--font-display); font-size: 1.7rem; font-weight: 800; margin: 0.9rem 0 0.7rem; }
+.apply-success p { color: var(--ink-soft); line-height: 1.6; max-width: 46ch; margin: 0 auto; }
+.apply-steps { margin-top: 3rem; margin-bottom: 0; }

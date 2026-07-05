@@ -45,6 +45,13 @@ export function getAllowedOrigins(env: Env): string[] {
     // Production domains
     if (env.CUSTOM_DOMAIN) {
         origins.push(`https://${env.CUSTOM_DOMAIN}`);
+
+        // The marketing site (apex + www) is served by this same worker and
+        // cross-origin POSTs the public PRODUCE application form to the API.
+        const marketingDomain = env.CUSTOM_DOMAIN.replace(/^app\./, '');
+        if (marketingDomain !== env.CUSTOM_DOMAIN) {
+            origins.push(`https://${marketingDomain}`, `https://www.${marketingDomain}`);
+        }
     }
     
     // Development origins (only in development)

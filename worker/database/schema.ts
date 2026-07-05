@@ -1076,6 +1076,34 @@ export const stripeWebhookEvents = sqliteTable('stripe_webhook_events', {
     statusIdx: index('stripe_webhook_events_status_idx').on(table.status),
 }));
 
+/**
+ * PRODUCE lane applications (billing spec lane two; PR G). The public apply
+ * form on the marketing site writes here; the applicant gets an automated
+ * acknowledgment email and the produce@ inbox gets a notification. Status is
+ * operator-managed as applications move through scoping.
+ */
+export const PRODUCE_TIERS = ['traction_sprint', 'solo', 'team_studio', 'team_pro', 'enterprise', 'unsure'] as const;
+export const APPLICATION_STATUSES = ['new', 'contacted', 'scoping', 'won', 'lost'] as const;
+
+export const produceApplications = sqliteTable('produce_applications', {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    email: text('email').notNull(),
+    company: text('company'),
+    tier: text('tier', { enum: PRODUCE_TIERS }).notNull(),
+    projectDescription: text('project_description').notNull(),
+    /** Where the application came from (e.g. 'pricing_page'). */
+    source: text('source'),
+    status: text('status', { enum: APPLICATION_STATUSES }).notNull().default('new'),
+    /** Whether the automated acknowledgment email was delivered. */
+    ackSent: integer('ack_sent', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    emailIdx: index('produce_applications_email_idx').on(table.email),
+    statusIdx: index('produce_applications_status_idx').on(table.status),
+    createdIdx: index('produce_applications_created_idx').on(table.createdAt),
+}));
+
 // ========================================
 // TYPE EXPORTS FOR APPLICATION USE
 // ========================================
@@ -1169,6 +1197,8 @@ export type CreditLedgerEntry = typeof creditLedger.$inferSelect;
 export type NewCreditLedgerEntry = typeof creditLedger.$inferInsert;
 
 export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
+export type ProduceApplication = typeof produceApplications.$inferSelect;
+export type ProduceTier = (typeof PRODUCE_TIERS)[number];
 export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
 
 /** Every way Sparks enter or leave an org's balance (credit_ledger.kind). */

@@ -20,6 +20,7 @@ import { setupAdminRoutes } from './adminRoutes';
 import { setupImpersonationRoutes } from './impersonationRoutes';
 import { setupOrgRoutes } from './orgRoutes';
 import { setupBillingRoutes } from './billingRoutes';
+import { setupProduceRoutes } from './produceRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
 import { setupStatusRoutes } from './statusRoutes';
@@ -100,4 +101,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
     // Sparks billing: checkout/portal (org-admin), summary (member), Stripe
     // webhook (public, signature-authenticated).
     setupBillingRoutes(app);
+
+    // PRODUCE application intake (public, marketing-site form).
+    setupProduceRoutes(app);
 }
