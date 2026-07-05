@@ -3,7 +3,8 @@ import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeExternalLinks from 'rehype-external-links';
-import { LoaderCircle, Check, AlertTriangle } from 'lucide-react';
+import { LoaderCircle, Check, AlertTriangle, Zap } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import type { SuggestionChip, ImageConsentCard } from '../utils/message-helpers';
 import type { ToolEvent } from '../utils/message-helpers';
@@ -108,10 +109,20 @@ export function AIMessage({
 											: 'border-accent/40 bg-bg-3 hover:border-accent hover:bg-accent/10',
 									)}
 								>
-									<span className="flex items-center justify-between gap-2 text-sm font-medium">
+									<span className="flex items-center justify-between gap-2 text-sm font-medium text-text-primary">
 										{chip.label}
-										<span className="shrink-0 rounded-sm bg-accent/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-accent">
-											{used ? 'Queued ✓' : `⚡ ${chip.sparks}`}
+										<span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-accent">
+											{used ? (
+												<>
+													<Check className="size-3" />
+													Queued
+												</>
+											) : (
+												<>
+													<Zap className="size-3" />
+													{chip.sparks}
+												</>
+											)}
 										</span>
 									</span>
 									<span className="text-xs text-text-tertiary">{chip.benefit}</span>
@@ -125,38 +136,42 @@ export function AIMessage({
 				)}
 				{imageConsent && (
 					<div className="mt-1 flex w-full max-w-md flex-col gap-2 rounded-lg border border-accent/40 bg-bg-3 p-3">
-						<div className="flex flex-col gap-0.5 text-xs text-text-tertiary">
+						<div className="flex flex-col gap-1 text-xs text-text-tertiary">
 							{imageConsent.images.map((img) => (
-								<span key={img.path} className="truncate">
-									• {img.purpose || img.path}
+								<span key={img.path} className="flex items-center gap-1.5 truncate">
+									<span className="size-1 shrink-0 rounded-full bg-accent/60" />
+									{img.purpose && img.purpose !== 'icon' ? img.purpose : img.path}
 								</span>
 							))}
 						</div>
 						{consentAnswered === null ? (
-							<div className="flex gap-2">
-								<button
-									type="button"
+							<div className="flex flex-wrap gap-2">
+								<Button
+									size="sm"
 									disabled={!onImageConsent}
 									onClick={() => {
 										setConsentAnswered(true);
 										onImageConsent?.(true);
 									}}
-									className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent/90"
+									className="gap-1.5"
 								>
-									Generate {imageConsent.count} image{imageConsent.count === 1 ? '' : 's'} · ⚡{' '}
-									{imageConsent.totalSparks}
-								</button>
-								<button
-									type="button"
+									Generate {imageConsent.count} image{imageConsent.count === 1 ? '' : 's'}
+									<span className="inline-flex items-center gap-0.5 tabular-nums opacity-90">
+										<Zap className="size-3.5" />
+										{imageConsent.totalSparks}
+									</span>
+								</Button>
+								<Button
+									size="sm"
+									variant="outline"
 									disabled={!onImageConsent}
 									onClick={() => {
 										setConsentAnswered(false);
 										onImageConsent?.(false);
 									}}
-									className="rounded-md border border-border-primary px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-4"
 								>
 									Skip — build without images
-								</button>
+								</Button>
 							</div>
 						) : (
 							<span className="text-xs text-text-tertiary">
