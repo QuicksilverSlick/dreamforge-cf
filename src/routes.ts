@@ -20,6 +20,7 @@ import AdminUsers from './routes/admin/users';
 import AdminUserDetail from './routes/admin/user-detail';
 import AdminApps from './routes/admin/apps';
 import AdminAudit from './routes/admin/audit';
+import AdminBilling from './routes/admin/billing';
 import OrganizationPage from './routes/organization/index';
 import InviteAccept from './routes/invite-accept';
 
@@ -96,6 +97,10 @@ const routes = [
 					{
 						path: 'admin/audit',
 						element: React.createElement(AdminRoute, { children: React.createElement(AdminAudit) }),
+					},
+					{
+						path: 'admin/billing',
+						element: React.createElement(AdminRoute, { children: React.createElement(AdminBilling) }),
 					},
 				],
 			},

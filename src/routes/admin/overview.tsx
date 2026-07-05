@@ -44,6 +44,9 @@ export default function AdminOverview() {
                     <Button variant="outline" onClick={() => navigate('/admin/apps')}>
                         <LayoutGrid className="h-4 w-4 mr-2" /> Apps
                     </Button>
+                    <Button variant="outline" onClick={() => navigate('/admin/billing')}>
+                        Billing
+                    </Button>
                     <Button variant="outline" onClick={() => navigate('/admin/audit')}>
                         <ScrollText className="h-4 w-4 mr-2" /> Audit log
                     </Button>

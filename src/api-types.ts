@@ -341,6 +341,9 @@ export type {
   AdminUserSecretsData,
   AdminAppDetailData,
   AdminAuditListData,
+  AdminBillingSummaryData,
+  AdminBillingLedgerRow,
+  AdminBillingAdjustData,
 } from 'worker/api/controllers/admin/types';
 export type {
   AdminUserSummary,

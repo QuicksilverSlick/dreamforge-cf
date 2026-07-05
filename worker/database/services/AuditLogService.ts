@@ -54,6 +54,11 @@ export const AdminAuditAction = {
     // so every write the operator makes as the customer is non-repudiable (the
     // "audited-only" guarantee covers the writes, not just session lifecycle).
     IMPERSONATION_ACTION: 'admin.user.impersonate.action',
+    // Sparks billing operator controls (spec 0.5). VIEW is a read audit
+    // (operator looked at an org balance/ledger); ADJUST is the money
+    // mutation - actorId = operator, entityId = the org whose balance moved.
+    BILLING_VIEW: 'admin.billing.view',
+    BILLING_ADJUST: 'admin.billing.adjust',
 } as const;
 
 export type AdminAuditActionType = (typeof AdminAuditAction)[keyof typeof AdminAuditAction];
