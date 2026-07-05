@@ -104,11 +104,15 @@ export function GlobalHeader() {
 							{/* Sparks metering live => platform balance badge; legacy
 							    Cloudflare credits badge only for BYO-era deployments
 							    (billing spec §7.4). */}
-							{user && (billingData?.meteringEnabled ? (
-								<SparksBalanceBadge />
-							) : (
+							{/* Until the billing summary resolves we render NEITHER badge —
+							    previously the legacy Cloudflare badge flashed during the
+							    fetch window before the Sparks badge replaced it. The legacy
+							    badge now requires a RESOLVED summary saying metering is off
+							    (BYO-era/self-hosted deployments). */}
+							{user && billingData?.meteringEnabled && <SparksBalanceBadge />}
+							{user && billingData && !billingData.meteringEnabled && (
 								<UsageLimitsBadge onConnect={() => startCloudflareConnect()} />
-							))}
+							)}
 							{user && <OrgSwitcher />}
 							<ThemeToggle />
 							<AuthButton />
