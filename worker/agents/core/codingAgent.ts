@@ -163,7 +163,8 @@ export class CodeGeneratorAgent
             // deploy creates an instance — an empty id makes getSandbox throw
             // "Sandbox ID must be 1-63 characters long"). `getSessionId` below
             // still tracks the deploy-time instance id separately.
-            const sandboxSessionId = this.state.sessionId || this.getAgentId();
+            const sandboxSessionId =
+                this.state.sandboxSessionOverride || this.state.sessionId || this.getAgentId();
             this._deploymentManager = new DeploymentManager({
                 sandboxClient: getSandboxService(sandboxSessionId, this.getAgentId()),
                 getSessionId: () => this.state.sandboxInstanceId,
@@ -355,6 +356,22 @@ export class CodeGeneratorAgent
                     }
                 });
         }
+    }
+
+    rotateSandboxSession(): void {
+        const fresh = generateId();
+        this.logger().warn('Rotating sandbox session — previous sandbox unreachable', {
+            previous: this.state.sandboxSessionOverride || this.state.sessionId,
+            fresh,
+        });
+        this.setState({
+            ...this.state,
+            sandboxSessionOverride: fresh,
+            sandboxInstanceId: undefined,
+        });
+        // Drop the cached manager so the getter rebuilds its sandbox client
+        // against the fresh Durable Object.
+        this._deploymentManager = null;
     }
 
     /**

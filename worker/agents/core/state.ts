@@ -149,6 +149,12 @@ export interface BaseProjectState {
      */
     blueprintImageConsent?: 'pending' | 'approved' | 'declined';
 
+    /**
+     * Overrides the sandbox DO id after a rotation (the default id is the
+     * immutable sessionId). Set when the original sandbox wedges permanently.
+     */
+    sandboxSessionOverride?: string;
+
     /** File state keyed by relative path. */
     generatedFilesMap: Record<string, FileState>;
 
