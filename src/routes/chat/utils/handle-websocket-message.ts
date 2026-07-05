@@ -335,6 +335,34 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 break;
             }
 
+            case 'improvement_suggestions': {
+                const suggestionsMessage: ChatMessage = {
+                    role: 'assistant',
+                    conversationId: 'improvement-suggestions',
+                    content: message.message,
+                    ui: { suggestions: message.suggestions },
+                };
+                sendMessage(suggestionsMessage);
+                break;
+            }
+
+            case 'image_generation_consent': {
+                const consentMessage: ChatMessage = {
+                    role: 'assistant',
+                    conversationId: 'image-consent',
+                    content: message.message,
+                    ui: {
+                        imageConsent: {
+                            images: message.images,
+                            count: message.count,
+                            totalSparks: message.totalSparks,
+                        },
+                    },
+                };
+                sendMessage(consentMessage);
+                break;
+            }
+
             case 'generation_complete': {
                 setIsRedeployReady(true);
                 setFiles((prev) => setAllFilesCompleted(prev));

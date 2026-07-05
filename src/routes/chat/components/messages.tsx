@@ -4,6 +4,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeExternalLinks from 'rehype-external-links';
 import { LoaderCircle, Check, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import type { SuggestionChip, ImageConsentCard } from '../utils/message-helpers';
 import type { ToolEvent } from '../utils/message-helpers';
 
 /**
@@ -36,11 +38,21 @@ export function AIMessage({
 	message,
 	isThinking,
 	toolEvents,
+	suggestions,
+	imageConsent,
+	onSuggestionAccept,
+	onImageConsent,
 }: {
 	message: string;
 	isThinking?: boolean;
 	toolEvents?: ToolEvent[];
+	suggestions?: SuggestionChip[];
+	imageConsent?: ImageConsentCard;
+	onSuggestionAccept?: (chip: SuggestionChip) => void;
+	onImageConsent?: (approved: boolean) => void;
 }) {
+	const [usedChipIds, setUsedChipIds] = useState<Set<string>>(new Set());
+	const [consentAnswered, setConsentAnswered] = useState<null | boolean>(null);
 	const sanitizedMessage = sanitizeMessageForDisplay(message);
 	
 	return (
@@ -76,6 +88,85 @@ export function AIMessage({
 				<Markdown className={clsx('a-tag', isThinking ? 'animate-pulse' : '')}>
 					{sanitizedMessage}
 				</Markdown>
+				{suggestions && suggestions.length > 0 && (
+					<div className="mt-1 flex flex-col gap-2">
+						{suggestions.map((chip) => {
+							const used = usedChipIds.has(chip.id);
+							return (
+								<button
+									key={chip.id}
+									type="button"
+									disabled={used || !onSuggestionAccept}
+									onClick={() => {
+										setUsedChipIds((prev) => new Set(prev).add(chip.id));
+										onSuggestionAccept?.(chip);
+									}}
+									className={clsx(
+										'group flex w-full max-w-md flex-col gap-0.5 rounded-lg border p-2.5 text-left transition-colors',
+										used
+											? 'border-border-primary bg-bg-3/40 opacity-50'
+											: 'border-accent/40 bg-bg-3 hover:border-accent hover:bg-accent/10',
+									)}
+								>
+									<span className="flex items-center justify-between gap-2 text-sm font-medium">
+										{chip.label}
+										<span className="shrink-0 rounded-sm bg-accent/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-accent">
+											{used ? 'Queued ✓' : `⚡ ${chip.sparks}`}
+										</span>
+									</span>
+									<span className="text-xs text-text-tertiary">{chip.benefit}</span>
+									<span className="text-[10px] uppercase tracking-wide text-text-tertiary/70">
+										{chip.scope}
+									</span>
+								</button>
+							);
+						})}
+					</div>
+				)}
+				{imageConsent && (
+					<div className="mt-1 flex w-full max-w-md flex-col gap-2 rounded-lg border border-accent/40 bg-bg-3 p-3">
+						<div className="flex flex-col gap-0.5 text-xs text-text-tertiary">
+							{imageConsent.images.map((img) => (
+								<span key={img.path} className="truncate">
+									• {img.purpose || img.path}
+								</span>
+							))}
+						</div>
+						{consentAnswered === null ? (
+							<div className="flex gap-2">
+								<button
+									type="button"
+									disabled={!onImageConsent}
+									onClick={() => {
+										setConsentAnswered(true);
+										onImageConsent?.(true);
+									}}
+									className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent/90"
+								>
+									Generate {imageConsent.count} image{imageConsent.count === 1 ? '' : 's'} · ⚡{' '}
+									{imageConsent.totalSparks}
+								</button>
+								<button
+									type="button"
+									disabled={!onImageConsent}
+									onClick={() => {
+										setConsentAnswered(false);
+										onImageConsent?.(false);
+									}}
+									className="rounded-md border border-border-primary px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-4"
+								>
+									Skip — build without images
+								</button>
+							</div>
+						) : (
+							<span className="text-xs text-text-tertiary">
+								{consentAnswered
+									? 'Generating images — they will appear in the preview as each one lands.'
+									: 'Skipped. You can ask for images anytime in chat.'}
+							</span>
+						)}
+					</div>
+				)}
 			</div>
 		</div>
 	);

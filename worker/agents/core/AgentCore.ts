@@ -240,6 +240,16 @@ export interface ICodingBehavior<
      */
     generateAllFiles(): Promise<void>;
 
+    /**
+     * Generate the blueprint-declared image assets after the user consents
+     * (images debit Sparks, so they never run without an explicit choice).
+     * Optional: behaviors without blueprint images need not implement it.
+     */
+    resumeBlueprintImages?(): Promise<void>;
+
+    /** Re-broadcast the pending image-consent card (reconnect support). */
+    broadcastImageConsentRequest?(): void;
+
     // ===== WebSocket-handler surface (called via agent.getBehavior()) =====
 
     /**

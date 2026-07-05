@@ -357,11 +357,33 @@ export class CodeGeneratorAgent
         }
     }
 
+    /**
+     * User approved blueprint-image generation (each image is metered).
+     * Idempotent: generateBlueprintImages only processes assets without URLs.
+     */
+    async approveBlueprintImages(): Promise<void> {
+        if (this.state.blueprintImageConsent === 'approved') return;
+        this.setState({ ...this.state, blueprintImageConsent: 'approved' });
+        await this.behavior.resumeBlueprintImages?.();
+    }
+
+    /** User declined — the build keeps its deterministic asset URLs bare. */
+    declineBlueprintImages(): void {
+        if (this.state.blueprintImageConsent === 'declined') return;
+        this.setState({ ...this.state, blueprintImageConsent: 'declined' });
+    }
+
     async onConnect(connection: Connection, ctx: ConnectionContext) {
         this.logger().info(`Agent connected for agent ${this.getAgentId()}`, {
             connection,
             ctx,
         });
+
+        // A consent card is ephemeral in the chat stream — re-emit it for
+        // late/reconnecting viewers while the choice is still pending.
+        if (this.state.blueprintImageConsent === 'pending') {
+            this.behavior.broadcastImageConsentRequest?.();
+        }
 
         // Attach this connection's identity (stamped on the upgrade request by the
         // route) so presence + the single-driver seat can identify each viewer.

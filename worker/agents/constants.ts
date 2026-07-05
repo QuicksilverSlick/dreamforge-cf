@@ -3,6 +3,12 @@ import { WebSocketMessageType } from "../api/websocketTypes";
 export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
     GENERATION_STARTED: 'generation_started',
     GENERATION_COMPLETE: 'generation_complete',
+    // Post-build enhancement ideas surfaced as consent-priced chips (the user
+    // accepts one to run it as a normal 30-Spark request).
+    IMPROVEMENT_SUGGESTIONS: 'improvement_suggestions',
+    // Blueprint-declared images now require user consent before generating
+    // (they debit Sparks) — this asks; approve/decline come back as requests.
+    IMAGE_GENERATION_CONSENT: 'image_generation_consent',
 
     PHASE_GENERATING: 'phase_generating',
     PHASE_GENERATED: 'phase_generated',
@@ -121,6 +127,8 @@ export const WebSocketMessageRequests = {
     
     // Conversational AI requests
     USER_SUGGESTION: 'user_suggestion',
+    APPROVE_BLUEPRINT_IMAGES: 'approve_blueprint_images',
+    DECLINE_BLUEPRINT_IMAGES: 'decline_blueprint_images',
     CLEAR_CONVERSATION: 'clear_conversation',
     GET_CONVERSATION_STATE: 'get_conversation_state',
     

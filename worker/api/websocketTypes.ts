@@ -68,6 +68,34 @@ type GenerationCompleteMessage = {
 	previewURL?: string;
 };
 
+export interface ImprovementSuggestion {
+	id: string;
+	/** Verb-phrase label shown on the chip ("Add a saloon leaderboard"). */
+	label: string;
+	/** One-line outcome-framed benefit. */
+	benefit: string;
+	/** What it touches: "UI only" | "new page" | "logic change" etc. */
+	scope: string;
+	/** The request text sent as a user_suggestion when accepted. */
+	prompt: string;
+	/** Spark price shown on the chip (the standard edit price). */
+	sparks: number;
+}
+
+type ImprovementSuggestionsMessage = {
+	type: 'improvement_suggestions';
+	message: string;
+	suggestions: ImprovementSuggestion[];
+};
+
+type ImageGenerationConsentMessage = {
+	type: 'image_generation_consent';
+	message: string;
+	images: Array<{ path: string; purpose: string }>;
+	count: number;
+	totalSparks: number;
+};
+
 type DeploymentStartedMessage = {
 	type: 'deployment_started';
 	message: string;
@@ -522,6 +550,8 @@ export type WebSocketMessage =
 	| FileGeneratedMessage
 	| FileRegeneratedMessage
 	| GenerationCompleteMessage
+	| ImprovementSuggestionsMessage
+	| ImageGenerationConsentMessage
 	| DeploymentStartedMessage
 	| DeploymentCompletedMessage
 	| DeploymentFailedMessage

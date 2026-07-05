@@ -777,6 +777,29 @@ export default function Chat() {
 											message={message.content}
 											isThinking={message.ui?.isThinking}
 											toolEvents={message.ui?.toolEvents}
+											suggestions={message.ui?.suggestions}
+											imageConsent={message.ui?.imageConsent}
+											onSuggestionAccept={(chip) => {
+												// An accepted chip is a normal priced request:
+												// the server's atomic debit is the gate (out of
+												// Sparks => the standard limit popup comes back).
+												websocket?.send(
+													JSON.stringify({
+														type: 'user_suggestion',
+														message: chip.prompt,
+													}),
+												);
+												sendUserMessage(chip.prompt);
+											}}
+											onImageConsent={(approved) => {
+												websocket?.send(
+													JSON.stringify({
+														type: approved
+															? 'approve_blueprint_images'
+															: 'decline_blueprint_images',
+													}),
+												);
+											}}
 										/>
 									);
 								}
