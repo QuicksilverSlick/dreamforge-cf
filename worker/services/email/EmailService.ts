@@ -75,24 +75,153 @@ export class EmailService {
 
         const { subject, html, text } = EmailService.renderOrgInvite(params, fromName);
 
+        // E_SENDER_NOT_VERIFIED (domain not onboarded yet), quota, etc. are
+        // never fatal to the invite, which already exists in D1 — the caller
+        // falls back to the copy-link.
+        return this.deliver({
+            fromName,
+            fromAddress,
+            to: params.to,
+            replyTo: params.replyTo,
+            subject,
+            html,
+            text,
+            logLabel: 'invite email',
+        });
+    }
+
+    /** produce@ on the sending domain — the PRODUCE lane's address (also an Email Routing inbox). */
+    private get produceAddress(): string {
+        const domain = this.env.EMAIL_FROM_ADDRESS?.split('@')[1] ?? 'getdreamforge.com';
+        return `produce@${domain}`;
+    }
+
+    /**
+     * Automated acknowledgment to a PRODUCE applicant: "we received it and
+     * are reaching out right away." Best-effort — the application is already
+     * stored in D1 before this is attempted.
+     */
+    async sendProduceApplicationAck(params: {
+        to: string;
+        name: string;
+        tierLabel: string;
+    }): Promise<EmailSendOutcome> {
+        const fromName = 'Dreamforge Produce';
+        const eName = escapeHtml(params.name);
+        const eTier = escapeHtml(params.tierLabel);
+        const subject = 'We got your application — here\u2019s what happens next';
+        const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7f9;padding:32px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;padding:32px;border:1px solid #e6e8eb;">
+          <tr><td style="font-size:20px;font-weight:600;color:#0f172a;padding-bottom:8px;">Your application is in, ${eName}.</td></tr>
+          <tr><td style="font-size:14px;line-height:22px;color:#475569;padding-bottom:16px;">
+            We received your <strong>${eTier}</strong> application and a Dreamforge engineer is reviewing it right now. You\u2019ll hear from us within one business day to set up your scoping call \u2014 a real conversation, a fixed price in writing, and only then a payment link.
+          </td></tr>
+          <tr><td style="font-size:14px;line-height:22px;color:#475569;padding-bottom:24px;">
+            While you wait: you can start exploring free at <a href="https://app.getdreamforge.com" style="color:#0ea5a4;text-decoration:none;font-weight:600;">app.getdreamforge.com</a> \u2014 anything you build comes with you into production.
+          </td></tr>
+          <tr><td style="font-size:12px;line-height:20px;color:#94a3b8;">
+            Questions before we call? Just reply to this email \u2014 it reaches a human.
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+        const text = [
+            `Your application is in, ${params.name}.`,
+            ``,
+            `We received your ${params.tierLabel} application and a Dreamforge engineer is reviewing it right now.`,
+            `You'll hear from us within one business day to set up your scoping call — a real conversation, a fixed price in writing, and only then a payment link.`,
+            ``,
+            `While you wait, you can start exploring free at https://app.getdreamforge.com — anything you build comes with you into production.`,
+            ``,
+            `Questions before we call? Just reply to this email — it reaches a human.`,
+        ].join('\n');
+        return this.deliver({
+            fromName,
+            fromAddress: this.produceAddress,
+            to: params.to,
+            replyTo: this.produceAddress,
+            subject,
+            html,
+            text,
+            logLabel: 'produce application ack',
+        });
+    }
+
+    /**
+     * Internal notification of a new application, delivered to the produce@
+     * inbox (Email Routing forwards it on). Reply-To is the applicant, so a
+     * plain reply from the operator's mail client starts the conversation.
+     */
+    async sendProduceApplicationNotice(params: {
+        name: string;
+        email: string;
+        company?: string | null;
+        tierLabel: string;
+        projectDescription: string;
+    }): Promise<EmailSendOutcome> {
+        const subject = `New Produce application — ${params.tierLabel} — ${params.name}`;
+        const rows: Array<[string, string]> = [
+            ['Name', params.name],
+            ['Email', params.email],
+            ['Company', params.company || '—'],
+            ['Tier', params.tierLabel],
+            ['Project', params.projectDescription],
+        ];
+        const html = `<!doctype html>
+<html><body style="margin:0;padding:24px;background:#f6f7f9;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;padding:24px;border:1px solid #e6e8eb;">
+    <tr><td style="font-size:17px;font-weight:600;color:#0f172a;padding-bottom:12px;">New Produce application</td></tr>
+    ${rows
+        .map(
+            ([k, v]) =>
+                `<tr><td style="font-size:13px;line-height:20px;color:#475569;padding-bottom:8px;"><strong style="color:#0f172a;">${escapeHtml(k)}:</strong> ${escapeHtml(v)}</td></tr>`,
+        )
+        .join('')}
+    <tr><td style="font-size:12px;color:#94a3b8;padding-top:12px;">Reply to this email to answer the applicant directly.</td></tr>
+  </table>
+</body></html>`;
+        const text = rows.map(([k, v]) => `${k}: ${v}`).join('\n');
+        return this.deliver({
+            fromName: 'Dreamforge Produce',
+            fromAddress: this.env.EMAIL_FROM_ADDRESS || this.produceAddress,
+            to: this.produceAddress,
+            replyTo: params.email,
+            subject,
+            html,
+            text,
+            logLabel: 'produce application notice',
+        });
+    }
+
+    /** Shared best-effort delivery wrapper around the EMAIL binding. */
+    private async deliver(input: {
+        fromName: string;
+        fromAddress: string;
+        to: string;
+        replyTo?: string;
+        subject: string;
+        html: string;
+        text: string;
+        logLabel: string;
+    }): Promise<EmailSendOutcome> {
+        if (!this.env.EMAIL) {
+            this.logger.warn(`EMAIL binding not configured; skipping ${input.logLabel}`, { to: input.to });
+            return { sent: false, error: 'email_not_configured' };
+        }
         try {
-            const raw = EmailService.buildMimeMessage({
-                fromName,
-                fromAddress,
-                to: params.to,
-                replyTo: params.replyTo,
-                subject,
-                html,
-                text,
-            });
-            const result = await this.env.EMAIL.send(new EmailMessage(fromAddress, params.to, raw));
-            this.logger.info('Invite email sent', { to: params.to, messageId: result.messageId });
+            const raw = EmailService.buildMimeMessage(input);
+            const result = await this.env.EMAIL.send(new EmailMessage(input.fromAddress, input.to, raw));
+            this.logger.info(`Sent ${input.logLabel}`, { to: input.to, messageId: result.messageId });
             return { sent: true, messageId: result.messageId };
         } catch (error) {
-            // E_SENDER_NOT_VERIFIED (domain not onboarded yet), quota, etc. —
-            // never fatal to the invite, which already exists in D1.
-            this.logger.error('Failed to send invite email; copy-link fallback in effect', {
-                to: params.to,
+            this.logger.error(`Failed to send ${input.logLabel}`, {
+                to: input.to,
                 error: error instanceof Error ? error.message : String(error),
             });
             return { sent: false, error: error instanceof Error ? error.message : 'send_failed' };

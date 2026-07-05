@@ -110,6 +110,61 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // PRODUCE application form (apply.html) → POST /api/produce/apply on the app API
+    const applyForm = document.getElementById('produceApplyForm');
+    if (applyForm) {
+        const tierSelect = document.getElementById('applyTier');
+        const preselect = landingParams.get('tier');
+        if (preselect && tierSelect && Array.from(tierSelect.options).some((o) => o.value === preselect)) {
+            tierSelect.value = preselect;
+        }
+        const API_ORIGIN = /(^|\.)getdreamforge\.com$/.test(window.location.hostname)
+            ? 'https://app.getdreamforge.com'
+            : window.location.origin;
+        const errorEl = document.getElementById('applyError');
+        const submitBtn = document.getElementById('applySubmit');
+        applyForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            errorEl.hidden = true;
+            if (!applyForm.reportValidity()) return;
+            const source = ['apply', landingParams.get('utm_source'), landingParams.get('utm_campaign')]
+                .filter(Boolean).join(':');
+            const payload = {
+                name: document.getElementById('applyName').value.trim(),
+                email: document.getElementById('applyEmail').value.trim(),
+                company: document.getElementById('applyCompany').value.trim() || undefined,
+                tier: tierSelect.value,
+                projectDescription: document.getElementById('applyProject').value.trim(),
+                source: source,
+                website: document.getElementById('applyWebsite').value
+            };
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Sending…';
+            try {
+                const res = await fetch(API_ORIGIN + '/api/produce/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                let data = null;
+                try { data = await res.json(); } catch (parseErr) { /* non-JSON error body */ }
+                if (!res.ok) {
+                    throw new Error((data && data.error && data.error.message) || 'Something went wrong. Please try again.');
+                }
+                document.getElementById('applySuccessEmail').textContent = payload.email;
+                applyForm.hidden = true;
+                document.getElementById('applySuccess').hidden = false;
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (err) {
+                errorEl.textContent = (err && err.message) ||
+                    'Something went wrong. Please try again — or email produce@getdreamforge.com.';
+                errorEl.hidden = false;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Send my application';
+            }
+        });
+    }
+
     // Demo video: swap the animated mock for the real video once it loads (no-op until the file exists).
     const demoVideo = document.querySelector('.showcase-video');
     if (demoVideo) {

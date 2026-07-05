@@ -75,7 +75,15 @@ export function createApp(env: Env): Hono<AppEnv> {
         if (c.req.path === '/api/billing/webhook') {
             return next();
         }
-        
+
+        // Skip for the public PRODUCE application form: it POSTs cross-origin
+        // from the marketing domain, which never receives a CSRF cookie, and
+        // the endpoint carries no ambient credentials for a forged request to
+        // ride. The controller enforces the Origin allowlist instead.
+        if (c.req.path === '/api/produce/apply') {
+            return next();
+        }
+
         try {
             // Handle GET requests - establish CSRF token if needed
             if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
