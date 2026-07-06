@@ -89,6 +89,7 @@ import { PreviewType, TemplateDetails, TemplateFile, type GitHubPushRequest, typ
 import { D1_AUTH_TEMPLATE_NAME } from 'shared/constants/templates';
 import { deriveBetterAuthSecret } from '../../utils/betterAuthSecret';
 import { buildUserWorkerUrl } from '../../utils/urls';
+import { isCfProxyEnabled, mintCfProxyToken } from '../../services/cf-proxy/controller';
 import type { GitHubExportResult } from '../../services/github/types';
 import { WebSocketMessageResponses } from '../constants';
 import { AppService } from '../../database';
@@ -657,9 +658,28 @@ export class CodeGeneratorAgent
         }
         const appId = this.getAgentId();
         if (!appId) return undefined;
-        return {
+        const containerEnv: Record<string, string> = {
             BETTER_AUTH_SECRET: await deriveBetterAuthSecret(this.env.SECRETS_ENCRYPTION_KEY, appId),
         };
+
+        // Route the container's remote-binding control-plane calls through the
+        // authorizing proxy: it carries a short-lived JWT as a dummy token
+        // (wrangler forwards it as the Bearer) and points at the proxy origin.
+        // The real Cloudflare token never enters the container.
+        if (isCfProxyEnabled(this.env)) {
+            const known = await this.readKnownResources();
+            if (known?.d1DatabaseId) {
+                containerEnv.CLOUDFLARE_API_TOKEN = await mintCfProxyToken(this.env, {
+                    appId,
+                    userId: this.state.metadata.userId,
+                    d1: [known.d1DatabaseId],
+                    scriptName: this.state.projectName,
+                });
+                containerEnv.CLOUDFLARE_ACCOUNT_ID = this.env.CLOUDFLARE_ACCOUNT_ID;
+                containerEnv.CLOUDFLARE_API_BASE_URL = `${this.env.CLOUDFLARE_API_PROXY_URL}/client/v4`;
+            }
+        }
+        return containerEnv;
     }
 
     /**

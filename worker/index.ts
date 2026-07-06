@@ -11,6 +11,7 @@ import { BillingBalanceDO as BaseBillingBalanceDO } from './services/billing/Bil
 import { CodebaseAnalyzer as BaseCodebaseAnalyzer } from './agents/analyzer/codebaseAnalyzer';
 import { getPreviewDomain, isPreviewOrigin } from './utils/urls';
 import { proxyToAiGateway } from './services/aigateway-proxy/controller';
+import { proxyToCloudflareApi } from './services/cf-proxy/controller';
 import { isOriginAllowed } from './config/security';
 import { reconcileBilling } from './services/billing/reconciler';
 
@@ -142,6 +143,22 @@ const worker = {
 		}
 
 		// --- Domain-based Routing ---
+
+		// Route 0: Cloudflare-API authorizing proxy (continuity arc). The D1
+		// template's sandbox container routes its remote-binding control-plane
+		// calls to this hostname carrying a short-lived JWT; the proxy verifies
+		// it, enforces per-app D1 scoping, and forwards with the real token.
+		// Matched first (before app/marketing) so its `/client/v4/...` paths
+		// never reach the SPA/API router.
+		if (env.CLOUDFLARE_API_PROXY_URL) {
+			try {
+				if (hostname === new URL(env.CLOUDFLARE_API_PROXY_URL).hostname) {
+					return proxyToCloudflareApi(request, env, ctx);
+				}
+			} catch {
+				logger.error('CLOUDFLARE_API_PROXY_URL is not a valid URL; skipping proxy route');
+			}
+		}
 
 		// Marketing hostnames: serve the StoryBrand landing pages from
 		// dist/client/marketing/ (copied there from worker/static/landing-pages/

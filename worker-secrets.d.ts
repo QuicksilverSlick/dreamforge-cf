@@ -89,6 +89,14 @@ declare namespace Cloudflare {
         // Auth + crypto
         JWT_SECRET: string;
         AI_PROXY_JWT_SECRET: string;
+        // Signs the per-session token the sandbox container carries to the
+        // Cloudflare-API authorizing proxy (continuity arc, CONT-3A). Optional:
+        // the proxy is off until set.
+        CF_PROXY_JWT_SECRET?: string;
+        // Public origin of the Cloudflare-API authorizing proxy (e.g.
+        // https://cf-proxy.getdreamforge.com). When set (with CF_PROXY_JWT_SECRET),
+        // the D1 template's container routes control-plane calls through it.
+        CLOUDFLARE_API_PROXY_URL?: string;
         ENTROPY_KEY: string;
         SECRETS_ENCRYPTION_KEY: string;
 
@@ -160,6 +168,8 @@ interface Env {
 
     JWT_SECRET: string;
     AI_PROXY_JWT_SECRET: string;
+    CF_PROXY_JWT_SECRET?: string;
+    CLOUDFLARE_API_PROXY_URL?: string;
     ENTROPY_KEY: string;
     SECRETS_ENCRYPTION_KEY: string;
 
