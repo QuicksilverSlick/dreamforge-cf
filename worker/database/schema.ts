@@ -322,7 +322,17 @@ export const apps = sqliteTable('apps', {
     
     // Deployment Information
     deploymentId: text('deployment_id'), // Deployment ID (extracted from deployment URL)
-    
+
+    // Per-app provisioned Cloudflare resources (continuity arc). Recorded on
+    // first provision so every subsequent sandbox (re)creation REUSES the same
+    // database instead of provisioning a fresh empty one (which orphaned the
+    // old data on every self-heal). Null until the app is built on a
+    // resource-backed template (e.g. the D1 flagship).
+    d1DatabaseId: text('d1_database_id'),
+    d1DatabaseName: text('d1_database_name'),
+    kvNamespaceId: text('kv_namespace_id'),
+    resourcesProvisionedAt: integer('resources_provisioned_at', { mode: 'timestamp' }),
+
     // GitHub Repository Integration
     githubRepositoryUrl: text('github_repository_url'), // GitHub repository URL
     githubRepositoryVisibility: text('github_repository_visibility', { enum: ['public', 'private'] }), // Repository visibility

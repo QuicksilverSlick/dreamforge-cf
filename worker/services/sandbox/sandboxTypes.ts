@@ -153,11 +153,19 @@ export const GetTemplateFilesResponseSchema = z.object({
 })
 export type GetTemplateFilesResponse = z.infer<typeof GetTemplateFilesResponseSchema>
 
+/** Per-app resource ids reused across recreations (continuity arc). */
+export const KnownResourcesSchema = z.object({
+    d1DatabaseId: z.string().optional(),
+    kvNamespaceId: z.string().optional(),
+})
+export type KnownResources = z.infer<typeof KnownResourcesSchema>
+
 export const BootstrapRequestSchema = z.object({
     templateName: z.string(),
     projectName: z.string(),
     webhookUrl: z.string().url().optional(),
     envVars: z.record(z.string(), z.string()).optional(),
+    knownResources: KnownResourcesSchema.optional(),
 })
 export type BootstrapRequest = z.infer<typeof BootstrapRequestSchema>
 
@@ -173,6 +181,9 @@ export const BootstrapResponseSchema = PreviewSchema.extend({
     processId: z.string().optional(),
     message: z.string().optional(),
     error: z.string().optional(),
+    // Ids CREATED on this instance (empty when all resources were reused) so
+    // the agent can record them on the app row for the next recreation.
+    newlyProvisioned: KnownResourcesSchema.optional(),
 })
 export type BootstrapResponse = z.infer<typeof BootstrapResponseSchema>
 

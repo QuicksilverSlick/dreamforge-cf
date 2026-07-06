@@ -1,6 +1,7 @@
 import type { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import type { DeploymentManager as IDeploymentManager } from '../../core/AgentCore';
 import type { StructuredLogger } from '../../../logger';
+import type { KnownResources } from '../../../services/sandbox/sandboxTypes';
 
 /**
  * Construction dependencies for {@link DeploymentManager}.
@@ -24,6 +25,21 @@ export interface DeploymentManagerOptions {
     webhookUrl?: string;
     /** Optional environment variables to seed the new sandbox with. */
     localEnvVars?: Record<string, string>;
+    /**
+     * Resolves the per-session container env (auth secret/url, proxy vars) at
+     * deploy time. Callback-style — the manager is a memoised singleton, so a
+     * value captured at construction would freeze; a getter stays live. Takes
+     * precedence over the static {@link localEnvVars}.
+     */
+    getLocalEnvVars?: () => Promise<Record<string, string> | undefined>;
+    /**
+     * Resolves the app's already-provisioned resource ids so a recreation
+     * REUSES the same database instead of provisioning a fresh empty one.
+     * Callback-style for the same freeze reason as {@link getSessionId}.
+     */
+    getKnownResources?: () => Promise<KnownResources | undefined>;
+    /** Persists ids CREATED this deploy, so the next recreation can reuse them. */
+    onResourcesProvisioned?: (ids: KnownResources) => Promise<void>;
     /** Optional logger; falls back to the sandbox client's own logger via console-style methods if omitted. */
     logger?: StructuredLogger;
 }
@@ -58,10 +74,25 @@ export class DeploymentManager implements IDeploymentManager {
             projectName,
             webhookUrl,
             localEnvVars,
+            getLocalEnvVars,
+            getKnownResources,
+            onResourcesProvisioned,
             logger,
         } = this.options;
         const opts = options ?? {};
         let sessionId = getSessionId();
+
+        // Resolved per-deploy (callbacks stay live on the memoised manager):
+        // the recorded resource ids to reuse, and the container env to seed.
+        const knownResources = (await getKnownResources?.()) ?? undefined;
+        const envVars = (await getLocalEnvVars?.()) ?? localEnvVars;
+
+        // Record ids CREATED this deploy (empty when everything was reused).
+        const recordIfNew = async (newlyProvisioned?: KnownResources): Promise<void> => {
+            if (newlyProvisioned && (newlyProvisioned.d1DatabaseId || newlyProvisioned.kvNamespaceId)) {
+                await onResourcesProvisioned?.(newlyProvisioned);
+            }
+        };
 
         if (!sessionId || opts.redeploy) {
             // Cold-start resilience: the first createInstance after a deploy can
@@ -71,7 +102,8 @@ export class DeploymentManager implements IDeploymentManager {
                 templateName,
                 projectName,
                 webhookUrl,
-                localEnvVars,
+                envVars,
+                knownResources,
             );
             if (!bootstrap.success || !bootstrap.runId) {
                 logger?.warn(
@@ -81,7 +113,8 @@ export class DeploymentManager implements IDeploymentManager {
                     templateName,
                     projectName,
                     webhookUrl,
-                    localEnvVars,
+                    envVars,
+                    knownResources,
                 );
             }
             if (!bootstrap.success || !bootstrap.runId) {
@@ -95,6 +128,7 @@ export class DeploymentManager implements IDeploymentManager {
             }
             sessionId = bootstrap.runId;
             onSessionIdChange?.(sessionId);
+            await recordIfNew(bootstrap.newlyProvisioned);
 
             if (opts.files && opts.files.length > 0) {
                 const write = await sandboxClient.writeFiles(sessionId, opts.files, opts.commitMessage);
@@ -144,11 +178,13 @@ export class DeploymentManager implements IDeploymentManager {
                 templateName,
                 projectName,
                 webhookUrl,
-                localEnvVars,
+                envVars,
+                knownResources,
             );
             if (fresh.success && fresh.runId) {
                 sessionId = fresh.runId;
                 onSessionIdChange?.(sessionId);
+                await recordIfNew(fresh.newlyProvisioned);
                 if (opts.files && opts.files.length > 0) {
                     const write = await sandboxClient.writeFiles(sessionId, opts.files, opts.commitMessage);
                     if (!write.success) {

@@ -25,7 +25,8 @@ import {
     // Deployment types
     DeploymentResult,
     BootstrapResponse,
-    
+    KnownResources,
+
     GetLogsResponse,
     ListInstancesResponse,
     GitHubPushRequest,
@@ -125,7 +126,7 @@ import { FileOutputType } from 'worker/agents/schemas';
      * Create a new instance from a template
      * Returns: { success: boolean, instanceId?: string, error?: string }
      */
-    abstract createInstance(templateName: string, projectName: string, webhookUrl?: string, localEnvVars?: Record<string, string>): Promise<BootstrapResponse>;
+    abstract createInstance(templateName: string, projectName: string, webhookUrl?: string, localEnvVars?: Record<string, string>, knownResources?: KnownResources): Promise<BootstrapResponse>;
 
     /**
      * List all instances across all sessions
