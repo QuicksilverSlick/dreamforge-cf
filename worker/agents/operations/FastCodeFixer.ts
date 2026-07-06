@@ -63,8 +63,10 @@ Analyze each reported issue and generate complete file contents with fixes appli
 `
 
 const userPromptFormatter = (query: string, issues: CodeIssue[], allFiles: FileOutputType[], _allPhases?: PhaseConceptType[]) => {
+    // Raw user query interpolated outside generalSystemPromptBuilder, so the
+    // prompt-injection sanitizer must be applied here directly.
     const prompt = PROMPT_UTILS.replaceTemplateVariables(USER_PROMPT, {
-        query,
+        query: PROMPT_UTILS.sanitizeUserQueryForPrompt(query),
         issues: issues.length > 0 ? JSON.stringify(issues, null, 2) : 'No specific issues reported - perform general code review',
         codebase: PROMPT_UTILS.serializeFiles(allFiles, CodeSerializerType.SIMPLE)
     });

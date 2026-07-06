@@ -194,8 +194,13 @@ export async function buildGatewayUrl(
 ): Promise<string> {
     // User's own Cloudflare AI Gateway (unified-billing / BYOK-credits mode):
     // route through their account+gateway so inference draws their credits.
+    // The origin is pinned to gateway.ai.cloudflare.com and the account/slug
+    // are encoded as single path segments, so a stored gateway value can never
+    // rewrite the path or redirect the request off the allowlisted origin
+    // (upstream d8a2526e: credentials are only ever sent to gateway origins
+    // matching their ownership).
     if (userGateway) {
-        const baseUrl = `https://gateway.ai.cloudflare.com/v1/${userGateway.accountId}/${userGateway.gatewaySlug}`;
+        const baseUrl = `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(userGateway.accountId)}/${encodeURIComponent(userGateway.gatewaySlug)}`;
         return providerOverride ? `${baseUrl}/${providerOverride}` : `${baseUrl}/compat`;
     }
 

@@ -154,9 +154,13 @@ export class SimpleCodeGenerationOperation extends AgentOperation<
         // Format existing files for context
         const existingFilesContext = formatExistingFiles(context.allFiles);
 
-        // Build system message with full context
+        // Build system message with full context. Raw user query interpolated
+        // outside generalSystemPromptBuilder, so the prompt-injection
+        // sanitizer must be applied here directly.
         const systemPrompt = PROMPT_UTILS.replaceTemplateVariables(SYSTEM_PROMPT, {
-            userQuery: context.query ? `## Requirements:\n${context.query}` : '',
+            userQuery: context.query
+                ? `## Requirements:\n${PROMPT_UTILS.sanitizeUserQueryForPrompt(context.query)}`
+                : '',
         });
 
         // Build user message with requirements
