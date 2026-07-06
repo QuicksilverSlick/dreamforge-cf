@@ -17,6 +17,7 @@ import {
     TemplateDetailsResponseSchema,
     BootstrapResponseSchema,
     BootstrapRequest,
+    KnownResources,
     GetInstanceResponseSchema,
     BootstrapStatusResponseSchema,
     WriteFilesResponseSchema,
@@ -125,12 +126,13 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
     /**
      * Create a new runner instance.
      */
-    async createInstance(templateName: string, projectName: string, webhookUrl?: string, localEnvVars?: Record<string, string>): Promise<BootstrapResponse> {
-        const requestBody: BootstrapRequest = { 
-            templateName, 
-            projectName, 
+    async createInstance(templateName: string, projectName: string, webhookUrl?: string, localEnvVars?: Record<string, string>, knownResources?: KnownResources): Promise<BootstrapResponse> {
+        const requestBody: BootstrapRequest = {
+            templateName,
+            projectName,
             ...(webhookUrl && { webhookUrl }),
-            ...(localEnvVars && { envVars: localEnvVars })
+            ...(localEnvVars && { envVars: localEnvVars }),
+            ...(knownResources && { knownResources })
         };
         return this.makeRequest('/instances', 'POST', BootstrapResponseSchema, requestBody);
     }

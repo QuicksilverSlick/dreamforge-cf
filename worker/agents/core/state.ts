@@ -160,6 +160,12 @@ export interface BaseProjectState {
 
     // Sandbox / runtime context
     sandboxInstanceId?: string;
+    // Per-app provisioned Cloudflare resource ids (continuity arc), mirrored
+    // from the apps row for a fast reuse-on-recreate read. The apps row is the
+    // durable record; this is the in-DO fast path (survives soft restarts,
+    // repopulated from the row after a hard reset).
+    d1DatabaseId?: string;
+    kvNamespaceId?: string;
     fileServingToken?: FileServingToken;
     commandsHistory?: string[];
     lastPackageJson?: string;

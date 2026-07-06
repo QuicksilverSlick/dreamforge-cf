@@ -347,6 +347,57 @@ export class AppService extends BaseService {
     }
 
     /**
+     * Record the Cloudflare resources provisioned for an app (continuity arc).
+     * Written once on first provision; read back on every subsequent sandbox
+     * (re)creation so the same database is reused rather than re-provisioned.
+     */
+    async updateAppResources(
+        appId: string,
+        resources: { d1DatabaseId?: string; d1DatabaseName?: string; kvNamespaceId?: string },
+    ): Promise<boolean> {
+        return this.updateApp(appId, {
+            ...resources,
+            resourcesProvisionedAt: new Date(),
+        });
+    }
+
+    /**
+     * The bare per-app resource ids, read from the primary (fresh): self-heal
+     * reads these back moments after a provision, so a replica-lagged read
+     * returning null would trigger a re-provision — the exact bug this fixes.
+     * No ownership/enrichment: the DO callback needs only the ids.
+     */
+    async getAppResources(
+        appId: string,
+    ): Promise<{ d1DatabaseId: string | null; d1DatabaseName: string | null; kvNamespaceId: string | null } | null> {
+        if (!appId) {
+            return null;
+        }
+        try {
+            const row = await this.database
+                .select({
+                    d1DatabaseId: schema.apps.d1DatabaseId,
+                    d1DatabaseName: schema.apps.d1DatabaseName,
+                    kvNamespaceId: schema.apps.kvNamespaceId,
+                })
+                .from(schema.apps)
+                .where(eq(schema.apps.id, appId))
+                .get();
+            return row ?? null;
+        } catch (error) {
+            // Degrade gracefully: if the resource columns don't exist yet
+            // (migration 0016 not applied) or the read fails, fall back to
+            // "no recorded resources" — the deploy then provisions fresh
+            // (today's behavior) rather than breaking every build.
+            this.logger.warn('getAppResources read failed; treating as unprovisioned', {
+                appId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+            return null;
+        }
+    }
+
+    /**
      * Update app with GitHub repository URL and visibility
      */
     async updateGitHubRepository(

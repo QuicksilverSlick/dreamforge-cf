@@ -45,7 +45,7 @@ import { FileObject } from '../code-fixer/types';
 import { generateId } from '../../utils/idGenerator';
 import { ResourceProvisioner } from './resourceProvisioner';
 import { TemplateParser } from './templateParser';
-import { ResourceProvisioningResult } from './types';
+import { ResourceProvisioningResult, KnownResources } from './types';
 import { GitHubService } from '../github/GitHubService';
 import { getPreviewDomain } from '../../utils/urls';
 import { isDev } from 'worker/utils/envs';
@@ -750,7 +750,7 @@ export class SandboxSdkClient extends BaseSandboxService {
     /**
      * Provisions Cloudflare resources for template placeholders in wrangler.jsonc
      */
-    private async provisionTemplateResources(instanceId: string, projectName: string): Promise<ResourceProvisioningResult> {
+    private async provisionTemplateResources(instanceId: string, projectName: string, knownResources?: KnownResources): Promise<ResourceProvisioningResult> {
         try {
             const session = await this.getInstanceSession(instanceId);
 
@@ -763,7 +763,8 @@ export class SandboxSdkClient extends BaseSandboxService {
                     provisioned: [],
                     failed: [],
                     replacements: {},
-                    wranglerUpdated: false
+                    wranglerUpdated: false,
+                    newlyProvisioned: {}
                 };
             }
 
@@ -778,41 +779,70 @@ export class SandboxSdkClient extends BaseSandboxService {
                     provisioned: [],
                     failed: [],
                     replacements: {},
-                    wranglerUpdated: false
+                    wranglerUpdated: false,
+                    newlyProvisioned: {}
                 };
             }
 
             this.logger.info('Placeholders found for provisioning', { instanceId, count: parseResult.placeholders.length });
 
-            // Initialize resource provisioner (skip if credentials are not available)
-            let resourceProvisioner: ResourceProvisioner;
-            try {
-                resourceProvisioner = new ResourceProvisioner(this.logger);
-            } catch (error) {
-                this.logger.warn(`Cannot initialize resource provisioner: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                return {
-                    success: true,
-                    provisioned: [],
-                    failed: parseResult.placeholders.map(p => ({
-                        placeholder: p.placeholder,
-                        resourceType: p.resourceType,
-                        error: 'Missing Cloudflare credentials',
-                        binding: p.binding
-                    })),
-                    replacements: {},
-                    wranglerUpdated: false
-                };
+            // A recorded id for a placeholder's resource type means this app was
+            // already provisioned — reuse it and never call the provisioner, so a
+            // sandbox recreation / self-heal binds the SAME database instead of a
+            // fresh empty one (the data-loss bug).
+            const knownIdFor = (resourceType: 'KV' | 'D1'): string | undefined =>
+                resourceType === 'D1' ? knownResources?.d1DatabaseId : knownResources?.kvNamespaceId;
+            const allPlaceholdersKnown = parseResult.placeholders.every((p) => knownIdFor(p.resourceType));
+
+            // Only touch the provisioner when at least one placeholder needs a
+            // fresh resource — a fully-reused instance must not require credentials.
+            let resourceProvisioner: ResourceProvisioner | undefined;
+            if (!allPlaceholdersKnown) {
+                try {
+                    resourceProvisioner = new ResourceProvisioner(this.logger);
+                } catch (error) {
+                    this.logger.warn(`Cannot initialize resource provisioner: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                    return {
+                        success: true,
+                        provisioned: [],
+                        failed: parseResult.placeholders.map(p => ({
+                            placeholder: p.placeholder,
+                            resourceType: p.resourceType,
+                            error: 'Missing Cloudflare credentials',
+                            binding: p.binding
+                        })),
+                        replacements: {},
+                        wranglerUpdated: false,
+                        newlyProvisioned: {}
+                    };
+                }
             }
-            
+
             const provisioned: ResourceProvisioningResult['provisioned'] = [];
             const failed: ResourceProvisioningResult['failed'] = [];
             const replacements: Record<string, string> = {};
+            // Ids created THIS call (not reused) — surfaced to the caller so the
+            // app row can record them for the next recreation.
+            const newlyProvisioned: KnownResources = {};
 
-            // Provision each resource
+            // Provision (or reuse) each resource
             for (const placeholderInfo of parseResult.placeholders) {
+                const knownId = knownIdFor(placeholderInfo.resourceType);
+                if (knownId) {
+                    this.logger.info(`Reusing recorded ${placeholderInfo.resourceType} ${knownId} for ${placeholderInfo.placeholder}`);
+                    provisioned.push({
+                        placeholder: placeholderInfo.placeholder,
+                        resourceType: placeholderInfo.resourceType,
+                        resourceId: knownId,
+                        binding: placeholderInfo.binding
+                    });
+                    replacements[placeholderInfo.placeholder] = knownId;
+                    continue;
+                }
+
                 this.logger.info(`Provisioning ${placeholderInfo.resourceType} resource for placeholder ${placeholderInfo.placeholder}`);
-                
-                const provisionResult = await resourceProvisioner.provisionResource(
+
+                const provisionResult = await resourceProvisioner!.provisionResource(
                     placeholderInfo.resourceType,
                     projectName
                 );
@@ -825,6 +855,11 @@ export class SandboxSdkClient extends BaseSandboxService {
                         binding: placeholderInfo.binding
                     });
                     replacements[placeholderInfo.placeholder] = provisionResult.resourceId;
+                    if (placeholderInfo.resourceType === 'D1') {
+                        newlyProvisioned.d1DatabaseId = provisionResult.resourceId;
+                    } else {
+                        newlyProvisioned.kvNamespaceId = provisionResult.resourceId;
+                    }
                 } else {
                     failed.push({
                         placeholder: placeholderInfo.placeholder,
@@ -856,7 +891,8 @@ export class SandboxSdkClient extends BaseSandboxService {
                 provisioned,
                 failed,
                 replacements,
-                wranglerUpdated
+                wranglerUpdated,
+                newlyProvisioned
             };
 
             if (failed.length > 0) {
@@ -873,7 +909,8 @@ export class SandboxSdkClient extends BaseSandboxService {
                 provisioned: [],
                 failed: [],
                 replacements: {},
-                wranglerUpdated: false
+                wranglerUpdated: false,
+                newlyProvisioned: {}
             };
         }
     }
@@ -978,17 +1015,19 @@ export class SandboxSdkClient extends BaseSandboxService {
         }
     }
 
-    private async setupInstance(instanceId: string, projectName: string, localEnvVars?: Record<string, string>): Promise<{previewURL: string, tunnelURL: string, processId: string, allocatedPort: number} | undefined> {
+    private async setupInstance(instanceId: string, projectName: string, localEnvVars?: Record<string, string>, knownResources?: KnownResources): Promise<{previewURL: string, tunnelURL: string, processId: string, allocatedPort: number, newlyProvisioned: KnownResources} | undefined> {
         try {
             const sandbox = this.getSandbox();
             // Update project configuration with the specified project name
             await this.updateProjectConfiguration(instanceId, projectName);
-            
-            // Provision Cloudflare resources if template has placeholders
-            const resourceProvisioningResult = await this.provisionTemplateResources(instanceId, projectName);
+
+            // Provision Cloudflare resources if template has placeholders (reusing
+            // any recorded ids so a recreation binds the same database).
+            const resourceProvisioningResult = await this.provisionTemplateResources(instanceId, projectName, knownResources);
             if (!resourceProvisioningResult.success && resourceProvisioningResult.failed.length > 0) {
                 this.logger.warn(`Some resources failed to provision for ${instanceId}, but continuing setup process`);
             }
+            const newlyProvisioned = resourceProvisioningResult.newlyProvisioned;
             
             // Store wrangler.jsonc configuration in KV after resource provisioning
             try {
@@ -1052,8 +1091,8 @@ export class SandboxSdkClient extends BaseSandboxService {
                     }
                         
                     this.logger.info('Preview URL exposed', { instanceId, previewURL });
-                        
-                    return { previewURL, tunnelURL, processId, allocatedPort };
+
+                    return { previewURL, tunnelURL, processId, allocatedPort, newlyProvisioned };
                 } catch (error) {
                     this.logger.warn('Failed to start dev server', error);
                     return undefined;
@@ -1100,7 +1139,7 @@ export class SandboxSdkClient extends BaseSandboxService {
         return redactedFiles;
     }
 
-    async createInstance(templateName: string, projectName: string, webhookUrl?: string, localEnvVars?: Record<string, string>): Promise<BootstrapResponse> {
+    async createInstance(templateName: string, projectName: string, webhookUrl?: string, localEnvVars?: Record<string, string>, knownResources?: KnownResources): Promise<BootstrapResponse> {
         try {
             const sandbox = this.getSandbox();
             // Set environment variables FIRST, before any other operations
@@ -1151,7 +1190,7 @@ export class SandboxSdkClient extends BaseSandboxService {
                 throw new Error(`Failed to move template: ${moveTemplateResult.stderr}`);
             }
 
-            const setupPromise = () => this.setupInstance(instanceId, projectName, localEnvVars);
+            const setupPromise = () => this.setupInstance(instanceId, projectName, localEnvVars, knownResources);
             const setupResult = await setupPromise();
             if (!setupResult) {
                 return {
@@ -1159,7 +1198,7 @@ export class SandboxSdkClient extends BaseSandboxService {
                     error: 'Failed to setup instance'
                 };
             }
-            const results: {previewURL: string, tunnelURL: string, processId: string, allocatedPort: number} = setupResult;
+            const results: {previewURL: string, tunnelURL: string, processId: string, allocatedPort: number, newlyProvisioned: KnownResources} = setupResult;
             // Store instance metadata
             const metadata = {
                 templateName: templateName,
@@ -1182,6 +1221,7 @@ export class SandboxSdkClient extends BaseSandboxService {
                 previewURL: results?.previewURL,
                 tunnelURL: results?.tunnelURL,
                 processId: results?.processId,
+                newlyProvisioned: results?.newlyProvisioned,
             };
         } catch (error) {
             this.logger.error('createInstance', error, { templateName: templateName, projectName: projectName });

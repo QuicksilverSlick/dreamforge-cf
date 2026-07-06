@@ -85,7 +85,8 @@ import {
     WebSocketMessageData,
     WebSocketMessageType,
 } from '../../api/websocketTypes';
-import { PreviewType, TemplateDetails, TemplateFile, type GitHubPushRequest } from '../../services/sandbox/sandboxTypes';
+import { PreviewType, TemplateDetails, TemplateFile, type GitHubPushRequest, type KnownResources } from '../../services/sandbox/sandboxTypes';
+import { D1_AUTH_TEMPLATE_NAME } from 'shared/constants/templates';
 import type { GitHubExportResult } from '../../services/github/types';
 import { WebSocketMessageResponses } from '../constants';
 import { AppService } from '../../database';
@@ -173,6 +174,12 @@ export class CodeGeneratorAgent
                 },
                 templateName: this.state.templateName,
                 projectName: this.state.projectName,
+                // Callback-style (manager is memoised): reuse the app's recorded
+                // resource ids on every recreation, persist newly-created ones,
+                // and deliver the auth env for the D1 flagship template.
+                getKnownResources: () => this.readKnownResources(),
+                onResourcesProvisioned: (ids) => this.persistResources(ids),
+                getLocalEnvVars: () => this.buildContainerEnv(),
                 logger: this.logger(),
             });
         }
@@ -584,6 +591,88 @@ export class CodeGeneratorAgent
         templateName: string,
     ): Promise<{ templateName: string; filesImported: number; files: TemplateFile[] }> {
         return this.behavior.importTemplate(templateName);
+    }
+
+    /**
+     * The app's already-provisioned resource ids for reuse on recreation.
+     * DO state is the fast path; on a miss (e.g. after a hard reset) it falls
+     * back to the durable apps row and rehydrates state. Returns undefined when
+     * the app has never provisioned any — the first build then creates them.
+     */
+    private async readKnownResources(): Promise<KnownResources | undefined> {
+        if (this.state.d1DatabaseId || this.state.kvNamespaceId) {
+            return { d1DatabaseId: this.state.d1DatabaseId, kvNamespaceId: this.state.kvNamespaceId };
+        }
+        const appId = this.getAgentId();
+        if (!appId) return undefined;
+        const row = await new AppService(this.env).getAppResources(appId);
+        if (!row || (!row.d1DatabaseId && !row.kvNamespaceId)) return undefined;
+        const ids: KnownResources = {
+            d1DatabaseId: row.d1DatabaseId ?? undefined,
+            kvNamespaceId: row.kvNamespaceId ?? undefined,
+        };
+        this.setState({ ...this.state, ...ids });
+        return ids;
+    }
+
+    /**
+     * Persist ids created on a first provision to both the DO state (fast reuse)
+     * and the durable apps row (survives a hard DO reset). Idempotent: only
+     * fires when something was actually created this deploy.
+     */
+    private async persistResources(ids: KnownResources): Promise<void> {
+        this.setState({
+            ...this.state,
+            ...(ids.d1DatabaseId ? { d1DatabaseId: ids.d1DatabaseId } : {}),
+            ...(ids.kvNamespaceId ? { kvNamespaceId: ids.kvNamespaceId } : {}),
+        });
+        const appId = this.getAgentId();
+        if (appId) {
+            await new AppService(this.env).updateAppResources(appId, {
+                d1DatabaseId: ids.d1DatabaseId,
+                kvNamespaceId: ids.kvNamespaceId,
+            });
+        }
+    }
+
+    /**
+     * The container env for the D1 flagship template. Delivers only the per-app
+     * better-auth secret — DERIVED (HKDF over the platform SECRETS_ENCRYPTION_KEY,
+     * salted by app id) rather than stored, so it is unguessable, stable across
+     * restarts, and byte-identical in preview and production with no persistence.
+     *
+     * BETTER_AUTH_URL is intentionally NOT set here: at sandbox-env build time the
+     * preview host does not exist yet, and neither the preview host (sandbox/port
+     * keyed) nor the deployed host (`<projectName>.<previewDomain>`) is the app id,
+     * so any value computed here would be wrong. In preview better-auth infers the
+     * origin from the request; the exact prod URL is delivered at deploy time (the
+     * deployer vars path). Non-D1 templates get nothing (returns undefined).
+     */
+    private async buildContainerEnv(): Promise<Record<string, string> | undefined> {
+        if (this.state.templateName !== D1_AUTH_TEMPLATE_NAME) {
+            return undefined;
+        }
+        const appId = this.getAgentId();
+        if (!appId) return undefined;
+        return {
+            BETTER_AUTH_SECRET: await this.deriveBetterAuthSecret(appId),
+        };
+    }
+
+    /** HKDF-SHA256(SECRETS_ENCRYPTION_KEY, salt=appId) → 32-byte hex. One-way; per-app. */
+    private async deriveBetterAuthSecret(appId: string): Promise<string> {
+        const master = this.env.SECRETS_ENCRYPTION_KEY;
+        if (!master || master.length < 32) {
+            throw new Error('SECRETS_ENCRYPTION_KEY must be set (>=32 chars) to derive the app auth secret');
+        }
+        const enc = new TextEncoder();
+        const key = await crypto.subtle.importKey('raw', enc.encode(master), 'HKDF', false, ['deriveBits']);
+        const bits = await crypto.subtle.deriveBits(
+            { name: 'HKDF', hash: 'SHA-256', salt: enc.encode(appId), info: enc.encode('better-auth-secret') },
+            key,
+            256,
+        );
+        return Array.from(new Uint8Array(bits)).map((b) => b.toString(16).padStart(2, '0')).join('');
     }
 
     protected async saveToDatabase() {
