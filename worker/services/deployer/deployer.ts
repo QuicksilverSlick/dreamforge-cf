@@ -137,6 +137,12 @@ export class WorkerDeployer {
 			metadata.vars = vars;
 		}
 
+		// Inherit secret_text bindings from the deployed worker when a redeploy
+		// omits them, so BETTER_AUTH_SECRET is never silently wiped.
+		if (metadata.bindings?.some((b) => b.type === 'secret_text')) {
+			metadata.keep_bindings = ['secret_text'];
+		}
+
 		// Extract Durable Object class names from bindings
 		const durableObjectClasses = bindings
 			?.filter(
@@ -196,6 +202,12 @@ export class WorkerDeployer {
 
 		if (vars && Object.keys(vars).length > 0) {
 			metadata.vars = vars;
+		}
+
+		// Inherit secret_text bindings from the deployed worker when a redeploy
+		// omits them, so BETTER_AUTH_SECRET is never silently wiped.
+		if (metadata.bindings?.some((b) => b.type === 'secret_text')) {
+			metadata.keep_bindings = ['secret_text'];
 		}
 
 		// Extract Durable Object class names from bindings

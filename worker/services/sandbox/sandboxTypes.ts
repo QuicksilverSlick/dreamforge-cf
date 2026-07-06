@@ -160,6 +160,17 @@ export const KnownResourcesSchema = z.object({
 })
 export type KnownResources = z.infer<typeof KnownResourcesSchema>
 
+/** Vars/secrets/token to apply when deploying a worker (continuity arc, CONT-3). */
+export const DeployOptionsSchema = z.object({
+    /** Plain vars merged over the template's (e.g. the deployed app's BETTER_AUTH_URL). */
+    vars: z.record(z.string(), z.string()).optional(),
+    /** Secret bindings (uploaded as secret_text; inherited on redeploy). */
+    secrets: z.record(z.string(), z.string()).optional(),
+    /** Override deploy token (future CF-OAuth user deploys); defaults to the platform env token. */
+    token: z.string().optional(),
+})
+export type DeployOptions = z.infer<typeof DeployOptionsSchema>
+
 export const BootstrapRequestSchema = z.object({
     templateName: z.string(),
     projectName: z.string(),

@@ -46,6 +46,7 @@ import { generateId } from '../../utils/idGenerator';
 import { ResourceProvisioner } from './resourceProvisioner';
 import { TemplateParser } from './templateParser';
 import { ResourceProvisioningResult, KnownResources } from './types';
+import type { DeployOptions } from './sandboxTypes';
 import { GitHubService } from '../github/GitHubService';
 import { getPreviewDomain } from '../../utils/urls';
 import { isDev } from 'worker/utils/envs';
@@ -2075,17 +2076,18 @@ export class SandboxSdkClient extends BaseSandboxService {
     // ==========================================
     // DEPLOYMENT
     // ==========================================
-    async deployToCloudflareWorkers(instanceId: string): Promise<DeploymentResult> {
+    async deployToCloudflareWorkers(instanceId: string, deployOptions?: DeployOptions): Promise<DeploymentResult> {
         try {
             this.logger.info('Starting deployment', { instanceId });
-            
+
             // Get project metadata
             const metadata = await this.getInstanceMetadata(instanceId);
             const projectName = metadata?.projectName || instanceId;
-            
-            // Get credentials from environment (secure - no exposure to external processes)
+
+            // Get credentials from environment (secure - no exposure to external processes).
+            // A caller-supplied token (future CF-OAuth user deploys) wins.
             const accountId = env.CLOUDFLARE_ACCOUNT_ID;
-            const apiToken = env.CLOUDFLARE_API_TOKEN;
+            const apiToken = deployOptions?.token ?? env.CLOUDFLARE_API_TOKEN;
             
             if (!accountId || !apiToken) {
                 throw new Error('CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be set in environment');
@@ -2212,7 +2214,10 @@ export class SandboxSdkClient extends BaseSandboxService {
                 accountId,
                 apiToken,
                 assetsManifest,
-                config.compatibility_flags
+                config.compatibility_flags,
+                (deployOptions?.vars || deployOptions?.secrets)
+                    ? { vars: deployOptions.vars, secrets: deployOptions.secrets }
+                    : undefined
             );
             
             // Step 7: Deploy using pure function

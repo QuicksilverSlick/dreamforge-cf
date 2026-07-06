@@ -161,8 +161,18 @@ export function extractDurableObjectClasses(mergedMigration: any): string[] {
 export function buildWorkerBindings(
 	config: any,
 	hasAssets: boolean = false,
+	secrets?: Record<string, string>,
 ): any[] {
 	const bindings: any[] = [];
+
+	// Secret bindings (e.g. BETTER_AUTH_SECRET) as secret_text. Paired with
+	// keep_bindings: ['secret_text'] on redeploys so they aren't wiped when a
+	// later deploy omits them.
+	if (secrets) {
+		for (const [name, text] of Object.entries(secrets)) {
+			bindings.push({ name, type: 'secret_text', text });
+		}
+	}
 
 	// Add asset binding if assets are present
 	if (hasAssets) {

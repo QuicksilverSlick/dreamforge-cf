@@ -22,9 +22,11 @@ export function buildDeploymentConfig(
 	apiToken: string,
 	assetsManifest?: Record<string, { hash: string; size: number }>,
 	compatibilityFlags?: string[],
+	deployEnv?: { vars?: Record<string, string>; secrets?: Record<string, string> },
 ): DeployConfig {
 	const hasAssets = assetsManifest && Object.keys(assetsManifest).length > 0;
-	const bindings = buildWorkerBindings(config, hasAssets) as WorkerBinding[];
+	const secrets = deployEnv?.secrets;
+	const bindings = buildWorkerBindings(config, hasAssets, secrets) as WorkerBinding[];
 
 	return {
 		accountId,
@@ -35,7 +37,9 @@ export function buildDeploymentConfig(
 		workerContent,
 		assets: assetsManifest,
 		bindings: bindings.length > 0 ? bindings : undefined,
-		vars: config.vars,
+		// Platform-injected vars (e.g. the deployed app's BETTER_AUTH_URL) win
+		// over the template's own vars.
+		vars: { ...config.vars, ...deployEnv?.vars },
 	};
 }
 

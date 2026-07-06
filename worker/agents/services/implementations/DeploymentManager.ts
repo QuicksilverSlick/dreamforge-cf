@@ -40,6 +40,13 @@ export interface DeploymentManagerOptions {
     getKnownResources?: () => Promise<KnownResources | undefined>;
     /** Persists ids CREATED this deploy, so the next recreation can reuse them. */
     onResourcesProvisioned?: (ids: KnownResources) => Promise<void>;
+    /**
+     * Resolves the vars + secrets to upload with the DEPLOYED (dispatch) worker
+     * — the auth secret and the exact prod origin for the D1 template. Derived
+     * DO-side (only the agent has appId + projectName + SECRETS_ENCRYPTION_KEY);
+     * callback-style for the memoised-singleton freeze reason.
+     */
+    getDeployEnv?: () => Promise<{ vars?: Record<string, string>; secrets?: Record<string, string> } | undefined>;
     /** Optional logger; falls back to the sandbox client's own logger via console-style methods if omitted. */
     logger?: StructuredLogger;
 }
@@ -218,21 +225,25 @@ export class DeploymentManager implements IDeploymentManager {
         token?: string;
         metadata?: Record<string, unknown>;
     }): Promise<{ deployedUrl?: string; error?: string }> {
-        const { sandboxClient, getSessionId, logger } = this.options;
-
-        // `target`/`token`/`metadata` are upstream surfaces for the
-        // user-token deployment path. The fork's sandbox client takes only
-        // the instance id and uses Workers env credentials; per-call target
-        // selection will land alongside the behavior port that needs it.
-        void options;
+        const { sandboxClient, getSessionId, getDeployEnv, logger } = this.options;
 
         const sessionId = getSessionId();
         if (!sessionId) {
             return { error: 'No sandbox instance to deploy from' };
         }
 
+        // Vars + secrets to ship with the deployed worker (auth secret + prod
+        // origin for the D1 template; undefined otherwise). `options.token` is
+        // the future CF-OAuth user-token surface — threaded so the signature is
+        // final, but the sandbox client defaults to the platform env token.
+        const deployEnv = await getDeployEnv?.();
+
         try {
-            const result = await sandboxClient.deployToCloudflareWorkers(sessionId);
+            const result = await sandboxClient.deployToCloudflareWorkers(sessionId, {
+                vars: deployEnv?.vars,
+                secrets: deployEnv?.secrets,
+                token: options?.token,
+            });
             if (!result.success) {
                 return { error: result.error ?? result.message ?? 'Cloudflare deploy failed' };
             }

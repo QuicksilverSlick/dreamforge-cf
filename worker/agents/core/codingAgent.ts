@@ -87,6 +87,8 @@ import {
 } from '../../api/websocketTypes';
 import { PreviewType, TemplateDetails, TemplateFile, type GitHubPushRequest, type KnownResources } from '../../services/sandbox/sandboxTypes';
 import { D1_AUTH_TEMPLATE_NAME } from 'shared/constants/templates';
+import { deriveBetterAuthSecret } from '../../utils/betterAuthSecret';
+import { buildUserWorkerUrl } from '../../utils/urls';
 import type { GitHubExportResult } from '../../services/github/types';
 import { WebSocketMessageResponses } from '../constants';
 import { AppService } from '../../database';
@@ -180,6 +182,7 @@ export class CodeGeneratorAgent
                 getKnownResources: () => this.readKnownResources(),
                 onResourcesProvisioned: (ids) => this.persistResources(ids),
                 getLocalEnvVars: () => this.buildContainerEnv(),
+                getDeployEnv: () => this.buildDeployEnv(),
                 logger: this.logger(),
             });
         }
@@ -655,24 +658,28 @@ export class CodeGeneratorAgent
         const appId = this.getAgentId();
         if (!appId) return undefined;
         return {
-            BETTER_AUTH_SECRET: await this.deriveBetterAuthSecret(appId),
+            BETTER_AUTH_SECRET: await deriveBetterAuthSecret(this.env.SECRETS_ENCRYPTION_KEY, appId),
         };
     }
 
-    /** HKDF-SHA256(SECRETS_ENCRYPTION_KEY, salt=appId) → 32-byte hex. One-way; per-app. */
-    private async deriveBetterAuthSecret(appId: string): Promise<string> {
-        const master = this.env.SECRETS_ENCRYPTION_KEY;
-        if (!master || master.length < 32) {
-            throw new Error('SECRETS_ENCRYPTION_KEY must be set (>=32 chars) to derive the app auth secret');
+    /**
+     * The vars + secrets shipped to the DEPLOYED worker for the D1 flagship
+     * template. Unlike the preview env, the serving host IS known at deploy
+     * time (`<projectName>.<previewDomain>` = the dispatch script name), so
+     * BETTER_AUTH_URL can be set exactly. The secret is the SAME HKDF
+     * derivation as the preview, so sessions survive the preview → prod jump.
+     * Returns undefined for non-D1 templates (deploy env unchanged).
+     */
+    private async buildDeployEnv(): Promise<{ vars?: Record<string, string>; secrets?: Record<string, string> } | undefined> {
+        if (this.state.templateName !== D1_AUTH_TEMPLATE_NAME) {
+            return undefined;
         }
-        const enc = new TextEncoder();
-        const key = await crypto.subtle.importKey('raw', enc.encode(master), 'HKDF', false, ['deriveBits']);
-        const bits = await crypto.subtle.deriveBits(
-            { name: 'HKDF', hash: 'SHA-256', salt: enc.encode(appId), info: enc.encode('better-auth-secret') },
-            key,
-            256,
-        );
-        return Array.from(new Uint8Array(bits)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        const appId = this.getAgentId();
+        if (!appId || !this.state.projectName) return undefined;
+        return {
+            vars: { BETTER_AUTH_URL: buildUserWorkerUrl(this.env, this.state.projectName) },
+            secrets: { BETTER_AUTH_SECRET: await deriveBetterAuthSecret(this.env.SECRETS_ENCRYPTION_KEY, appId) },
+        };
     }
 
     protected async saveToDatabase() {
