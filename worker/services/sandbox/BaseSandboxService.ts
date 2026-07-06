@@ -26,6 +26,7 @@ import {
     DeploymentResult,
     BootstrapResponse,
     KnownResources,
+    DeployOptions,
 
     GetLogsResponse,
     ListInstancesResponse,
@@ -214,7 +215,7 @@ import { FileOutputType } from 'worker/agents/schemas';
      * Deploy instance to Cloudflare Workers
      * Returns: { success: boolean, message: string, deployedUrl?: string, deploymentId?: string, error?: string }
      */
-    abstract deployToCloudflareWorkers(instanceId: string): Promise<DeploymentResult>;
+    abstract deployToCloudflareWorkers(instanceId: string, deployOptions?: DeployOptions): Promise<DeploymentResult>;
   
     // ==========================================
     // GITHUB INTEGRATION (Required)

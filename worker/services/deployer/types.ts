@@ -85,6 +85,10 @@ export interface WorkerMetadata {
 	vars?: Record<string, string>;
 	migrations?: DurableObjectMigration;
 	exported_handlers?: string[]; // For Durable Object class exports
+	// Binding types whose values are inherited from the currently-deployed
+	// worker when omitted from this upload — so a redeploy that doesn't resend
+	// secret_text bindings doesn't wipe them.
+	keep_bindings?: string[];
 }
 
 /**
@@ -112,6 +116,7 @@ export interface WorkerBinding {
 	namespace_id?: string; // For KV namespaces
 	database_id?: string; // For D1 databases
 	bucket_name?: string; // For R2 buckets
+	text?: string; // For secret_text / plain_text bindings
 }
 
 /**

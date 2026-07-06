@@ -18,6 +18,7 @@ import {
     BootstrapResponseSchema,
     BootstrapRequest,
     KnownResources,
+    DeployOptions,
     GetInstanceResponseSchema,
     BootstrapStatusResponseSchema,
     WriteFilesResponseSchema,
@@ -203,8 +204,8 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
      * @param instanceId The ID of the runner instance to deploy
      * @param credentials Optional Cloudflare deployment credentials
      */
-    async deployToCloudflareWorkers(instanceId: string): Promise<DeploymentResult> {
-        return this.makeRequest(`/instances/${instanceId}/deploy`, 'POST', DeploymentResultSchema);
+    async deployToCloudflareWorkers(instanceId: string, deployOptions?: DeployOptions): Promise<DeploymentResult> {
+        return this.makeRequest(`/instances/${instanceId}/deploy`, 'POST', DeploymentResultSchema, deployOptions ?? undefined);
     }
 
     /**
