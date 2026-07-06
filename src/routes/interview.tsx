@@ -71,7 +71,9 @@ export default function InterviewPage() {
         // The session id lets the builder load the full structured spec
         // (stories, acceptance criteria, capability flags), not just the brief.
         const sessionParam = interviewSessionId ? `&interviewSession=${encodeURIComponent(interviewSessionId)}` : '';
-        navigate(`/chat/new?query=${encodeURIComponent(enhancedQuery)}&agentMode=${encodeURIComponent(agentMode)}${sessionParam}${imageParam}`);
+        // `fromPrompt` marks the navigation as in-app so /chat/new auto-starts
+        // without the external-link confirmation gate.
+        navigate(`/chat/new?query=${encodeURIComponent(enhancedQuery)}&agentMode=${encodeURIComponent(agentMode)}${sessionParam}${imageParam}`, { state: { fromPrompt: true } });
     }, [navigate, agentMode, imagesParam]);
 
     const applyState = useCallback((data: InterviewStateData) => {
