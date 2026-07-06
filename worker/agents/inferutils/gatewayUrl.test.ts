@@ -120,4 +120,52 @@ describe('getConfigurationForModel — positive coupling (decryptable token)', (
         expect(cfg.keySource).toBe('platform');
         expect(cfg.baseURL).toBe('https://gw.example.com/plat/compat');
     });
+
+    it('runtime user key wins over cf-gateway and routes the PLATFORM gateway (never the user URL)', async () => {
+        // Adapted from upstream d8a2526e: a caller-supplied credential must not
+        // change WHOSE gateway the request is routed to. Runtime keys are the
+        // fork's only request-supplied credential; even with a decryptable user
+        // token + selected gateway present, they stay on the platform gateway
+        // with the wholesaling header — only 'cf-gateway' rides the user URL.
+        const blob = await blobFor('u1', Date.now() + 3_600_000);
+        const cfg = await getConfigurationForModel(
+            'openai/gpt-4o', cfEnv, 'u1', { openai: 'user-runtime-key-abcdef123456' }, true, blob, gateway,
+        );
+        expect(cfg.keySource).toBe('runtime');
+        expect(cfg.apiKey).toBe('user-runtime-key-abcdef123456');
+        expect(cfg.baseURL).not.toContain(USER_GW_HOST);
+        expect(cfg.baseURL).toBe('https://gw.example.com/plat/compat');
+        expect(cfg.defaultHeaders?.['cf-aig-authorization']).toBe('Bearer platform-gateway-token-xxxxxxxx');
+    });
+});
+
+describe('buildGatewayUrl — user gateway origin pinning (upstream d8a2526e)', () => {
+    // The user-gateway branch is the fork's only user-linked base URL. Its
+    // origin must be structurally unforgeable: whatever the stored account id
+    // or gateway slug contains, the request may only ever go to
+    // gateway.ai.cloudflare.com — a credential can never be redirected to an
+    // attacker-controlled host via a poisoned D1 gateway row.
+    const PINNED_ORIGIN = `https://${USER_GW_HOST}`;
+    const hostileGateways: Array<[string, { accountId: string; gatewaySlug: string }]> = [
+        ['path traversal', { accountId: '../../evil', gatewaySlug: 'gw' }],
+        ['embedded authority', { accountId: 'acct@evil.com', gatewaySlug: 'gw' }],
+        ['scheme smuggling', { accountId: 'https://evil.com', gatewaySlug: 'gw' }],
+        ['query + fragment injection', { accountId: 'acct', gatewaySlug: 'gw?x=1#f' }],
+        ['backslash separators', { accountId: 'acct\\evil.com', gatewaySlug: 'gw' }],
+        ['protocol-relative', { accountId: '', gatewaySlug: '//evil.com' }],
+    ];
+
+    it.each(hostileGateways)('stays on the pinned origin: %s', async (_label, gw) => {
+        const url = await buildGatewayUrl({} as Env, undefined, gw);
+        expect(new URL(url).origin).toBe(PINNED_ORIGIN);
+    });
+
+    it('encodes account and slug as single path segments (no path/query rewriting)', async () => {
+        const url = await buildGatewayUrl({} as Env, undefined, { accountId: 'a/b', gatewaySlug: 'c?d' });
+        const parsed = new URL(url);
+        expect(parsed.origin).toBe(PINNED_ORIGIN);
+        expect(parsed.pathname).toBe('/v1/a%2Fb/c%3Fd/compat');
+        expect(parsed.search).toBe('');
+        expect(parsed.hash).toBe('');
+    });
 });

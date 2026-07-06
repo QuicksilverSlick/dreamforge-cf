@@ -174,7 +174,7 @@ Just reply with the corrected SEARCH/REPLACE blocks in this format:
 
 const userPromptFormatter = (user_prompt: string, query: string, file: FileOutputType, previousFiles?: FileOutputType[], currentPhase?: PhaseConceptType, issues?: string[]) => {
     const variables: Record<string, string> = {
-        query,
+        query: PROMPT_UTILS.sanitizeUserQueryForPrompt(query),
         previousFiles: previousFiles ? PROMPT_UTILS.serializeFiles(previousFiles, CodeSerializerType.SIMPLE) : '',
         filePath: file.filePath,
         filePurpose: file.filePurpose,

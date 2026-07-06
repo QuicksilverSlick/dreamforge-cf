@@ -129,7 +129,15 @@ export type InferenceMetadata = {
 export type InferenceRuntimeOverrides = {
     /** Provider API keys (BYOK) keyed by provider id, e.g. "openai" -> key. */
     userApiKeys?: Record<string, string>;
-    /** Optional AI gateway override (baseUrl + token). */
+    /**
+     * Optional AI gateway override (baseUrl + token). Deliberately NOT
+     * consumed anywhere in the fork: inference routing is derived solely from
+     * `keySource` in `getConfigurationForModel`, which couples the base URL to
+     * key ownership. Any future consumer MUST preserve that coupling (upstream
+     * d8a2526e): a user-supplied baseUrl may only ever be paired with the
+     * user's own credentials — never a platform env key — and must be a
+     * well-formed https URL, or the platform secret leaks to the override host.
+     */
     aiGatewayOverride?: { baseUrl: string; token: string };
 };
 

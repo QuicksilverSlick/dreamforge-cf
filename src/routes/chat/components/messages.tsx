@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeExternalLinks from 'rehype-external-links';
+import { SAFE_MARKDOWN_COMPONENTS } from './markdown-components';
 import { LoaderCircle, Check, AlertTriangle, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
@@ -199,7 +200,13 @@ export function Markdown({ children, className, ...props }: MarkdownProps) {
 		>
 			<ReactMarkdown
 				remarkPlugins={[remarkGfm]}
-				rehypePlugins={[[rehypeExternalLinks, { target: '_blank' }]]}
+				rehypePlugins={[
+					[
+						rehypeExternalLinks,
+						{ target: '_blank', rel: ['noopener', 'noreferrer', 'nofollow'] },
+					],
+				]}
+				components={SAFE_MARKDOWN_COMPONENTS}
 			>
 				{children}
 			</ReactMarkdown>

@@ -40,10 +40,10 @@
  *     `InferenceContext` shape: it does NOT carry `abortSignal`,
  *     `runtimeOverrides`, `userApiToken`, or `onUsageConsumed`. Those
  *     fields land when the fork's `infer()` wires them through.
- *   - `getBootstrapCommands()` does not call
- *     `validateAndCleanBootstrapCommands` (not in the fork); it returns
- *     the raw `state.commandsHistory` array. Cleanup lands with
- *     sub-slice C's `saveExecutedCommands`.
+ *   - `getBootstrapCommands()` and `saveExecutedCommands()` run the
+ *     command history through `validateAndCleanBootstrapCommands`, so
+ *     only whitelisted package-management commands persist in state and
+ *     reach the generated `.bootstrap.js`.
  *   - `deployToSandbox` / `deployToCloudflare` route through fork's
  *     narrower `DeploymentManager` interface (just `deployToSandbox` /
  *     `deployToCloudflare`); the upstream callback bag and
@@ -119,7 +119,7 @@ import { SimpleCodeGenerationOperation } from '../../operations/SimpleCodeGenera
 import { ImageGenerationOperation, type GeneratedImageResult } from '../../operations/ImageGeneration';
 import type { ImageGenerationRequest } from '../../services/interfaces/ICodingAgent';
 import { fixProjectIssues, type FileFetcher } from '../../../services/code-fixer';
-import { looksLikeCommand } from '../../utils/common';
+import { looksLikeCommand, validateAndCleanBootstrapCommands } from '../../utils/common';
 import { ModelConfigService } from '../../../database/services/ModelConfigService';
 import { AGENT_CONFIG } from '../../inferutils/config';
 import { ImageType, uploadImage } from '../../../utils/images';
@@ -1369,7 +1369,8 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
      * Execute a batch of sandbox commands in chunks, retrying failed
      * install commands via the project-setup assistant when
      * `shouldRetry` is set. Lifted from the fork's retired `SimpleCodeGeneratorAgent`;
-     * successful commands are appended to `state.commandsHistory`.
+     * only sandbox-successful commands are persisted, via
+     * `saveExecutedCommands`.
      */
     protected async executeCommands(
         commands: string[],
@@ -1503,9 +1504,36 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             this.logger.info(`All commands executed successfully: ${successfulCommands.join(', ')}`);
         }
 
+        // Only sandbox-successful commands are persisted. Saving requested commands
+        // unconditionally would let a command that failed here still be embedded in the
+        // bootstrap history and re-run on a user's machine after export (VEC-C).
+        this.saveExecutedCommands(successfulCommands);
+    }
+
+    /**
+     * Merge newly executed commands into `state.commandsHistory`,
+     * keeping only validated, deduplicated package-management commands
+     * capped at `MAX_BOOTSTRAP_COMMANDS`. The history is embedded in the
+     * exported `.bootstrap.js` and re-run on the user's machine after
+     * clone, so anything outside the whitelist must never persist.
+     */
+    protected saveExecutedCommands(commands: string[]): void {
+        const mergedCommands = [...(this.state.commandsHistory ?? []), ...commands];
+        const { validCommands, invalidCommands, deduplicated } =
+            validateAndCleanBootstrapCommands(mergedCommands);
+
+        if (invalidCommands.length > 0 || deduplicated > 0) {
+            this.logger.warn('Bootstrap commands cleaned', {
+                invalidCommands,
+                invalidCount: invalidCommands.length,
+                deduplicatedCount: deduplicated,
+                finalCount: validCommands.length,
+            });
+        }
+
         this.setState({
             ...this.state,
-            commandsHistory: [...(this.state.commandsHistory ?? []), ...successfulCommands],
+            commandsHistory: validCommands,
         });
     }
 
@@ -2243,14 +2271,17 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     /**
-     * Returns the recorded bootstrap commands. Upstream additionally
-     * runs them through `validateAndCleanBootstrapCommands` (not yet in
-     * the fork) — the validate / dedup step lands with sub-slice B's
-     * `saveExecutedCommands`. For now the helper just hands back the
-     * raw list.
+     * Returns the recorded bootstrap commands, validated and cleaned so
+     * only whitelisted package-management commands can reach the
+     * generated `.bootstrap.js`. `saveExecutedCommands` already cleans
+     * on write; re-validating here guards histories persisted before
+     * that gate existed.
      */
     protected getBootstrapCommands(): string[] {
-        return this.state.commandsHistory ?? [];
+        const { validCommands } = validateAndCleanBootstrapCommands(
+            this.state.commandsHistory ?? [],
+        );
+        return validCommands;
     }
 
     // ==========================================
