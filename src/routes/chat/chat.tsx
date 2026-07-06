@@ -8,7 +8,7 @@ import {
 	type ReactElement,
 } from 'react';
 import { ArrowRight, Image as ImageIcon } from 'react-feather';
-import { useParams, useSearchParams, useNavigate } from 'react-router';
+import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router';
 import { MonacoEditor } from '../../components/monaco-editor/monaco-editor';
 import { useAuth } from '@/contexts/auth-context';
 import { CollaborationBar } from './components/collaboration-bar';
@@ -44,14 +44,25 @@ import { SparksUpgradeDialog } from '@/components/billing/sparks-upgrade-dialog'
 import { CreditsBanner } from '@/components/credits-banner';
 import { checkCanSendPrompt, getBackendLimitDialog } from '@/utils/usage-limit-checker';
 import { startCloudflareConnect } from '@/utils/cloudflare-connect';
+import { Button } from '@/components/ui/button';
 
 export default function Chat() {
 	const { chatId: urlChatId } = useParams();
 
 	const [searchParams] = useSearchParams();
+	const location = useLocation();
 	const userQuery = searchParams.get('query');
 	const agentMode = searchParams.get('agentMode') || 'deterministic';
-	
+
+	// Only auto-start a brand-new session when it originated from in-app
+	// navigation (home prompt box and interview finish set `fromPrompt` in
+	// router state). A cold external load of /chat/new?query= requires an
+	// explicit confirmation instead, since the query seeds the agent's system
+	// prompt and the build debits Sparks (CSRF-flavored link crafting).
+	const startedFromInApp =
+		(location.state as { fromPrompt?: boolean } | null)?.fromPrompt === true;
+	const autoStart = urlChatId !== 'new' || startedFromInApp;
+
 	// Extract images from URL params if present
 	const userImages = useMemo(() => {
 		const imagesParam = searchParams.get('images');
@@ -158,12 +169,16 @@ export default function Chat() {
 		// CF-OAuth: free build tier exhausted at creation
 		creationLimitExceeded,
 		clearCreationLimit,
+		// Externally-sourced session start gate
+		awaitingStartConfirmation,
+		confirmStart,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
 		images: userImages,
 		agentMode: agentMode as 'deterministic' | 'smart',
 		interviewSessionId: searchParams.get('interviewSession'),
+		autoStart,
 		onDebugMessage: addDebugMessage,
 	});
 
@@ -659,6 +674,32 @@ export default function Chat() {
 			isRunning,
 			projectStages,
 		});
+	}
+
+	if (awaitingStartConfirmation) {
+		return (
+			<div className="size-full flex items-center justify-center p-6 text-text-primary">
+				<div className="max-w-lg w-full flex flex-col gap-4 rounded-xl border border-border-primary bg-bg-2 p-6">
+					<h1 className="text-lg font-medium">Start building this app?</h1>
+					<p className="text-sm text-text-secondary">
+						This link wants to start a new project with the prompt
+						below. It will use your account and your Sparks — review
+						it before continuing.
+					</p>
+					<div className="rounded-lg border border-border-primary bg-bg-3 p-4 max-h-64 overflow-y-auto">
+						<p className="text-sm text-text-primary whitespace-pre-wrap break-words">
+							{displayQuery}
+						</p>
+					</div>
+					<div className="flex items-center justify-end gap-2">
+						<Button variant="outline" onClick={() => navigate('/')}>
+							Cancel
+						</Button>
+						<Button onClick={confirmStart}>Start building</Button>
+					</div>
+				</div>
+			</div>
+		);
 	}
 
 	return (

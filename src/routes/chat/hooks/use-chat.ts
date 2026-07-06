@@ -12,7 +12,8 @@
 //    down the active connection.
 //  - handleConnectionFailure (useCallback) intentionally captures connectWithRetry
 //    via closure to avoid a definition cycle.
-//  - The mount-init useEffect is intentionally a `[]` ("run once") effect.
+//  - The mount-init useEffect intentionally depends only on startTrigger (the
+//    externally-sourced-session confirmation gate re-arms it exactly once).
 //    Including agentMode, connectWithRetry, urlChatId, etc. would cause a full
 //    re-initialization (state reset + WebSocket reconnect) on every render where
 //    any of those changes.
@@ -79,6 +80,7 @@ export function useChat({
 	images: userImages,
 	agentMode = 'deterministic',
 	interviewSessionId,
+	autoStart = true,
 	onDebugMessage,
 	onTerminalMessage,
 }: {
@@ -87,6 +89,14 @@ export function useChat({
 	images?: ImageAttachment[];
 	agentMode?: 'deterministic' | 'smart';
 	interviewSessionId?: string | null;
+	/**
+	 * Whether a brand-new session may be created automatically on mount.
+	 * In-app navigation (home prompt box, interview finish) sets this true.
+	 * Sessions opened from an external/pasted /chat/new?query= link leave it
+	 * false so the query — which seeds the agent's system prompt and debits
+	 * Sparks — requires an explicit user gesture before it runs.
+	 */
+	autoStart?: boolean;
 	onDebugMessage?: (type: 'error' | 'warning' | 'info' | 'websocket', message: string, details?: string, source?: string, messageType?: string, rawMessage?: unknown) => void;
 	onTerminalMessage?: (log: { id: string; content: string; type: 'command' | 'stdout' | 'stderr' | 'info' | 'error' | 'warn' | 'debug'; timestamp: number; source?: string }) => void;
 }) {
@@ -102,6 +112,17 @@ export function useChat({
 	// Set when agent creation is blocked by the free-tier usage gate (HTTP 429);
 	// chat.tsx turns this into the connect/configure dialog when the flag is on.
 	const [creationLimitExceeded, setCreationLimitExceeded] = useState(false);
+	// Gate for externally-sourced new sessions: true while the init effect is
+	// parked awaiting the user's explicit confirmation to start the build.
+	const [awaitingStartConfirmation, setAwaitingStartConfirmation] = useState(false);
+	const startConfirmedRef = useRef(false);
+	const [startTrigger, setStartTrigger] = useState(0);
+
+	const confirmStart = useCallback(() => {
+		startConfirmedRef.current = true;
+		setAwaitingStartConfirmation(false);
+		setStartTrigger((n) => n + 1);
+	}, []);
 	const [messages, setMessages] = useState<ChatMessage[]>([
 		createAIMessage('main', 'Thinking...', true),
 	]);
@@ -446,6 +467,18 @@ export function useChat({
 						return;
 					}
 
+					// Gate externally-sourced sessions: the query seeds the agent's
+					// system prompt and debits Sparks, so require an explicit user
+					// gesture when the session was not started from in-app navigation.
+					if (!autoStart && !startConfirmedRef.current) {
+						setAwaitingStartConfirmation(true);
+						return;
+					}
+
+					// Prevent duplicate session creation if the effect re-runs
+					// while creation is still streaming.
+					connectionStatus.current = 'connecting';
+
 					// Start new code generation using API client
 					const response = await apiClient.createAgentSession({
 						query: userQuery,
@@ -599,7 +632,9 @@ export function useChat({
 			}
 		}
 		init();
-	}, []);
+		// startTrigger re-arms init exactly once: the gated first run returned
+		// before touching connectionStatus, and confirmStart bumps the trigger.
+	}, [startTrigger]);
 
     // Mount/unmount: enable/disable reconnection and clear pending retries
     useEffect(() => {
@@ -788,5 +823,8 @@ export function useChat({
 		// CF-OAuth: free build tier exhausted at creation (HTTP 429)
 		creationLimitExceeded,
 		clearCreationLimit: () => setCreationLimitExceeded(false),
+		// Externally-sourced session start gate
+		awaitingStartConfirmation,
+		confirmStart,
 	};
 }
