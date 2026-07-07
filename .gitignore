@@ -81,3 +81,4 @@ deploy*.log
 # Local operator-seed credentials (never commit plaintext)
 .seed.json
 *.seed.json
+.cont-spike.env
