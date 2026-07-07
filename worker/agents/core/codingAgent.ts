@@ -90,6 +90,7 @@ import { D1_AUTH_TEMPLATE_NAME } from 'shared/constants/templates';
 import { deriveBetterAuthSecret } from '../../utils/betterAuthSecret';
 import { buildUserWorkerUrl } from '../../utils/urls';
 import { isCfProxyEnabled, mintCfProxyToken } from '../../services/cf-proxy/controller';
+import { ResourceProvisioner } from '../../services/sandbox/resourceProvisioner';
 import type { GitHubExportResult } from '../../services/github/types';
 import { WebSocketMessageResponses } from '../constants';
 import { AppService } from '../../database';
@@ -177,10 +178,12 @@ export class CodeGeneratorAgent
                 },
                 templateName: this.state.templateName,
                 projectName: this.state.projectName,
-                // Callback-style (manager is memoised): reuse the app's recorded
-                // resource ids on every recreation, persist newly-created ones,
-                // and deliver the auth env for the D1 flagship template.
-                getKnownResources: () => this.readKnownResources(),
+                // Callback-style (manager is memoised): resolve the app's
+                // resource ids each deploy — eagerly provisioning the D1 flagship's
+                // database before the container env is built so its proxy token
+                // carries the id — persist newly-created ones, and deliver the
+                // auth env for the D1 flagship template.
+                ensureResourcesProvisioned: () => this.ensureResourcesProvisioned(),
                 onResourcesProvisioned: (ids) => this.persistResources(ids),
                 getLocalEnvVars: () => this.buildContainerEnv(),
                 getDeployEnv: () => this.buildDeployEnv(),
@@ -617,6 +620,46 @@ export class CodeGeneratorAgent
         };
         this.setState({ ...this.state, ...ids });
         return ids;
+    }
+
+    /**
+     * Resolve the resource ids for a deploy, provisioning the flagship
+     * template's per-app D1 EAGERLY when required. Normally this is just
+     * {@link readKnownResources}; for the D1 flagship with the CF proxy enabled
+     * it also creates + records the D1 on the FIRST build — before the container
+     * env is built — so the proxy token minted in {@link buildContainerEnv}
+     * carries the database id. Without it the id is only created later inside
+     * createInstance (one build too late), and the proxy would reject the
+     * container's first remote-binding upload.
+     *
+     * Idempotent (returns the recorded ids once provisioned) and best-effort (a
+     * provisioning failure is logged and swallowed — createInstance still
+     * provisions and the next build's token carries the id — rather than failing
+     * the deploy). createInstance's own provisioner REUSES the id recorded here,
+     * so the database is never created twice.
+     */
+    private async ensureResourcesProvisioned(): Promise<KnownResources | undefined> {
+        const known = await this.readKnownResources();
+        if (this.state.templateName !== D1_AUTH_TEMPLATE_NAME || !isCfProxyEnabled(this.env)) {
+            return known;
+        }
+        if (known?.d1DatabaseId) return known;
+        const appId = this.getAgentId();
+        if (!appId) return known;
+        try {
+            const provisioner = new ResourceProvisioner(this.logger());
+            const result = await provisioner.provisionResource('D1', this.state.projectName);
+            if (result.success && result.resourceId) {
+                await this.persistResources({ d1DatabaseId: result.resourceId });
+                return { ...known, d1DatabaseId: result.resourceId };
+            }
+            this.logger().warn(`Eager D1 provisioning failed for app ${appId}: ${result.error ?? 'unknown error'}`);
+        } catch (error) {
+            this.logger().warn(
+                `Eager D1 provisioning threw for app ${appId}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
+        return known;
     }
 
     /**

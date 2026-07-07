@@ -38,6 +38,17 @@ export interface DeploymentManagerOptions {
      * Callback-style for the same freeze reason as {@link getSessionId}.
      */
     getKnownResources?: () => Promise<KnownResources | undefined>;
+    /**
+     * Resolves the resources to use for this deploy, EAGERLY provisioning any
+     * that must exist before the container env is built — the D1 flagship's
+     * proxy token carries the database id, which is otherwise created a build
+     * too late (inside {@link BaseSandboxService.createInstance}). A superset of
+     * {@link getKnownResources}: it reads the recorded ids and, only when
+     * needed, creates + records the missing one. Preferred over
+     * getKnownResources when present. Idempotent + best-effort; createInstance's
+     * own provisioner REUSES whatever this records (never double-creates).
+     */
+    ensureResourcesProvisioned?: () => Promise<KnownResources | undefined>;
     /** Persists ids CREATED this deploy, so the next recreation can reuse them. */
     onResourcesProvisioned?: (ids: KnownResources) => Promise<void>;
     /**
@@ -83,6 +94,7 @@ export class DeploymentManager implements IDeploymentManager {
             localEnvVars,
             getLocalEnvVars,
             getKnownResources,
+            ensureResourcesProvisioned,
             onResourcesProvisioned,
             logger,
         } = this.options;
@@ -90,8 +102,11 @@ export class DeploymentManager implements IDeploymentManager {
         let sessionId = getSessionId();
 
         // Resolved per-deploy (callbacks stay live on the memoised manager):
-        // the recorded resource ids to reuse, and the container env to seed.
-        const knownResources = (await getKnownResources?.()) ?? undefined;
+        // the resource ids to use — provisioned EAGERLY when the container env
+        // must embed them (the D1 flagship's proxy token) — then the env to seed.
+        // Resolving these before getLocalEnvVars is what lets buildContainerEnv
+        // read the just-provisioned id on the first build.
+        const knownResources = (await (ensureResourcesProvisioned ?? getKnownResources)?.()) ?? undefined;
         const envVars = (await getLocalEnvVars?.()) ?? localEnvVars;
 
         // Record ids CREATED this deploy (empty when everything was reused).
