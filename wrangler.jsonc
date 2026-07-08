@@ -315,6 +315,18 @@
             "pattern": "*app.getdreamforge.com/*",
             "custom_domain": false,
             "zone_id": "157d05cb90f7190794c33e37bef447db"
+        },
+        // Cloudflare-API authorizing proxy (continuity arc, CONT-3A). The sandbox
+        // container points CLOUDFLARE_API_BASE_URL at this hostname; worker/index.ts
+        // Route 0 intercepts it (by exact hostname) before app routing and hands it
+        // to proxyToCloudflareApi. A distinct custom domain — NOT under *.app. so it
+        // does not collide with the preview-app wildcard above. Inert until the
+        // owner sets CF_PROXY_JWT_SECRET + CLOUDFLARE_API_PROXY_URL
+        // (=https://cf-proxy.getdreamforge.com); with those unset the route still
+        // resolves but proxyToCloudflareApi 403s every request.
+        {
+            "pattern": "cf-proxy.getdreamforge.com",
+            "custom_domain": true
         }
     ]
 }
