@@ -117,6 +117,13 @@ export class SandboxSdkClient extends BaseSandboxService {
     private sandbox: SandboxType;
     private metadataCache = new Map<string, InstanceMetadata>();
     /**
+     * In-flight `ensureTemplateExists` promises, keyed by the target. Concurrent
+     * setups of the same template on the shared session would otherwise each
+     * download + write + unzip the same `${templateName}.zip` and race on that
+     * path; sharing one in-flight setup makes them await a single download.
+     */
+    private templateSetupPromises = new Map<string, Promise<void>>();
+    /**
      * Per-instance `ExecutionSession` cache. Keyed by session id — the
      * instance id for the main per-instance session, {@link DEFAULT_SESSION_ID}
      * for container-global ops, and `${instanceId}-dev` / `${instanceId}-tunnel`
@@ -243,19 +250,35 @@ export class SandboxSdkClient extends BaseSandboxService {
     /** Write a binary file to the sandbox using small base64 chunks to avoid large control messages. */
     private async writeBinaryFileViaBase64(targetPath: string, data: ArrayBuffer, bytesPerChunk: number = 16 * 1024): Promise<void> {
         const dir = targetPath.includes('/') ? targetPath.slice(0, targetPath.lastIndexOf('/')) : '.';
-        // Ensure directory and clean target file
         await this.safeSandboxExec(`mkdir -p '${dir}'`);
-        await this.safeSandboxExec(`rm -f '${targetPath}'`);
+
+        // Assemble into a UNIQUE temp file, then atomically move it into place.
+        // Writing chunks directly to targetPath with `>>` is not safe under
+        // concurrency: two setups of the same file (e.g. ensureTemplateExists
+        // racing across onConnect / build / resume) interleave each other's
+        // rm + append on the shared path and corrupt the result ("extra bytes at
+        // beginning", growing one chunk per retry). Each writer building its own
+        // temp file and finishing with a single atomic `mv` guarantees the target
+        // is always a complete, single-writer file.
+        const tmpPath = `${targetPath}.${crypto.randomUUID()}.part`;
+        await this.safeSandboxExec(`rm -f '${tmpPath}'`);
 
         const buffer = new Uint8Array(data);
         for (let i = 0; i < buffer.length; i += bytesPerChunk) {
             const chunk = buffer.subarray(i, Math.min(i + bytesPerChunk, buffer.length));
             const base64Chunk = btoa(String.fromCharCode(...chunk));
-            // Append decoded bytes into the target file inside the sandbox
-            const appendResult = await this.safeSandboxExec(`printf '%s' '${base64Chunk}' | base64 -d >> '${targetPath}'`);
+            // Append decoded bytes into the temp file inside the sandbox
+            const appendResult = await this.safeSandboxExec(`printf '%s' '${base64Chunk}' | base64 -d >> '${tmpPath}'`);
             if (appendResult.exitCode !== 0) {
-                throw new Error(`Failed to append to ${targetPath}: ${appendResult.stderr}`);
+                await this.safeSandboxExec(`rm -f '${tmpPath}'`);
+                throw new Error(`Failed to append to ${tmpPath}: ${appendResult.stderr}`);
             }
+        }
+
+        const moveResult = await this.safeSandboxExec(`mv -f '${tmpPath}' '${targetPath}'`);
+        if (moveResult.exitCode !== 0) {
+            await this.safeSandboxExec(`rm -f '${tmpPath}'`);
+            throw new Error(`Failed to finalize ${targetPath}: ${moveResult.stderr}`);
         }
     }
 
@@ -356,18 +379,34 @@ export class SandboxSdkClient extends BaseSandboxService {
         return zipData;
     }
 
-    private async ensureTemplateExists(templateName: string, downloadDir?: string, isInstance: boolean = false) {
+    private async ensureTemplateExists(templateName: string, downloadDir?: string, isInstance: boolean = false): Promise<void> {
+        // Dedup concurrent setups of the same template on the shared session:
+        // onConnect / build / resume all call this, and racing downloads+writes
+        // corrupt the shared zip. Share one in-flight setup keyed by the target.
+        const key = `${templateName}|${downloadDir ?? ''}|${isInstance ? 'instance' : 'default'}`;
+        const inFlight = this.templateSetupPromises.get(key);
+        if (inFlight) {
+            return inFlight;
+        }
+        const promise = this.doEnsureTemplateExists(templateName, downloadDir, isInstance).finally(() => {
+            this.templateSetupPromises.delete(key);
+        });
+        this.templateSetupPromises.set(key, promise);
+        return promise;
+    }
+
+    private async doEnsureTemplateExists(templateName: string, downloadDir?: string, isInstance: boolean = false): Promise<void> {
         if (!await this.checkTemplateExists(templateName)) {
             // Download and extract template
             this.logger.info(`Template doesnt exist, Downloading template from: ${templateName}`);
-            
+
             const zipData = await this.downloadTemplate(templateName, downloadDir);
             // Stream zip to sandbox in safe base64 chunks and write directly as binary
             await this.writeBinaryFileViaBase64(`${templateName}.zip`, zipData);
             this.logger.info(`Wrote zip file to sandbox in chunks: ${templateName}.zip`);
-            
+
             const setupResult = await this.safeSandboxExec(`unzip -o -q ${templateName}.zip -d ${isInstance ? '.' : templateName}`);
-        
+
             if (setupResult.exitCode !== 0) {
                 throw new Error(`Failed to download/extract template: ${setupResult.stderr}`);
             }
