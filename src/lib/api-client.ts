@@ -11,6 +11,8 @@ import type{
 	FavoriteToggleData,
 	CreateAppData,
 	UpdateAppVisibilityData,
+	DatabaseRestoreInfo,
+	DatabaseRestoreResult,
 	AppDeleteData,
 	AppDetailsData,
 	AppStarToggleData,
@@ -564,6 +566,32 @@ class ApiClient {
 			{
 				method: 'PUT',
 				body: { visibility },
+			},
+		);
+	}
+
+	/**
+	 * Whether this app has a restorable per-app D1, and the Time Travel window
+	 * (continuity arc, CONT-4). Owner-only.
+	 */
+	async getAppDatabaseRestoreInfo(appId: string): Promise<ApiResponse<DatabaseRestoreInfo>> {
+		return this.request<DatabaseRestoreInfo>(`/api/apps/${appId}/database/restore-info`);
+	}
+
+	/**
+	 * Restore the app's per-app D1 to a point in time (`timestamp`) or undo a
+	 * prior restore (`bookmark` = the previousBookmark it returned). Owner-only,
+	 * never Spark-metered.
+	 */
+	async restoreAppDatabase(
+		appId: string,
+		params: { timestamp?: string; bookmark?: string },
+	): Promise<ApiResponse<DatabaseRestoreResult>> {
+		return this.request<DatabaseRestoreResult>(
+			`/api/apps/${appId}/database/restore`,
+			{
+				method: 'POST',
+				body: params,
 			},
 		);
 	}

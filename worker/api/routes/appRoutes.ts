@@ -1,4 +1,5 @@
 import { AppController } from '../controllers/apps/controller';
+import { AppDatabaseController } from '../controllers/apps/databaseController';
 import { AppViewController } from '../controllers/appView/controller';
 import { Hono } from 'hono';
 import { AppEnv } from '../../types/appenv';
@@ -64,7 +65,13 @@ export function setupAppRoutes(app: Hono<AppEnv>): void {
 
     // Delete app - OWNER ONLY
     appRouter.delete('/:id', setAuthLevel(AuthConfig.ownerOnly), adaptController(AppController, AppController.deleteApp));
-    
+
+    // Per-app D1 Time Travel restore (continuity arc, CONT-4) - OWNER ONLY.
+    // The only path that restores an app's database; there is no agent code
+    // path, so the AI never auto-restores. Never Spark-metered.
+    appRouter.get('/:id/database/restore-info', setAuthLevel(AuthConfig.ownerOnly), adaptController(AppDatabaseController, AppDatabaseController.getRestoreInfo));
+    appRouter.post('/:id/database/restore', setAuthLevel(AuthConfig.ownerOnly), adaptController(AppDatabaseController, AppDatabaseController.restore));
+
     // Mount the app router under /api/apps
     app.route('/api/apps', appRouter);
 }
