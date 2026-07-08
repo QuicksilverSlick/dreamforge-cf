@@ -274,6 +274,15 @@ export class CodeGeneratorAgent
 
         await this.gitInit();
 
+        // The agents runtime does not strictly guarantee onStart() has finished
+        // before this RPC runs; a lost race left this.behavior unset and threw
+        // "Cannot read properties of undefined (reading 'initialize')", failing
+        // code generation. Construct it here if needed — idempotent with the
+        // onStart construction.
+        if (!this.behavior) {
+            this.constructBehaviorAndObjective();
+        }
+
         await this.behavior.initialize({
             ...initArgs,
             sandboxSessionId,
@@ -289,19 +298,13 @@ export class CodeGeneratorAgent
     }
 
     /**
-     * Called every time the agent is started or re-started.
+     * Construct the project objective and the coding behavior from bootstrap
+     * props (falling back to persisted state, then defaults). Called from both
+     * onStart() and, defensively, initialize() — see the race note there. The
+     * agentic behavior's build() currently routes through phasic (see
+     * agentic.ts); phasic is the default.
      */
-    async onStart(props?: Record<string, unknown> | undefined): Promise<void> {
-        const migratedState = StateMigration.migrateCommon(this.state);
-        if (migratedState) {
-            this.setState(migratedState);
-        }
-
-        this.logger().info(
-            `Agent ${this.getAgentId()} session: ${this.state.sessionId} onStart`,
-            { props },
-        );
-
+    private constructBehaviorAndObjective(props?: Record<string, unknown>): void {
         const agentProps = props as AgentBootstrapProps | undefined;
         const behaviorType: BehaviorType =
             agentProps?.behaviorType ?? this.state.behaviorType ?? 'phasic';
@@ -312,11 +315,6 @@ export class CodeGeneratorAgent
         // behavior — wire it up first so behaviors can call into it.
         this.objective = this.createObjective(projectType);
 
-        // Behavior factory. PhasicCodingBehavior and AgenticCodingBehavior
-        // structurally satisfy `ICodingBehavior<TState>`. The phasic
-        // behavior drives the live phase state machine; the agentic
-        // behavior's `build()` is a documented stub that routes through
-        // phasic until the agentic loop is ported (see agentic.ts).
         if (behaviorType === 'phasic') {
             this.behavior = new PhasicCodingBehavior(
                 this as AgentInfrastructure<PhasicState>,
@@ -333,6 +331,23 @@ export class CodeGeneratorAgent
             behaviorType,
             projectType,
         });
+    }
+
+    /**
+     * Called every time the agent is started or re-started.
+     */
+    async onStart(props?: Record<string, unknown> | undefined): Promise<void> {
+        const migratedState = StateMigration.migrateCommon(this.state);
+        if (migratedState) {
+            this.setState(migratedState);
+        }
+
+        this.logger().info(
+            `Agent ${this.getAgentId()} session: ${this.state.sessionId} onStart`,
+            { props },
+        );
+
+        this.constructBehaviorAndObjective(props);
 
         // Ensure the per-app git repo exists on every wake-up — idempotent and
         // CHEAP (just writes the initial refs; NO baseline commit), so it never
