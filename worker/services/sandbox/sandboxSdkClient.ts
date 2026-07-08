@@ -124,6 +124,17 @@ export class SandboxSdkClient extends BaseSandboxService {
      */
     private templateSetupPromises = new Map<string, Promise<void>>();
     /**
+     * The container env vars (from buildContainerEnv: BETTER_AUTH_SECRET and, for
+     * the D1 flagship, CLOUDFLARE_API_BASE_URL + the proxy token) set via
+     * `sandbox.setEnvVars`. The SDK only injects these into its own DEFAULT
+     * session, but our dev-server / instance / tunnel sessions are created
+     * separately via {@link getOrCreateSession} and would otherwise start with an
+     * empty env — so the dev process (`bun run dev`) never sees the proxy vars and
+     * the D1 template's remote-binding session can't reach the proxy (vite never
+     * binds its port; zero proxy calls). Kept here so those sessions inherit them.
+     */
+    private containerEnvVars: Record<string, string> = {};
+    /**
      * Per-instance `ExecutionSession` cache. Keyed by session id — the
      * instance id for the main per-instance session, {@link DEFAULT_SESSION_ID}
      * for container-global ops, and `${instanceId}-dev` / `${instanceId}-tunnel`
@@ -182,7 +193,16 @@ export class SandboxSdkClient extends BaseSandboxService {
     private async getOrCreateSession(sessionId: string, cwd: string): Promise<ExecutionSession> {
         try {
             this.logger.info('Creating new sandbox session', { sessionId, cwd });
-            return await this.getSandbox().createSession({ id: sessionId, cwd });
+            // Pass the container env explicitly: sessions created here do NOT
+            // inherit `sandbox.setEnvVars` (only the SDK's default session does),
+            // so without this the dev-server session's `bun run dev` would run with
+            // no CLOUDFLARE_API_BASE_URL / proxy token and the D1 remote-binding
+            // session would fail before vite binds its port.
+            return await this.getSandbox().createSession({
+                id: sessionId,
+                cwd,
+                ...(Object.keys(this.containerEnvVars).length > 0 ? { env: this.containerEnvVars } : {}),
+            });
         } catch (error) {
             this.logger.info('Sandbox session already exists, retrieving it', {
                 sessionId,
@@ -1182,9 +1202,13 @@ export class SandboxSdkClient extends BaseSandboxService {
     async createInstance(templateName: string, projectName: string, webhookUrl?: string, localEnvVars?: Record<string, string>, knownResources?: KnownResources): Promise<BootstrapResponse> {
         try {
             const sandbox = this.getSandbox();
-            // Set environment variables FIRST, before any other operations
+            // Set environment variables FIRST, before any other operations —
+            // and stash them so the dev-server / instance sessions created later
+            // via getOrCreateSession inherit them (setEnvVars only reaches the
+            // SDK's own default session).
             if (localEnvVars && Object.keys(localEnvVars).length > 0) {
                 this.logger.info('Configuring environment variables', { envVars: Object.keys(localEnvVars) });
+                this.containerEnvVars = { ...this.containerEnvVars, ...localEnvVars };
                 await sandbox.setEnvVars(localEnvVars);
             }
             if (env.ALLOCATION_STRATEGY === 'one_to_one') {
