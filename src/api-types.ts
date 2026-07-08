@@ -31,6 +31,8 @@ export type {
   CreateAppData,
   UpdateAppVisibilityData,
   AppDeleteData,
+  DatabaseRestoreInfo,
+  DatabaseRestoreResult,
   AppWithUserAndStats
 } from 'worker/api/controllers/apps/types';
 

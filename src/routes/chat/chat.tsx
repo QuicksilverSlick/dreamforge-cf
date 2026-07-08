@@ -23,6 +23,7 @@ import { PreviewIframe } from './components/preview-iframe';
 import { ViewModeSwitch } from './components/view-mode-switch';
 import { DebugPanel, type DebugMessage } from './components/debug-panel';
 import { DeploymentControls } from './components/deployment-controls';
+import { DatabaseRestoreControl } from './components/database-restore-control';
 import { useChat, type FileType } from './hooks/use-chat';
 import { type ModelConfigsData, type BlueprintType, SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
 import { Copy } from './components/copy';
@@ -807,6 +808,7 @@ export default function Chat() {
 											}
 										}}
 									/>
+									<DatabaseRestoreControl appId={app?.id || chatId} canRestore={!isReadOnlyViewer} />
 								</motion.div>
 							)}
 

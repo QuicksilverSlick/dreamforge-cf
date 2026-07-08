@@ -60,6 +60,32 @@ export interface UpdateAppVisibilityData {
 }
 
 /**
+ * Response data for GET /api/apps/:id/database/restore-info (CONT-4).
+ * Tells the client whether the app has a restorable per-app D1 and the
+ * Time Travel window it can restore within.
+ */
+export interface DatabaseRestoreInfo {
+    /** True only for apps with a provisioned per-app D1 (the D1 flagship). */
+    hasDatabase: boolean;
+    databaseName: string | null;
+    retentionDays: number;
+    /** Earliest ISO timestamp the app can be restored to (now − retention). */
+    earliestRestoreAt: string;
+    now: string;
+}
+
+/**
+ * Response data for POST /api/apps/:id/database/restore (CONT-4).
+ */
+export interface DatabaseRestoreResult {
+    restoredToBookmark: string;
+    /** Restore to this bookmark to undo the restore. */
+    previousBookmark: string;
+    message: string;
+    restoredAt: string;
+}
+
+/**
  * Response data for deleteApp
  */
 export interface AppDeleteData {

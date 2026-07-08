@@ -369,7 +369,7 @@ export class AppService extends BaseService {
      */
     async getAppResources(
         appId: string,
-    ): Promise<{ d1DatabaseId: string | null; d1DatabaseName: string | null; kvNamespaceId: string | null } | null> {
+    ): Promise<{ d1DatabaseId: string | null; d1DatabaseName: string | null; kvNamespaceId: string | null; resourcesProvisionedAt: Date | null } | null> {
         if (!appId) {
             return null;
         }
@@ -379,6 +379,7 @@ export class AppService extends BaseService {
                     d1DatabaseId: schema.apps.d1DatabaseId,
                     d1DatabaseName: schema.apps.d1DatabaseName,
                     kvNamespaceId: schema.apps.kvNamespaceId,
+                    resourcesProvisionedAt: schema.apps.resourcesProvisionedAt,
                 })
                 .from(schema.apps)
                 .where(eq(schema.apps.id, appId))
