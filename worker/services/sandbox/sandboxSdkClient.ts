@@ -831,16 +831,37 @@ export class SandboxSdkClient extends BaseSandboxService {
                     // diagnostics must never fail the deploy.
                     try {
                         const logs = await devSession.getProcessLogs(process.id);
-                        this.logger.warn('Dev server output (readiness-timeout diagnostic)', {
+                        this.logger.warn('Dev server supervisor output (readiness-timeout diagnostic)', {
                             instanceId,
                             port,
-                            stdoutTail: logs.stdout?.slice(-4000),
-                            stderrTail: logs.stderr?.slice(-4000),
+                            stdoutTail: logs.stdout?.slice(-2000),
+                            stderrTail: logs.stderr?.slice(-2000),
                         });
                     } catch (logErr) {
                         this.logger.warn('Could not read dev-server process logs for diagnostics', {
                             instanceId,
                             error: logErr instanceof Error ? logErr.message : String(logErr),
+                        });
+                    }
+                    // getProcessLogs above returns the monitor-cli SUPERVISOR
+                    // output (restart events), not the child `bun run dev` stderr
+                    // where the actual crash reason lives. monitor-cli captures the
+                    // child's output per-instance; read it directly.
+                    try {
+                        const childLog = await devSession.exec(
+                            `monitor-cli logs get --instance-id ${instanceId}`,
+                            { timeout: 10000 },
+                        );
+                        this.logger.warn('Dev server CHILD output (monitor-cli logs get)', {
+                            instanceId,
+                            exitCode: childLog.exitCode,
+                            childTail: childLog.stdout?.slice(-6000),
+                            childStderrTail: childLog.stderr?.slice(-1500),
+                        });
+                    } catch (childErr) {
+                        this.logger.warn('Could not read child dev-server logs', {
+                            instanceId,
+                            error: childErr instanceof Error ? childErr.message : String(childErr),
                         });
                     }
                 }
