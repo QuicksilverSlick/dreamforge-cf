@@ -91,6 +91,8 @@ import { deriveBetterAuthSecret } from '../../utils/betterAuthSecret';
 import { buildUserWorkerUrl } from '../../utils/urls';
 import { isCfProxyEnabled, mintCfProxyToken } from '../../services/cf-proxy/controller';
 import { ResourceProvisioner } from '../../services/sandbox/resourceProvisioner';
+import { D1MigrationApplicator } from '../../services/sandbox/d1MigrationApplicator';
+import type { BaseSandboxService } from '../../services/sandbox/BaseSandboxService';
 import type { GitHubExportResult } from '../../services/github/types';
 import { WebSocketMessageResponses } from '../constants';
 import { AppService } from '../../database';
@@ -170,8 +172,9 @@ export class CodeGeneratorAgent
             // still tracks the deploy-time instance id separately.
             const sandboxSessionId =
                 this.state.sandboxSessionOverride || this.state.sessionId || this.getAgentId();
+            const sandboxClient = getSandboxService(sandboxSessionId, this.getAgentId());
             this._deploymentManager = new DeploymentManager({
-                sandboxClient: getSandboxService(sandboxSessionId, this.getAgentId()),
+                sandboxClient,
                 getSessionId: () => this.state.sandboxInstanceId,
                 onSessionIdChange: (id) => {
                     this.setState({ ...this.state, sandboxInstanceId: id });
@@ -187,6 +190,11 @@ export class CodeGeneratorAgent
                 onResourcesProvisioned: (ids) => this.persistResources(ids),
                 getLocalEnvVars: () => this.buildContainerEnv(),
                 getDeployEnv: () => this.buildDeployEnv(),
+                // Platform-side D1 schema application (the container's own
+                // `wrangler d1 migrations apply --remote` is 403'd by the
+                // authorizing proxy, so this is the ONLY path that can put
+                // the template's + AI's migrations into the per-app D1).
+                applyMigrations: (instanceId) => this.applyPendingMigrations(sandboxClient, instanceId),
                 logger: this.logger(),
             });
         }
@@ -738,6 +746,37 @@ export class CodeGeneratorAgent
             }
         }
         return containerEnv;
+    }
+
+    /**
+     * Apply the instance's D1 migrations to the app's remote database. The
+     * database id comes from PLATFORM records (DO state / apps row) — never
+     * from container-controlled files — so migration SQL written inside the
+     * container can only ever run against the app's OWN database, which the
+     * container can already write freely through its remote binding (no new
+     * capability is granted). Covers the template's 0001_init.sql on the
+     * first deploy and AI-generated `drizzle-kit generate` output on later
+     * ones; the bookkeeping seed keeps a user's own out-of-sandbox
+     * `wrangler d1 migrations apply --remote` a no-op.
+     */
+    private async applyPendingMigrations(sandboxClient: BaseSandboxService, instanceId: string): Promise<void> {
+        if (this.state.templateName !== D1_AUTH_TEMPLATE_NAME) return;
+        const known = await this.readKnownResources();
+        const databaseId = known?.d1DatabaseId;
+        if (!databaseId) return;
+        const migrations = await sandboxClient.readMigrationFiles(instanceId);
+        if (migrations.length === 0) return;
+        const applicator = new D1MigrationApplicator(this.logger());
+        const result = await applicator.apply(databaseId, migrations);
+        if (!result.ok) {
+            this.logger().error(
+                `D1 migration apply failed for app ${this.getAgentId()} (db ${databaseId}): ${result.error ?? 'unknown error'}`,
+            );
+        } else if (result.applied.length > 0) {
+            this.logger().info(
+                `Applied D1 migrations to ${databaseId}: ${result.applied.join(', ')}`,
+            );
+        }
     }
 
     /**

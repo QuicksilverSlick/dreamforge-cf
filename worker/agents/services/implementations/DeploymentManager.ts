@@ -52,6 +52,17 @@ export interface DeploymentManagerOptions {
     /** Persists ids CREATED this deploy, so the next recreation can reuse them. */
     onResourcesProvisioned?: (ids: KnownResources) => Promise<void>;
     /**
+     * Applies the instance's D1 migrations (template 0001 + AI-generated) to
+     * the app's remote database. Runs after every successful deploy: the
+     * container cannot apply them itself (its API calls route through the
+     * authorizing proxy, which permits no D1 endpoints), so the platform is
+     * the only party that can. Best-effort — a failure is logged, never
+     * fails the deploy. Callback-style for the memoised-singleton freeze
+     * reason; the owning agent resolves the database id from ITS records,
+     * never from container-controlled files.
+     */
+    applyMigrations?: (instanceId: string) => Promise<void>;
+    /**
      * Resolves the vars + secrets to upload with the DEPLOYED (dispatch) worker
      * — the auth secret and the exact prod origin for the D1 template. Derived
      * DO-side (only the agent has appId + projectName + SECRETS_ENCRYPTION_KEY);
@@ -96,10 +107,26 @@ export class DeploymentManager implements IDeploymentManager {
             getKnownResources,
             ensureResourcesProvisioned,
             onResourcesProvisioned,
+            applyMigrations,
             logger,
         } = this.options;
         const opts = options ?? {};
         let sessionId = getSessionId();
+
+        // Best-effort D1 migration apply, run before every successful return:
+        // covers the bootstrap (template 0001), phase redeploys (AI-generated
+        // migrations written via writeFiles), and backfills apps whose D1
+        // predates platform-side migration application. Never fails a deploy.
+        const runMigrations = async (instanceId: string): Promise<void> => {
+            if (!applyMigrations) return;
+            try {
+                await applyMigrations(instanceId);
+            } catch (error) {
+                logger?.warn(
+                    `applyMigrations failed (non-fatal): ${error instanceof Error ? error.message : String(error)}`,
+                );
+            }
+        };
 
         // Resolved per-deploy (callbacks stay live on the memoised manager):
         // the resource ids to use — provisioned EAGERLY when the container env
@@ -159,6 +186,8 @@ export class DeploymentManager implements IDeploymentManager {
                 }
             }
 
+            await runMigrations(sessionId);
+
             return {
                 deploymentId: sessionId,
                 previewURL: bootstrap.previewURL,
@@ -213,6 +242,7 @@ export class DeploymentManager implements IDeploymentManager {
                         logger?.warn(`writeFiles after self-heal reported failure: ${write.error ?? ''}`);
                     }
                 }
+                await runMigrations(sessionId);
                 return {
                     deploymentId: sessionId,
                     previewURL: fresh.previewURL,
@@ -228,6 +258,8 @@ export class DeploymentManager implements IDeploymentManager {
             throw new Error(`SANDBOX_UNREACHABLE: ${reason}`);
         }
 
+        await runMigrations(sessionId);
+
         return {
             deploymentId: sessionId,
             previewURL: status.previewURL,
@@ -240,11 +272,25 @@ export class DeploymentManager implements IDeploymentManager {
         token?: string;
         metadata?: Record<string, unknown>;
     }): Promise<{ deployedUrl?: string; error?: string }> {
-        const { sandboxClient, getSessionId, getDeployEnv, logger } = this.options;
+        const { sandboxClient, getSessionId, getDeployEnv, applyMigrations, logger } = this.options;
 
         const sessionId = getSessionId();
         if (!sessionId) {
             return { error: 'No sandbox instance to deploy from' };
+        }
+
+        // The dispatched worker binds the SAME per-app D1 as the preview, so a
+        // `db:generate` that was never followed by a preview redeploy must not
+        // ship prod against a stale schema — apply pending migrations first.
+        // Best-effort, same as the sandbox-deploy path.
+        if (applyMigrations) {
+            try {
+                await applyMigrations(sessionId);
+            } catch (error) {
+                logger?.warn(
+                    `applyMigrations before Cloudflare deploy failed (non-fatal): ${error instanceof Error ? error.message : String(error)}`,
+                );
+            }
         }
 
         // Vars + secrets to ship with the deployed worker (auth secret + prod

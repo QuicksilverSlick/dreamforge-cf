@@ -37,6 +37,7 @@ import {
   import { createObjectLogger, StructuredLogger } from '../../logger';
   import { env } from 'cloudflare:workers'
 import { FileOutputType } from 'worker/agents/schemas';
+import { MigrationFile } from './d1MigrationApplicator';
   /**
    * Streaming event for enhanced command execution
    */
@@ -168,6 +169,15 @@ import { FileOutputType } from 'worker/agents/schemas';
      * Returns: { success: boolean, files: [...], errors?: [...], error?: string }
      */
     abstract getFiles(instanceId: string, filePaths?: string[]): Promise<GetFilesResponse>;
+
+    /**
+     * Read the instance's `migrations/*.sql` files (template-shipped and
+     * AI-generated alike) so the PLATFORM can apply them to the app's remote
+     * D1 — the container itself cannot (its API calls route through the
+     * authorizing proxy, which permits no D1 endpoints). Returns [] when the
+     * instance has no migrations directory. Never throws.
+     */
+    abstract readMigrationFiles(instanceId: string): Promise<MigrationFile[]>;
 
     abstract getLogs(instanceId: string): Promise<GetLogsResponse>;
   
