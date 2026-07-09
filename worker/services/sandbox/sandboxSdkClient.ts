@@ -825,6 +825,24 @@ export class SandboxSdkClient extends BaseSandboxService {
                 const isReady = await this.waitForServerReady(instanceId, port, 30000);
                 if (!isReady) {
                     this.logger.warn('Development server did not reach HTTP readiness within timeout; proceeding best-effort', { instanceId, port });
+                    // Surface WHY the port never bound: the dev-server (vite /
+                    // wrangler remote-binding) stderr lives inside the container
+                    // and never reaches the worker tail otherwise. Best-effort —
+                    // diagnostics must never fail the deploy.
+                    try {
+                        const logs = await devSession.getProcessLogs(process.id);
+                        this.logger.warn('Dev server output (readiness-timeout diagnostic)', {
+                            instanceId,
+                            port,
+                            stdoutTail: logs.stdout?.slice(-4000),
+                            stderrTail: logs.stderr?.slice(-4000),
+                        });
+                    } catch (logErr) {
+                        this.logger.warn('Could not read dev-server process logs for diagnostics', {
+                            instanceId,
+                            error: logErr instanceof Error ? logErr.message : String(logErr),
+                        });
+                    }
                 }
             } catch (readinessError) {
                 this.logger.warn(`Error during readiness check for ${instanceId}:`, readinessError);
