@@ -97,8 +97,8 @@ export function compareMigrationNames(a: string, b: string): number {
 
 /**
  * Remove SQL comments for PARSING purposes only (never for execution): `--`
- * line comments (including drizzle's `--> statement-breakpoint`) and
- * `/* ... *​/` block comments would otherwise produce phantom CREATE matches.
+ * line comments (including drizzle's `--> statement-breakpoint`) and block
+ * comments would otherwise produce phantom CREATE matches.
  */
 export function stripSqlComments(sql: string): string {
 	return sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--.*$/gm, '');
