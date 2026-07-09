@@ -35,6 +35,7 @@ import {
     GitHubPushResponseSchema,
 } from './sandboxTypes';
 import { BaseSandboxService } from "./BaseSandboxService";
+import { MigrationFile } from './d1MigrationApplicator';
 import { env } from 'cloudflare:workers'
 import z from 'zod';
 import { FileOutputType } from 'worker/agents/schemas';
@@ -168,6 +169,15 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
         // Build query params if filePaths are provided
         const queryParams = filePaths && filePaths.length > 0 ? `?filePaths=${encodeURIComponent(JSON.stringify(filePaths))}` : '';
         return this.makeRequest(`/instances/${instanceId}/files${queryParams}`, 'GET', GetFilesResponseSchema);
+    }
+
+    /**
+     * The remote runner protocol has no migration-listing endpoint; the
+     * platform-side D1 migration apply is a SandboxSdkClient-only capability.
+     * Returning [] makes the apply a no-op on this path rather than an error.
+     */
+    async readMigrationFiles(_instanceId: string): Promise<MigrationFile[]> {
+        return [];
     }
 
     /**

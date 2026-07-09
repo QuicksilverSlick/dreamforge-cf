@@ -31,6 +31,7 @@ import {
 import { createObjectLogger } from '../../logger';
 import { env } from 'cloudflare:workers'
 import { BaseSandboxService } from './BaseSandboxService';
+import { MigrationFile, isValidMigrationName } from './d1MigrationApplicator';
 
 import { 
     buildDeploymentConfig, 
@@ -1235,6 +1236,47 @@ export class SandboxSdkClient extends BaseSandboxService {
         }
         
         return undefined;
+    }
+
+    /**
+     * Read the instance's `migrations/*.sql` (template-shipped 0001 + any
+     * AI-generated `drizzle-kit generate` output) for the PLATFORM to apply to
+     * the app's remote D1. Only file CONTENT comes from the container — the
+     * target database id is resolved by the caller from platform records, so a
+     * tampered wrangler.jsonc can never redirect the apply at another tenant.
+     */
+    async readMigrationFiles(instanceId: string): Promise<MigrationFile[]> {
+        try {
+            const session = await this.getInstanceSession(instanceId);
+            // Absolute path — a reused session's cwd may have drifted, and the
+            // readFile below is absolute; keep both on the same base.
+            const listing = await session.exec(`ls -1 /workspace/${instanceId}/migrations 2>/dev/null || true`);
+            const names = listing.stdout
+                .split('\n')
+                .map((line) => line.trim())
+                .filter((name) => name.endsWith('.sql'))
+                .sort();
+            const files: MigrationFile[] = [];
+            for (const name of names) {
+                if (!isValidMigrationName(name)) {
+                    this.logger.warn('Skipping migration file with unsafe name', { instanceId, name });
+                    continue;
+                }
+                const file = await session.readFile(`/workspace/${instanceId}/migrations/${name}`);
+                if (!file.success) {
+                    this.logger.warn('Failed to read migration file', { instanceId, name });
+                    continue;
+                }
+                files.push({ name, sql: file.content });
+            }
+            return files;
+        } catch (error) {
+            this.logger.warn('readMigrationFiles failed', {
+                instanceId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+            return [];
+        }
     }
 
     private async fetchDontTouchFiles(templateName: string): Promise<string[]> {
