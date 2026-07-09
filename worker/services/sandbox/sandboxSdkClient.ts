@@ -211,6 +211,15 @@ export class SandboxSdkClient extends BaseSandboxService {
             });
             const existingSession = await this.getSandbox().getSession(sessionId);
 
+            // A session created earlier (by a sibling request / prior op on the
+            // shared container) did NOT receive our container env — createSession's
+            // `env` only applies at creation. Re-apply it so a reused session is
+            // equivalent to a freshly created one (belt-and-suspenders alongside
+            // the per-invocation env on exec/startProcess).
+            if (Object.keys(this.containerEnvVars).length > 0) {
+                await existingSession.setEnvVars(this.containerEnvVars);
+            }
+
             const pwdResult = await existingSession.exec('pwd');
             const actualCwd = pwdResult.stdout.trim();
             if (actualCwd !== cwd) {
@@ -309,8 +318,19 @@ export class SandboxSdkClient extends BaseSandboxService {
     private async executeCommand(instanceId: string, command: string, timeout?: number): Promise<ExecResult> {
         // The instance session's cwd is `/workspace/${instanceId}`, so the
         // command runs in the instance directory without a `cd` prefix.
+        //
+        // The container env (the D1 flagship's CLOUDFLARE_API_* proxy vars +
+        // BETTER_AUTH_SECRET) is applied PER-INVOCATION rather than relying on
+        // the session carrying it: a session obtained via getOrCreateSession may
+        // have been reused ("already exists") without its env being (re)applied,
+        // so setup commands like `db:migrate:remote` would run with no
+        // CLOUDFLARE_API_BASE_URL and never reach the authorizing proxy. Passing
+        // env here guarantees the process environment regardless of session state.
         const session = await this.getInstanceSession(instanceId);
-        return await session.exec(command, { timeout });
+        return await session.exec(command, {
+            timeout,
+            ...(Object.keys(this.containerEnvVars).length > 0 ? { env: this.containerEnvVars } : {}),
+        });
     }
 
     private async getInstanceMetadata(instanceId: string): Promise<InstanceMetadata> {
@@ -778,8 +798,19 @@ export class SandboxSdkClient extends BaseSandboxService {
             // The dev session's cwd is the instance directory, so no `cwd` option
             // is passed (it would otherwise double-nest under the session cwd).
             const devSession = await this.getOrCreateSession(`${instanceId}-dev`, `/workspace/${instanceId}`);
+            // Apply the container env PER-PROCESS. `bun run dev` (and the
+            // @cloudflare/vite-plugin's remote-binding control-plane auth for the
+            // D1 flagship) reads CLOUDFLARE_API_TOKEN / CLOUDFLARE_API_BASE_URL /
+            // CLOUDFLARE_ACCOUNT_ID from the PROCESS environment — not `.dev.vars`.
+            // Relying on the dev session's env is fragile: a reused session starts
+            // without it, so vite can't reach the proxy and never binds its port.
+            // The existing `VITE_LOGGER_TYPE=json` prefix already proves env flows
+            // monitor-cli -> bun -> vite, so a per-process env reaches vite too.
+            const devEnvKeys = Object.keys(this.containerEnvVars);
+            this.logger.info('Starting dev server', { instanceId, port, envKeys: devEnvKeys });
             const process = await devSession.startProcess(
                 `VITE_LOGGER_TYPE=json monitor-cli process start --instance-id ${instanceId} --port ${port} -- bun run dev`,
+                devEnvKeys.length > 0 ? { env: this.containerEnvVars } : undefined,
             );
             this.logger.info('Development server started', { instanceId, processId: process.id });
 
