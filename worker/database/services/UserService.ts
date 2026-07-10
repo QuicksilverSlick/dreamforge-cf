@@ -87,13 +87,16 @@ export class UserService extends BaseService {
         return users[0] || null;
     }
 
+    /**
+     * Stamp `users.lastActiveAt` (the admin console's "Last active" column).
+     * Deliberately does NOT bump `updatedAt` — that field keeps meaning
+     * "profile/state mutation", while this is a pure activity heartbeat fired
+     * (throttled) from the auth middleware.
+     */
     async updateUserActivity(userId: string): Promise<void> {
         await this.database
             .update(schema.users)
-            .set({ 
-                lastActiveAt: new Date(),
-                updatedAt: new Date()
-            })
+            .set({ lastActiveAt: new Date() })
             .where(eq(schema.users.id, userId));
     }
 
