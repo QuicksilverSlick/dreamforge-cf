@@ -22,8 +22,9 @@ import {
 import { AuthResult, AuthUserSession, OAuthUserInfo } from '../../types/auth-types';
 import { generateId } from '../../utils/idGenerator';
 import {
-    AuthUser, 
-    OAuthProvider
+    AuthUser,
+    OAuthProvider,
+    OrgRole
 } from '../../types/auth-types';
 import { mapUserResponse } from '../../utils/authUtils';
 import { createLogger } from '../../logger';
@@ -956,7 +957,7 @@ export class AuthService extends BaseService {
             // stay the exact public payload shape (and activity attribution
             // must never follow the target).
             const { lastActiveAt: _targetLastActiveAt, ...target } = targetRecord;
-            const activeOrg = await this.organizationService.resolveUserDefaultOrg(target.id);
+            const activeOrg = await this.resolveImpersonatedActiveOrg(grant, target.id);
             return {
                 ...target,
                 orgId: activeOrg.orgId,
@@ -972,6 +973,26 @@ export class AuthService extends BaseService {
             });
             return null;
         }
+    }
+
+    /**
+     * The org context for an impersonated request. An explicit switch made
+     * while viewing-as (grant.activeOrgId) wins — but only after re-validating
+     * the TARGET's membership on THIS request (the stored id is never
+     * trusted: a mid-grant removal from the org collapses the view back to
+     * the target's own default org, same discipline as resolveActiveOrg).
+     */
+    private async resolveImpersonatedActiveOrg(
+        grant: { activeOrgId: string | null },
+        targetUserId: string,
+    ): Promise<{ orgId?: string; orgRole?: OrgRole }> {
+        if (grant.activeOrgId) {
+            const membership = await this.organizationService.getMembership(grant.activeOrgId, targetUserId);
+            if (membership) {
+                return { orgId: grant.activeOrgId, orgRole: membership.role };
+            }
+        }
+        return this.organizationService.resolveUserDefaultOrg(targetUserId);
     }
 
     /**

@@ -132,6 +132,34 @@ export class ImpersonationService extends BaseService {
     }
 
     /**
+     * Point the active grant's IMPERSONATED VIEW at a different org. This is
+     * the impersonation analogue of {@link OrganizationService.setActiveOrg}:
+     * an org switch while viewing-as must never touch the operator's real
+     * session row (their own working org survives the impersonation), so the
+     * choice is carried on the grant instead. The caller validates the
+     * TARGET's membership first; the chokepoint re-validates it on every
+     * request, so a stored id never outlives a revoked membership.
+     */
+    async setGrantActiveOrg(sessionId: string, actorId: string, orgId: string): Promise<void> {
+        const grant = await this.resolveActiveGrant(sessionId);
+        if (!grant) {
+            throw new ImpersonationError('No active impersonation session.', 409);
+        }
+        if (grant.actorUserId !== actorId) {
+            throw new ImpersonationError('This impersonation session does not belong to you.', 403);
+        }
+        await this.database
+            .update(schema.impersonationSessions)
+            .set({ activeOrgId: orgId })
+            .where(
+                and(
+                    eq(schema.impersonationSessions.id, grant.id),
+                    eq(schema.impersonationSessions.isRevoked, false),
+                ),
+            );
+    }
+
+    /**
      * Open an impersonation grant. Fail-closed: any pre-existing active grant on
      * this session is superseded, and the new grant + audit row are written in
      * one batch. Guards: actor role permitted, no self-impersonation, target
