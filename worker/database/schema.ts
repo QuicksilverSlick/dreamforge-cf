@@ -186,6 +186,13 @@ export const impersonationSessions = sqliteTable('impersonation_sessions', {
     // false => full-write (human superadmin, minus the hard block-list);
     // true => read-only (mutations structurally 403'd — the agent path default).
     readOnly: integer('read_only', { mode: 'boolean' }).notNull().default(false),
+    // The operator's chosen active org FOR THE IMPERSONATED VIEW. Null =>
+    // default to the target's own current working org (resolveUserDefaultOrg).
+    // Written by switch-org while impersonating (the operator's real session's
+    // currentOrgId must never be touched by an impersonated switch); the
+    // TARGET's membership in this org is re-validated on every request at the
+    // chokepoint — never trusted stored.
+    activeOrgId: text('active_org_id').references(() => organizations.id, { onDelete: 'set null' }),
     // Time-box (see table doc). issuedAt + absoluteExpiresAt are immutable.
     issuedAt: integer('issued_at', { mode: 'timestamp' }).notNull(),
     expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),

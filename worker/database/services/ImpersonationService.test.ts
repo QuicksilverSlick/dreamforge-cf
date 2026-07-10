@@ -318,3 +318,77 @@ describe('ImpersonationService.extend', () => {
         ).rejects.toBeInstanceOf(ImpersonationError);
     });
 });
+
+describe('setGrantActiveOrg', () => {
+    async function insertOrg(id: string, ownerUserId: string): Promise<void> {
+        await env.DB.prepare(
+            `INSERT INTO organizations (id, name, slug, is_personal, owner_user_id) VALUES (?, ?, ?, 0, ?)`,
+        )
+            .bind(id, `Org ${id}`, `slug-${id}`, ownerUserId)
+            .run();
+    }
+
+    it('stores the org choice on the active grant (visible to resolveActiveGrant)', async () => {
+        await insertUser('op', { role: 'superadmin' });
+        await insertUser('target');
+        await insertSession('sess-1', 'op');
+        await insertOrg('org-1', 'target');
+        await insertGrant('g1', {
+            actorUserId: 'op',
+            targetUserId: 'target',
+            sessionId: 'sess-1',
+            expiresAtSec: nowSec() + 600,
+            absoluteExpiresAtSec: nowSec() + 3600,
+        });
+
+        const service = new ImpersonationService(env);
+        await service.setGrantActiveOrg('sess-1', 'op', 'org-1');
+
+        const grant = await service.resolveActiveGrant('sess-1');
+        expect(grant?.activeOrgId).toBe('org-1');
+    });
+
+    it("never touches the operator's own session row", async () => {
+        await insertUser('op', { role: 'superadmin' });
+        await insertUser('target');
+        await insertSession('sess-1', 'op');
+        await insertOrg('org-1', 'target');
+        await insertGrant('g1', {
+            actorUserId: 'op',
+            targetUserId: 'target',
+            sessionId: 'sess-1',
+            expiresAtSec: nowSec() + 600,
+            absoluteExpiresAtSec: nowSec() + 3600,
+        });
+
+        await new ImpersonationService(env).setGrantActiveOrg('sess-1', 'op', 'org-1');
+
+        const row = await env.DB.prepare('SELECT current_org_id FROM sessions WHERE id = ?')
+            .bind('sess-1')
+            .first<{ current_org_id: string | null }>();
+        expect(row?.current_org_id).toBeNull();
+    });
+
+    it('409s with no active grant and 403s for a non-owning actor', async () => {
+        await insertUser('op', { role: 'superadmin' });
+        await insertUser('other', { role: 'superadmin' });
+        await insertUser('target');
+        await insertSession('sess-1', 'op');
+        await insertOrg('org-1', 'target');
+
+        await expect(
+            new ImpersonationService(env).setGrantActiveOrg('sess-1', 'op', 'org-1'),
+        ).rejects.toBeInstanceOf(ImpersonationError);
+
+        await insertGrant('g1', {
+            actorUserId: 'op',
+            targetUserId: 'target',
+            sessionId: 'sess-1',
+            expiresAtSec: nowSec() + 600,
+            absoluteExpiresAtSec: nowSec() + 3600,
+        });
+        await expect(
+            new ImpersonationService(env).setGrantActiveOrg('sess-1', 'other', 'org-1'),
+        ).rejects.toBeInstanceOf(ImpersonationError);
+    });
+});

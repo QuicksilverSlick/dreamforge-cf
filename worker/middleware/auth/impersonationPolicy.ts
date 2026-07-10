@@ -62,6 +62,11 @@ const BLOCK_RULES: readonly BlockRule[] = [
     // Destructive: app deletion (DELETE /api/apps/:id). Sub-paths like
     // /api/apps/:id/star|favorite|visibility are NOT matched (benign).
     { label: 'app deletion', matches: (p) => /^\/api\/apps\/[^/]+$/.test(p) },
+    // Runs a REAL LLM inference billed to the target's credits/BYOK quota.
+    // (Editing a customer's broken model config stays allowed + audited —
+    // the deliberate support-fix path — but spending their money to verify
+    // it does not.)
+    { label: 'model-config test inference', matches: (p) => p === '/api/model-configs/test' },
     // Org structure + membership + consent (create/rename/delete/members/invites)
     { label: 'organization or membership change', matches: underPrefix('/api/orgs') },
     { label: 'accepting an organization invite', matches: (p) => /^\/api\/invites\/[^/]+\/accept$/.test(p) },

@@ -59,6 +59,8 @@ describe('evaluateImpersonationPolicy', () => {
             ['DELETE', '/api/orgs/o1/members/u2'],
             ['POST', '/api/invites/tok/accept'],
             ['POST', '/api/admin/users/u1/impersonate'],
+            // Real inference billed to the target's credits/BYOK quota.
+            ['POST', '/api/model-configs/test'],
         ];
         for (const [method, path] of blocked) {
             expect(evaluateImpersonationPolicy(impersonated, method, path), `${method} ${path}`).not.toBeNull();
@@ -73,6 +75,9 @@ describe('evaluateImpersonationPolicy', () => {
             ['POST', '/api/agent'],
             ['POST', '/api/auth/switch-org'],
             ['POST', '/api/interview/answer'],
+            // The audited support-fix path: EDITING a customer's model config
+            // stays allowed — only the /test inference spend is blocked.
+            ['PUT', '/api/model-configs/blueprint'],
         ];
         for (const [method, path] of allowed) {
             expect(evaluateImpersonationPolicy(impersonated, method, path), `${method} ${path}`).toBeNull();

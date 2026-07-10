@@ -23,6 +23,7 @@ import {
     type OrgInvitationView,
     type OrgMutationContext,
 } from '../../../database/services/OrganizationService';
+import { ImpersonationService } from '../../../database/services/ImpersonationService';
 import { EmailService } from '../../../services/email/EmailService';
 import {
     createTeamBodySchema,
@@ -106,9 +107,39 @@ export class OrgController extends BaseController {
             return OrgController.createErrorResponse<OrgData>('No active session', 400);
         }
         try {
-            const org = await new OrganizationService(env).setActiveOrg(
+            const orgService = new OrganizationService(env);
+            const user = context.user!;
+
+            // Switching orgs WHILE IMPERSONATING re-points the impersonated
+            // VIEW, not the operator's real session: the effective user here is
+            // the TARGET, so setActiveOrg's session UPDATE (WHERE sessionId =
+            // operator's AND userId = target's) could never match — it was a
+            // silent no-op. Carry the choice on the grant instead, gated on the
+            // TARGET's own membership (fail-closed, same shape as setActiveOrg);
+            // the auth chokepoint re-validates that membership every request.
+            if (user.impersonatedBy) {
+                const membership = await orgService.getMembership(body.data.orgId, user.id);
+                if (!membership) {
+                    return OrgController.createErrorResponse<OrgData>(
+                        'The impersonated user is not a member of that organization.',
+                        403,
+                    );
+                }
+                await new ImpersonationService(env).setGrantActiveOrg(
+                    context.sessionId,
+                    user.impersonatedBy,
+                    body.data.orgId,
+                );
+                const org = await orgService.getOrgById(body.data.orgId);
+                if (!org) {
+                    return OrgController.createErrorResponse<OrgData>('Organization not found', 404);
+                }
+                return OrgController.createSuccessResponse({ organization: org });
+            }
+
+            const org = await orgService.setActiveOrg(
                 context.sessionId,
-                context.user!.id,
+                user.id,
                 body.data.orgId,
             );
             return OrgController.createSuccessResponse({ organization: org });
