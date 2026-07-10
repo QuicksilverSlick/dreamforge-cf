@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/auth-context';
+import { apiClient } from '@/lib/api-client';
 import { LoginModal } from './login-modal';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import {
@@ -168,13 +169,30 @@ export function AuthButton({ className }: AuthButtonProps) {
 							</DropdownMenuItem>
 						</DropdownMenuGroup>
 
-						<DropdownMenuItem
-							onClick={() => logout()}
-							className="cursor-pointer text-destructive focus:text-text-primary"
-						>
-							<LogOut className="mr-1 h-4 w-4" />
-							Sign Out
-						</DropdownMenuItem>
+						{user.impersonatedBy ? (
+							// While viewing-as, "Sign Out" would kill the OPERATOR's
+							// real session (and the grant with it) — surprising from
+							// inside the target's world. Offer the impersonation exit
+							// instead; the banner's Exit does the same thing.
+							<DropdownMenuItem
+								onClick={async () => {
+									await apiClient.stopImpersonation();
+									window.location.assign('/');
+								}}
+								className="cursor-pointer text-destructive focus:text-text-primary"
+							>
+								<LogOut className="mr-1 h-4 w-4" />
+								Exit impersonation
+							</DropdownMenuItem>
+						) : (
+							<DropdownMenuItem
+								onClick={() => logout()}
+								className="cursor-pointer text-destructive focus:text-text-primary"
+							>
+								<LogOut className="mr-1 h-4 w-4" />
+								Sign Out
+							</DropdownMenuItem>
+						)}
 					</motion.div>
 				</DropdownMenuContent>
 			</AnimatePresence>

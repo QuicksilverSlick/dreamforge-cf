@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
 import { Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
@@ -28,7 +27,6 @@ const WARN_MS = 2 * 60 * 1000; // prompt to extend when under 2 min remain
  */
 export function ImpersonationBanner() {
 	const { user, refreshUser } = useAuth();
-	const navigate = useNavigate();
 	const isImpersonating = !!user?.impersonatedBy;
 
 	const [status, setStatus] = useState<ImpersonationStatusData | null>(null);
@@ -68,15 +66,15 @@ export function ImpersonationBanner() {
 		setBusy(true);
 		try {
 			await apiClient.stopImpersonation();
-			await refreshUser();
-			navigate('/');
-			toast.success('Returned to your own account');
+			// HARD reload back into the operator's own world — a soft navigate
+			// leaves fetch-once chrome state (org switcher, billing, limits)
+			// holding the impersonated user's data.
+			window.location.assign('/');
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Could not exit impersonation');
-		} finally {
 			setBusy(false);
 		}
-	}, [navigate, refreshUser]);
+	}, []);
 
 	const extend = useCallback(async () => {
 		setBusy(true);
