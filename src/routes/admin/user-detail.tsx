@@ -173,7 +173,7 @@ function SecretsTab({ userId }: { userId: string }) {
 export default function AdminUserDetail() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { user: currentUser, refreshUser } = useAuth();
+    const { user: currentUser } = useAuth();
     const userId = id ?? '';
     const { data, loading, error, refetch } = useAdminUser(userId);
 
@@ -211,11 +211,13 @@ export default function AdminUserDetail() {
                 setImpersonateOpen(false);
                 setImpersonateReason('');
                 toast.success(`Now viewing as ${user.displayName || user.email}`);
-                // The next request resolves as the target; refresh the profile and
-                // land on home (the /admin guard would bounce us anyway, since we
-                // now appear as a non-admin user).
-                await refreshUser();
-                navigate('/');
+                // HARD reload into the target's world. A soft navigate leaves
+                // every fetch-once hook in the always-mounted chrome (org
+                // switcher, billing, limits) holding the OPERATOR's data — the
+                // reload reboots auth-context and every provider under the new
+                // effective identity. (The /admin guard would bounce us off
+                // this page anyway, since we now appear as a non-admin user.)
+                window.location.assign('/');
             } else {
                 toast.error('Could not start impersonation');
             }

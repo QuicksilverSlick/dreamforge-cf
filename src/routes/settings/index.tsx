@@ -590,8 +590,12 @@ export default function SettingsPage() {
 
 					{/* Cloudflare AI Gateway. With Sparks metering live this is a
 					    power-user ADVANCED option (bring your own Cloudflare); on
-					    BYO-era deployments it remains the primary surface. */}
-					{cloudflareConnectEnabled && (
+					    BYO-era deployments it remains the primary surface.
+					    Hidden while impersonating: the connection state reflects
+					    the OPERATOR's HttpOnly OAuth cookie, not the viewed
+					    user's — showing it inside the target's world would be
+					    misleading (its mutations are server-blocked anyway). */}
+					{cloudflareConnectEnabled && !user?.impersonatedBy && (
 						<div id="cloudflare-gateway">
 							{billingData?.meteringEnabled && (
 								<div className="mb-2 mt-4">
