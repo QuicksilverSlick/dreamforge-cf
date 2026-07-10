@@ -5,7 +5,7 @@
 import { createMiddleware } from 'hono/factory';
 import { AuthUser, UserRole, PLATFORM_STAFF_ROLES } from '../../types/auth-types';
 import { createLogger } from '../../logger';
-import { AppService } from '../../database';
+import { AppService, UserService } from '../../database';
 import { authMiddleware } from './auth';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { errorResponse } from '../../api/responses';
@@ -234,6 +234,8 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
 			Sentry.setUser({ id: user.id, email: user.email });
 		}
 
+        touchActorActivity(c, user, userSession.actorLastActiveAt);
+
         const config = await getUserConfigurableSettings(c.env, user.id);
         c.set('config', config);
 
@@ -272,6 +274,50 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
     if (!result.success) {
         logger.warn('Authentication check failed', result.response, requirement, user);
         return result.response;
+    }
+}
+
+/** Refresh `users.lastActiveAt` at most this often per actor. */
+const LAST_ACTIVE_TOUCH_INTERVAL_MS = 15 * 60 * 1000;
+
+/**
+ * Pure throttle decision for the activity touch. Exported for tests.
+ * - `undefined` (chokepoint didn't resolve the value) => never touch — without
+ *   a staleness reading, touching would write on EVERY request on that path.
+ * - `null` (user has never been stamped) => touch.
+ * - stale beyond the interval => touch; fresh => skip.
+ */
+export function shouldTouchActivity(actorLastActiveAt: Date | null | undefined, now: number): boolean {
+    if (actorLastActiveAt === undefined) return false;
+    if (actorLastActiveAt === null) return true;
+    return now - actorLastActiveAt.getTime() >= LAST_ACTIVE_TOUCH_INTERVAL_MS;
+}
+
+/**
+ * Throttled, fire-and-forget stamp of the REAL actor's `users.lastActiveAt`
+ * (the admin console's "Last active" column). Attribution follows the actor:
+ * during impersonation the OPERATOR's row is touched, never the target's, so
+ * viewing-as can never fabricate customer activity. The staleness reading
+ * rides the chokepoint's existing per-request users select (zero extra reads);
+ * the write is off the response path and capped at one per actor per interval.
+ */
+function touchActorActivity(
+    c: Context<AppEnv>,
+    user: AuthUser,
+    actorLastActiveAt: Date | null | undefined,
+): void {
+    if (!shouldTouchActivity(actorLastActiveAt, Date.now())) {
+        return;
+    }
+    const actorId = user.impersonatedBy ?? user.id;
+    const write = new UserService(c.env)
+        .updateUserActivity(actorId)
+        .catch((error) => logger.error('Failed to touch lastActiveAt', error));
+    try {
+        c.executionCtx.waitUntil(write);
+    } catch {
+        // No execution context available — the write is already best-effort.
+        void write;
     }
 }
 

@@ -105,6 +105,14 @@ export interface TokenPayload {
 export interface AuthUserSession {
     user: AuthUser;
     sessionId: string;
+    /**
+     * The REAL actor's `users.lastActiveAt` as read at the auth chokepoint —
+     * during impersonation this is the OPERATOR's value (read before the
+     * identity swap), so activity attribution can never follow the target.
+     * Lets the middleware throttle its fire-and-forget activity touch with
+     * zero extra D1 reads. Absent on paths that did not resolve it.
+     */
+    actorLastActiveAt?: Date | null;
 }
 
 /**

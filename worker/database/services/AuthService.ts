@@ -789,9 +789,12 @@ export class AuthService extends BaseService {
     }
 
     /**
-     * Get user for authentication (for middleware)
+     * Get user for authentication (for middleware). Also carries the row's
+     * `lastActiveAt` so the auth middleware can throttle its activity touch
+     * without a second read — the field rides along and is NOT part of the
+     * public AuthUser payload shape.
      */
-    async getUserForAuth(userId: string): Promise<AuthUser | null> {
+    async getUserForAuth(userId: string): Promise<(AuthUser & { lastActiveAt: Date | null }) | null> {
         try {
             const user = await this.database
                 .select({
@@ -806,6 +809,7 @@ export class AuthService extends BaseService {
                     emailVerified: schema.users.emailVerified,
                     createdAt: schema.users.createdAt,
                     role: schema.users.role,
+                    lastActiveAt: schema.users.lastActiveAt,
                 })
                 .from(schema.users)
                 .where(
@@ -837,8 +841,8 @@ export class AuthService extends BaseService {
                 logger.debug('User not found for auth', { userId });
                 return null;
             }
-            
-            return mapUserResponse(user);
+
+            return { ...mapUserResponse(user), lastActiveAt: user.lastActiveAt ?? null };
         } catch (error: unknown) {
             logger.error('Error getting user for auth', {
                 errorMessage: error instanceof Error ? error.message : String(error),
@@ -868,11 +872,14 @@ export class AuthService extends BaseService {
                 return null;
             }
             
-            // Get user from database
-            const user = await this.getUserForAuth(payload.sub);
-            if (!user) {
+            // Get user from database. `lastActiveAt` is the ACTOR's own value —
+            // captured here, BEFORE any impersonation swap, so the middleware's
+            // activity touch always throttles against (and stamps) the operator.
+            const record = await this.getUserForAuth(payload.sub);
+            if (!record) {
                 return null;
             }
+            const { lastActiveAt: actorLastActiveAt, ...user } = record;
 
             // Impersonation indirection (Phase 1). If this actor holds an active
             // grant on this session, resolve the EFFECTIVE identity as the target
@@ -882,7 +889,7 @@ export class AuthService extends BaseService {
             // grant lookup is skipped entirely for non-impersonator roles.
             const impersonated = await this.tryResolveImpersonation(user, payload.sessionId);
             if (impersonated) {
-                return { user: impersonated, sessionId: payload.sessionId };
+                return { user: impersonated, sessionId: payload.sessionId, actorLastActiveAt };
             }
 
             // Resolve the active org per-request (NEVER from the JWT) from the
@@ -894,6 +901,7 @@ export class AuthService extends BaseService {
             return {
                 user: { ...user, orgId: activeOrg.orgId, orgRole: activeOrg.orgRole },
                 sessionId: payload.sessionId,
+                actorLastActiveAt,
             };
         } catch (error) {
             logger.error('Token validation error', error);
@@ -935,8 +943,8 @@ export class AuthService extends BaseService {
             if (!grant || grant.actorUserId !== actor.id) {
                 return null;
             }
-            const target = await this.getUserForAuth(grant.targetUserId);
-            if (!target || !targetRoleMayBeImpersonated(target.role)) {
+            const targetRecord = await this.getUserForAuth(grant.targetUserId);
+            if (!targetRecord || !targetRoleMayBeImpersonated(targetRecord.role)) {
                 // Target became non-impersonable mid-session (suspended/deleted, or
                 // promoted into a protected role). Tear the grant down so it can
                 // never resurrect when the target is reactivated — then degrade to
@@ -944,6 +952,10 @@ export class AuthService extends BaseService {
                 await this.impersonationService.endGrant(grant.id, 'target_unavailable');
                 return null;
             }
+            // Strip the ride-along activity field — the effective AuthUser must
+            // stay the exact public payload shape (and activity attribution
+            // must never follow the target).
+            const { lastActiveAt: _targetLastActiveAt, ...target } = targetRecord;
             const activeOrg = await this.organizationService.resolveUserDefaultOrg(target.id);
             return {
                 ...target,
