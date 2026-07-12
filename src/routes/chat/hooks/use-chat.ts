@@ -30,7 +30,8 @@ import {
 	type WebSocketMessage,
 	type CodeFixEdits,
 	type ImageAttachment,
-	type PresenceMember
+	type PresenceMember,
+	type AttachmentRef
 } from '@/api-types';
 import { ApiError } from '@/lib/api-client';
 import {
@@ -78,6 +79,7 @@ export function useChat({
 	chatId: urlChatId,
 	query: userQuery,
 	images: userImages,
+	attachments: userAttachments,
 	agentMode = 'deterministic',
 	interviewSessionId,
 	autoStart = true,
@@ -87,6 +89,7 @@ export function useChat({
 	chatId?: string;
 	query: string | null;
 	images?: ImageAttachment[];
+	attachments?: AttachmentRef[];
 	agentMode?: 'deterministic' | 'smart';
 	interviewSessionId?: string | null;
 	/**
@@ -488,6 +491,7 @@ export function useChat({
 						query: userQuery,
 						agentMode,
 						images: userImages, // Pass images from URL params for multi-modal blueprint
+						attachments: userAttachments, // Already-uploaded file refs (server re-verifies ownership)
 						interviewSessionId: interviewSessionId ?? undefined,
 					});
 

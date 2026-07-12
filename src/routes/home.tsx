@@ -14,6 +14,8 @@ import clsx from 'clsx';
 import { useImageUpload } from '@/hooks/use-image-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ImageUploadButton } from '@/components/image-upload-button';
+import { AttachmentPickerButton, AttachmentChips } from '@/components/attachment-picker';
+import { useAttachmentUpload } from '@/hooks/use-attachment-upload';
 import { ImageAttachmentPreview } from '@/components/image-attachment-preview';
 import { SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
 import { Switch } from '@/components/ui/switch';
@@ -56,6 +58,9 @@ export default function Home() {
 		accept: [...SUPPORTED_IMAGE_MIME_TYPES],
 	});
 
+	// Text-like file attachments (upload-first; only compact refs ride the URL).
+	const { attachments, addFiles, removeAttachment, clearAttachments, isUploading } = useAttachmentUpload();
+
 
 	const placeholderPhrases = useMemo(() => [
 		"todo list app",
@@ -85,6 +90,9 @@ export default function Home() {
 
 		// Encode images as JSON if present
 		const imageParam = images.length > 0 ? `&images=${encodeURIComponent(JSON.stringify(images))}` : '';
+		// Attachments are already uploaded — carry only compact refs.
+		const attachmentRefs = attachments.map((a) => ({ id: a.id, filename: a.filename, kind: a.kind, extractedKey: a.extractedKey }));
+		const attachmentParam = attachmentRefs.length > 0 ? `&attachments=${encodeURIComponent(JSON.stringify(attachmentRefs))}` : '';
 		// Interview-first by default: the idea seeds the interview, which hands
 		// an enriched build brief to /chat/new when it finishes. Read the pref
 		// from localStorage (written synchronously by toggleInterview) instead of
@@ -92,8 +100,8 @@ export default function Home() {
 		// can't route to the stale flow before the state flushes.
 		const interviewOn = localStorage.getItem(interviewPrefKey(user?.id)) !== 'off';
 		const intendedUrl = interviewOn
-			? `/interview?query=${encodedQuery}&agentMode=${encodedMode}${imageParam}`
-			: `/chat/new?query=${encodedQuery}&agentMode=${encodedMode}${imageParam}`;
+			? `/interview?query=${encodedQuery}&agentMode=${encodedMode}${imageParam}${attachmentParam}`
+			: `/chat/new?query=${encodedQuery}&agentMode=${encodedMode}${imageParam}${attachmentParam}`;
 
 		if (
 			!requireAuth({
@@ -109,8 +117,9 @@ export default function Home() {
 		// marks the navigation as in-app so /chat/new auto-starts without the
 		// external-link confirmation gate.
 		navigate(intendedUrl, { state: { fromPrompt: true } });
-		// Clear images after navigation
+		// Clear images + attachments after navigation
 		clearImages();
+		clearAttachments();
 	};
 
 	// Auto-resize textarea based on content
@@ -287,6 +296,13 @@ export default function Home() {
 										/>
 									</div>
 								)}
+								{attachments.length > 0 && (
+									<AttachmentChips
+										attachments={attachments}
+										onRemove={removeAttachment}
+										className="mt-3"
+									/>
+								)}
 							</div>
 							<div className="flex items-center justify-between mt-4 pt-1">
 								{import.meta.env.VITE_AGENT_MODE_ENABLED ? (
@@ -303,6 +319,10 @@ export default function Home() {
 								<ImageUploadButton
 									onFilesSelected={addImages}
 									disabled={isProcessing}
+								/>
+								<AttachmentPickerButton
+									onFilesSelected={addFiles}
+									disabled={isUploading}
 								/>
 								<button
 									type="submit"

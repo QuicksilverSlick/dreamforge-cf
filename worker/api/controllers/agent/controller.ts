@@ -20,6 +20,7 @@ import { createLogger } from '../../../logger';
 import { getPreviewDomain } from 'worker/utils/urls';
 import { ImageType, uploadImage } from 'worker/utils/images';
 import { ProcessedImageAttachment } from 'worker/types/image-attachment';
+import { resolveAttachedDocuments } from 'worker/services/attachments/resolve';
 
 const defaultCodeGenArgs: CodeGenArgs = {
     query: '',
@@ -240,6 +241,10 @@ export class CodingAgentController extends BaseController {
                 }
             });
 
+            // Resolve the extracted text of any files the user attached (owner
+            // -verified R2 reads, globally budgeted) for blueprint context.
+            const attachedDocuments = await resolveAttachedDocuments(env, user.id, body.attachments);
+
             const agentPromise = agentInstance.initialize({
                 query,
                 language: body.language || defaultCodeGenArgs.language,
@@ -249,6 +254,7 @@ export class CodingAgentController extends BaseController {
                 images: uploadedImages,
                 interviewSpec,
                 referenceSite,
+                attachedDocuments,
                 onBlueprintChunk: (chunk: string) => {
                     writer.write({chunk});
                 },

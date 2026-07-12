@@ -81,6 +81,35 @@ export const SUPPORTED_ATTACHMENT_TYPES: Readonly<Record<string, TypeSpec>> = {
     env: { kind: 'text', mimes: [], textLike: true },
 } as const;
 
+/**
+ * Client→server reference to an already-uploaded attachment (the upload
+ * response, echoed back on the build request). The server NEVER trusts
+ * `extractedKey` blindly — it re-verifies the key is owned by the authed user
+ * before reading it (a client can't point at another user's R2 object).
+ */
+export interface AttachmentRef {
+    id: string;
+    filename: string;
+    kind: AttachmentKind;
+    /** R2 key of the extracted text sibling (owner-verified server-side). */
+    extractedKey?: string;
+}
+
+/**
+ * Extracted document text resolved for injection into the blueprint prompt.
+ * TRANSIENT — assembled at build kickoff and passed into inference, never
+ * persisted to DO state (which keeps only refs).
+ */
+export interface AttachedDocument {
+    filename: string;
+    kind: AttachmentKind;
+    text: string;
+    truncated: boolean;
+}
+
+/** Global char budget for ALL attached-document text in one blueprint prompt. */
+export const ATTACHMENT_INJECTION_BUDGET_CHARS = 50_000;
+
 /** A stored, processed attachment — references only, never blob data. */
 export interface ProcessedAttachment {
     id: string;

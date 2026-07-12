@@ -25,7 +25,7 @@ import { DebugPanel, type DebugMessage } from './components/debug-panel';
 import { DeploymentControls } from './components/deployment-controls';
 import { DatabaseRestoreControl } from './components/database-restore-control';
 import { useChat, type FileType } from './hooks/use-chat';
-import { type ModelConfigsData, type BlueprintType, SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
+import { type ModelConfigsData, type BlueprintType, type AttachmentRef, SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
 import { Copy } from './components/copy';
 import { useFileContentStream } from './hooks/use-file-content-stream';
 import { logger } from '@/utils/logger';
@@ -72,6 +72,18 @@ export default function Chat() {
 			return JSON.parse(decodeURIComponent(imagesParam));
 		} catch (error) {
 			console.error('Failed to parse images from URL:', error);
+			return undefined;
+		}
+	}, [searchParams]);
+
+	// Extract already-uploaded attachment refs from URL params if present.
+	const userAttachments = useMemo(() => {
+		const param = searchParams.get('attachments');
+		if (!param) return undefined;
+		try {
+			return JSON.parse(decodeURIComponent(param)) as AttachmentRef[];
+		} catch (error) {
+			console.error('Failed to parse attachments from URL:', error);
 			return undefined;
 		}
 	}, [searchParams]);
@@ -177,6 +189,7 @@ export default function Chat() {
 		chatId: urlChatId,
 		query: userQuery,
 		images: userImages,
+		attachments: userAttachments,
 		agentMode: agentMode as 'deterministic' | 'smart',
 		interviewSessionId: searchParams.get('interviewSession'),
 		autoStart,

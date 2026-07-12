@@ -49,6 +49,7 @@ export default function InterviewPage() {
     const query = searchParams.get('query') ?? '';
     const agentMode = searchParams.get('agentMode') ?? 'deterministic';
     const imagesParam = searchParams.get('images');
+    const attachmentsParam = searchParams.get('attachments');
 
     const [state, setState] = useState<InterviewStateData | null>(null);
     const [transcript, setTranscript] = useState<InterviewTranscriptEntry[]>([]);
@@ -68,13 +69,16 @@ export default function InterviewPage() {
     const startBuild = useCallback((enhancedQuery: string, interviewSessionId?: string) => {
         sessionStorage.removeItem(SESSION_STORAGE_KEY);
         const imageParam = imagesParam ? `&images=${encodeURIComponent(imagesParam)}` : '';
+        // Forward attachments through the interview so they aren't dropped when
+        // the (default-on) Quick Interview path is taken.
+        const attachmentParam = attachmentsParam ? `&attachments=${encodeURIComponent(attachmentsParam)}` : '';
         // The session id lets the builder load the full structured spec
         // (stories, acceptance criteria, capability flags), not just the brief.
         const sessionParam = interviewSessionId ? `&interviewSession=${encodeURIComponent(interviewSessionId)}` : '';
         // `fromPrompt` marks the navigation as in-app so /chat/new auto-starts
         // without the external-link confirmation gate.
-        navigate(`/chat/new?query=${encodeURIComponent(enhancedQuery)}&agentMode=${encodeURIComponent(agentMode)}${sessionParam}${imageParam}`, { state: { fromPrompt: true } });
-    }, [navigate, agentMode, imagesParam]);
+        navigate(`/chat/new?query=${encodeURIComponent(enhancedQuery)}&agentMode=${encodeURIComponent(agentMode)}${sessionParam}${imageParam}${attachmentParam}`, { state: { fromPrompt: true } });
+    }, [navigate, agentMode, imagesParam, attachmentsParam]);
 
     const applyState = useCallback((data: InterviewStateData) => {
         setState(data);

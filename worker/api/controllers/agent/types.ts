@@ -1,5 +1,6 @@
 import { PreviewType } from "../../../services/sandbox/sandboxTypes";
 import type { ImageAttachment } from '../../../types/image-attachment';
+import type { AttachmentRef } from '../../../types/attachment';
 
 /**
  * Hard cap on user query length applied during state migration (legacy
@@ -17,6 +18,8 @@ export interface CodeGenArgs {
     selectedTemplate?: string;
     agentMode: 'deterministic' | 'smart';
     images?: ImageAttachment[];
+    /** Already-uploaded build attachments (refs; server re-verifies ownership). */
+    attachments?: AttachmentRef[];
     /** Intake-interview session whose spec should drive the blueprint. */
     interviewSessionId?: string;
 }
