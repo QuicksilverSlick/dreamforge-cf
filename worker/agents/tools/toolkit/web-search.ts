@@ -28,12 +28,25 @@ interface SerpApiResponse {
 }
 
 
-const createSearchUrl = (query: string, apiKey: string, numResults: number) => {
+/** SerpApi `tbs` recency filters (Google "past X" time restriction). */
+const RECENCY_TBS: Readonly<Record<string, string>> = {
+    day: 'qdr:d',
+    week: 'qdr:w',
+    month: 'qdr:m',
+    year: 'qdr:y',
+};
+
+type SearchRecency = keyof typeof RECENCY_TBS;
+
+const createSearchUrl = (query: string, apiKey: string, numResults: number, recency?: SearchRecency) => {
     const url = new URL('https://serpapi.com/search');
     url.searchParams.set('engine', 'google');
     url.searchParams.set('q', query);
     url.searchParams.set('api_key', apiKey);
     url.searchParams.set('num', Math.min(numResults, 10).toString());
+    if (recency && RECENCY_TBS[recency]) {
+        url.searchParams.set('tbs', RECENCY_TBS[recency]);
+    }
     return url.toString();
 };
 
@@ -97,6 +110,7 @@ const formatSearchResults = (
 async function performWebSearch(
     query: string,
     numResults = 5,
+    recency?: SearchRecency,
 ): Promise<string> {
     const apiKey = env.SERPAPI_KEY;
     if (!apiKey) {
@@ -105,7 +119,7 @@ async function performWebSearch(
 
     try {
         const response = await fetch(
-            createSearchUrl(query, apiKey, numResults),
+            createSearchUrl(query, apiKey, numResults, recency),
             {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (compatible; WebBot/1.0)',
@@ -198,14 +212,15 @@ async function fetchWebContent(url: string): Promise<string> {
 // Define the argument and result types for the web search tool
 type WebSearchArgs = {
     query?: string;
-    url?: string; 
+    url?: string;
     num_results?: number;
+    recency?: SearchRecency;
 };
 
 type WebSearchResult = { content?: string; error?: string }
 
 const toolWebSearch = async (args: WebSearchArgs): Promise<WebSearchResult> => {
-    const { query, url, num_results = 5 } = args;
+    const { query, url, num_results = 5, recency } = args;
     if (typeof url === 'string') {
         const content = await fetchWebContent(url);
         return { content };
@@ -214,6 +229,7 @@ const toolWebSearch = async (args: WebSearchArgs): Promise<WebSearchResult> => {
         const content = await performWebSearch(
             query,
             num_results as number,
+            recency,
         );
         return { content };
     }
@@ -226,13 +242,18 @@ export const toolWebSearchDefinition: ToolDefinition<WebSearchArgs, WebSearchRes
     function: {
         name: 'web_search',
         description:
-            'Search the web using Google or fetch content from a specific URL',
+            'Search the web using Google or fetch content from a specific URL. Your own knowledge of what ' +
+            'is "current" or "latest" is stale: for recency-sensitive topics, ALWAYS include the current ' +
+            'month and year (from the conversation timestamp, e.g. "July 2026") in the query AND set the ' +
+            'recency parameter.',
         parameters: {
             type: 'object',
             properties: {
                 query: {
                     type: 'string',
-                    description: 'Search query for Google search',
+                    description:
+                        'Search query for Google search. For "current/latest/new X" topics, anchor it with the ' +
+                        'current month and year taken from the conversation timestamp.',
                 },
                 url: {
                     type: 'string',
@@ -244,6 +265,13 @@ export const toolWebSearchDefinition: ToolDefinition<WebSearchArgs, WebSearchRes
                     description:
                         'Number of search results to return (default: 5, max: 10)',
                     default: 5,
+                },
+                recency: {
+                    type: 'string',
+                    enum: ['day', 'week', 'month', 'year'],
+                    description:
+                        'Restrict results to this recency window. Use "year" (or tighter) whenever searching ' +
+                        'for current options, versions, or best practices.',
                 },
             },
             required: [],

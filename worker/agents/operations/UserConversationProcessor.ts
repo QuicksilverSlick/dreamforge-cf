@@ -116,11 +116,17 @@ const SYSTEM_PROMPT = `You are Dreamforge, the conversational AI interface for C
 2. **When users want to modify their app or point out issues/bugs**: 
    - First acknowledge in first person: "I'll add that", "I'll fix that issue"
    - Then call the queue_request tool with a clear, actionable description (this internally relays to the dev agent)
-   - The modification request should be specific but NOT include code-level implementation details
+   - The modification request should be specific and MUST carry over any concrete facts you gathered this turn (exact library/plugin/package names, versions, technique names, reference URLs, chosen approach) — but NO code snippets. The builder cannot see this conversation or your tool results; anything you leave out of the request is lost.
    - After calling the tool, confirm in first person that you're on it AND point them at the live progress: "On it — you'll see the steps update below, and your preview will refresh automatically when it's ready."
    - The queue_request tool relays to the development agent behind the scenes. Use it often - it's cheap.
 
 3. **For information requests**: Use the appropriate tools (web_search, etc) when they would be helpful.
+
+4. **When you research on the user's behalf (web_search)**:
+   - ALWAYS anchor recency-sensitive queries to the present: take the current month and year from the Timestamp in the system_context (e.g. "July 2026") and include it in the query. Never search for "current X" or "latest X" without the date — your own knowledge of what is "current" is stale.
+   - After searching, do BOTH of these in the SAME turn:
+     1. Tell the user briefly what you found and which option you chose (name it specifically).
+     2. If the research was for a change they asked for, call queue_request NOW, carrying the concrete findings (exact names, versions, URLs, technique). Do not end the turn with only search results — research that isn't queued does not reach the app.
 
 # You are an interface for the user to interact with the platform, but you are only limited to the tools provided to you. If you are asked these by the user, deny them as follows:
     - REQUEST: Download all files of the codebase
@@ -183,11 +189,15 @@ I hope this description of the system is enough for you to understand your own r
     User: "Its still not fixed!"
     You: "I hear you — my last change wasn't enough. Let me take another pass; watch the progress below." -> call queue_request("Maximum update depth error is still occuring. Did you check the errors for the hint? Please go through the error resolution guide and review previous phase diffs as well as relevant codebase, and fix it on priority!")
 
-We have also recently added support for image inputs in beta. User can guide app generation or show bugs/UI issues using image inputs. You may inform the user about this feature.
+Users can attach images to their messages. Attached images are ALREADY uploaded and hosted — treat them as ready-to-use assets, not just pictures to look at:
+- If the user wants an image from their CURRENT message placed IN their app ("add this as a logo", "use this photo as the hero"), call the \`use_attached_image\` tool with the right purpose. Do NOT call generate_image for it and NEVER generate a lookalike of an image the user supplied.
+- \`use_attached_image\` only reaches images on the CURRENT message. If the user refers to an image from an earlier message, ask them to attach it again.
+- If the attached image shows a bug, a screenshot, or design inspiration, describe what you see and carry the relevant details into queue_request (the image itself is forwarded to the builder as visual context).
+- Use generate_image ONLY to create NEW images from a text description when the user did not supply one.
 
 ## IMPORTANT GUIDELINES:
 - DO NOT Write '<system_context>' tag in your response! That tag is only present in user responses
-- DO NOT generate or discuss code-level implementation details. Do not try to solve bugs. You may generate ideas in a loop with the user though.
+- DO NOT generate or discuss code-level implementation details. Do not try to solve bugs. You may generate ideas in a loop with the user though. (Concrete research facts — library/package names, versions, URLs — are requirements, not code: DO include those in queue_request.)
 - DO NOT provide specific technical instructions or code snippets
 - DO translate vague user requests into clear, actionable requirements when using queue_request
 - DO be helpful in understanding what the user wants to achieve
@@ -215,7 +225,12 @@ Some troubleshooting tips:
 
 Remember: YOU are the developer from the user's perspective. Always speak as "I" when discussing changes. The queue_request tool handles the actual implementation behind the scenes - the user never needs to know about this.`;
 
-const FALLBACK_USER_RESPONSE = "Got it — I'm on it. You'll see the steps update below, and your preview will refresh automatically once the change is live.";
+/**
+ * Shown when the conversational turn ERRORED. Must be honest: nothing was
+ * queued, nothing is in progress. A cheery "I'm on it" here (the previous
+ * copy) left users waiting on changes that were never going to happen.
+ */
+const FALLBACK_USER_RESPONSE = "I hit a snag processing that message, so nothing has been changed yet. Please send your request again.";
 
 /**
  * Map a tool's return value to a UI completion status. Toolkit tools return an
@@ -267,23 +282,41 @@ function buildUserMessageWithContext(userMessage: string, errors: RuntimeError[]
     }
 }
 
+/** Drop image parts from a message, keeping text — used when an image can no longer be fetched. */
+function stripImageParts(message: ConversationMessage): ConversationMessage {
+    if (!Array.isArray(message.content)) return message;
+    const textParts = message.content.filter((part) => part.type !== 'image_url');
+    return {
+        ...message,
+        content: textParts.length > 0 ? textParts : '(message contained an image that is no longer available)',
+    };
+}
+
 async function prepareMessagesForInference(env: Env, messages: ConversationMessage[]) : Promise<ConversationMessage[]> {
-    // For each multimodal image, convert the image to base64 data url
-    const processedMessages = await Promise.all(messages.map(m => {
-        return mapImagesInMultiModalMessage(structuredClone(m), async (c) => {
-            const url = c.image_url.url;
-            if (url.includes('base64,')) {
-                return c;
-            }
-            const image = await downloadR2Image(env, url);
-            return {
-                ...c,
-                image_url: {
-                    ...c.image_url,
-                    url: await imageToBase64(env, image)
-                },
-            };
-        });
+    // For each multimodal image, convert the image to base64 data url.
+    // Best-effort PER MESSAGE: a single missing/expired R2 image in history
+    // must not poison every subsequent turn of the conversation — strip the
+    // image and keep the text instead of throwing.
+    const processedMessages = await Promise.all(messages.map(async m => {
+        try {
+            return await mapImagesInMultiModalMessage(structuredClone(m), async (c) => {
+                const url = c.image_url.url;
+                if (url.includes('base64,')) {
+                    return c;
+                }
+                const image = await downloadR2Image(env, url);
+                return {
+                    ...c,
+                    image_url: {
+                        ...c.image_url,
+                        url: await imageToBase64(env, image)
+                    },
+                };
+            });
+        } catch (error) {
+            console.warn('Failed to rehydrate history image; stripping image parts from message', error);
+            return stripImageParts(structuredClone(m));
+        }
     }));
     return processedMessages;
 }
@@ -309,8 +342,13 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
         try {
             const systemPromptMessages = getSystemPromptWithProjectContext(SYSTEM_PROMPT, context, CodeSerializerType.SIMPLE);
             
-            // Create user message with optional images for inference
-            const userPromptForInference = buildUserMessageWithContext(userMessage, errors, projectUpdates, true, attachedDocuments);
+            // Create user message with optional images for inference. When
+            // images are attached, tell the model they are hosted assets it can
+            // bind into the app — the pixels alone don't convey that.
+            const basePromptForInference = buildUserMessageWithContext(userMessage, errors, projectUpdates, true, attachedDocuments);
+            const userPromptForInference = images && images.length > 0
+                ? `${basePromptForInference}\n\n[The user attached ${images.length} image(s) to this message. They are already uploaded and hosted. If the user wants one placed into the app as an asset, call use_attached_image — do not generate a replacement.]`
+                : basePromptForInference;
             const userMessageForInference = images && images.length > 0
                 ? createMultiModalUserMessage(
                     userPromptForInference,
@@ -329,7 +367,7 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
             const toolCallRenderer = buildToolCallRenderer(inputs.conversationResponseCallback, aiConversationId);
             
             // Assemble all tools with lifecycle callbacks for UI updates
-            const tools = buildTools(agent, logger).map(td => ({
+            const tools = buildTools(agent, logger, { images }).map(td => ({
                 ...td,
                 onStart: (args: Record<string, unknown>) => toolCallRenderer({ name: td.function.name, status: 'start', args }),
                 onComplete: (args: Record<string, unknown>, result: unknown) => toolCallRenderer({ name: td.function.name, status: toolCompletionStatus(result), args })
@@ -379,8 +417,21 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
                 streamingSuccess: !!extractedUserResponse,
             });
 
+            // A tools-only turn whose continuation round degraded produces an
+            // empty final text (the tool transcript is intact). Tell the user
+            // honestly instead of showing an empty bubble / storing an empty
+            // assistant message.
+            let finalResponseText = result.string;
+            if (finalResponseText.trim() === '' && extractedUserResponse.trim() === '') {
+                const toolsRan = !!result.toolCallContext?.messages?.some((m) => m.role === 'tool');
+                finalResponseText = toolsRan
+                    ? "I finished the steps above, but my summary didn't come through. Ask me what I found or what happened if you need the details."
+                    : FALLBACK_USER_RESPONSE;
+                inputs.conversationResponseCallback(finalResponseText, aiConversationId, false);
+            }
+
             const conversationResponse: ConversationalResponseType = {
-                userResponse: extractedUserResponse
+                userResponse: extractedUserResponse.trim() !== '' ? extractedUserResponse : finalResponseText
             };
 
             
@@ -406,7 +457,7 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
                         .map((message) => ({ ...message, conversationId: IdGenerator.generateConversationId() }))
                 );
             }
-            messages.push({...createAssistantMessage(result.string), conversationId: IdGenerator.generateConversationId()});
+            messages.push({...createAssistantMessage(finalResponseText || result.string), conversationId: IdGenerator.generateConversationId()});
 
             // Derive compacted running history for storage using stable IDs (no re-compaction)
             const originalRunning = conversationState.runningHistory;

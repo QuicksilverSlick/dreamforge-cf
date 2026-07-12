@@ -121,7 +121,9 @@ export default function Chat() {
 				rawMessage,
 			};
 
-			setDebugMessages((prev) => [...prev, debugMessage]);
+			// Cap retained debug messages: a long build emits thousands of WS
+			// events and unbounded growth balloons memory and render cost.
+			setDebugMessages((prev) => [...prev, debugMessage].slice(-500));
 		},
 		[],
 	);

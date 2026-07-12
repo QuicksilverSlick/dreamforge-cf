@@ -105,6 +105,15 @@ export interface HandleMessageDeps {
     }) => void;
 }
 
+/**
+ * Sockets that already auto-resumed generation once. Every cf_agent_state
+ * broadcast carries shouldBeGenerating=true for the whole build — re-sending
+ * generate_all on each one made client and server ping-pong state broadcasts
+ * for the build's entire duration. Auto-resume is only meant to kick a
+ * dropped build back to life once per connection.
+ */
+const autoResumedSockets = new WeakSet<WebSocket>();
+
 export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
     const extractTextContent = (content: ConversationMessage['content']): string => {
         if (!content) return '';
@@ -260,13 +269,14 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                     }
                 }
 
-                if (state.shouldBeGenerating) {
-                    logger.debug('🔄 shouldBeGenerating=true detected, auto-resuming generation');
+                if (state.shouldBeGenerating && !autoResumedSockets.has(websocket)) {
+                    autoResumedSockets.add(websocket);
+                    logger.debug('🔄 shouldBeGenerating=true detected, auto-resuming generation (once per connection)');
                     updateStage('code', { status: 'active' });
-                    
+
                     logger.debug('📡 Sending auto-resume generate_all message');
                     sendWebSocketMessage(websocket, 'generate_all');
-                } else {
+                } else if (!state.shouldBeGenerating) {
                     const codeStage = projectStages.find((stage: any) => stage.id === 'code');
                     if (codeStage?.status === 'active' && !isGenerating) {
                         if (state.generatedFilesMap && Object.keys(state.generatedFilesMap).length > 0) {
@@ -854,8 +864,13 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                     // Images now generate concurrently with coding, so the
                     // preview may have already deployed while assets were still
                     // rendering as placeholders. Refresh it so the freshly
-                    // generated images swap in.
+                    // generated images swap in. PULSE the flag — leaving it
+                    // stuck true makes PreviewIframe reload forever (its effect
+                    // re-fires on every loaded state while the flag holds).
                     setShouldRefreshPreview(true);
+                    setTimeout(() => {
+                        setShouldRefreshPreview(false);
+                    }, 100);
                 }
                 break;
             }

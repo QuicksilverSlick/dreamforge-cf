@@ -2120,13 +2120,80 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     /**
+     * Bind a user-uploaded image (already hosted at a public URL by the
+     * upload path) into the app as an asset — {@link queueImageGeneration}
+     * minus the generation. Drives the conversational `use_attached_image`
+     * tool so "add this as a logo" uses the user's actual image instead of
+     * generating a lookalike.
+     */
+    async registerUploadedAsset(
+        request: Pick<ImageGenerationRequest, 'path' | 'purpose'>,
+        image: ProcessedImageAttachment,
+    ): Promise<string | null> {
+        const url = image.publicUrl;
+        if (!url) {
+            this.logger.warn('Attached image has no public URL; cannot register as asset', {
+                path: request.path,
+            });
+            return null;
+        }
+        // The /api image-serving route rejects path suffixes outside this
+        // charset. Uploads are sanitized at store time now, but an image
+        // uploaded before that fix (or an externally-hosted URL) could still
+        // slip a key through that would 404 when the generated app loads it —
+        // refuse to bind a URL we know cannot be served.
+        try {
+            const pathname = new URL(url).pathname;
+            if (!/^[A-Za-z0-9._/%-]+$/.test(pathname)) {
+                this.logger.warn('Attached image URL is not servable (charset); refusing to bind as asset', {
+                    path: request.path,
+                    url,
+                });
+                return null;
+            }
+        } catch {
+            this.logger.warn('Attached image URL is malformed; refusing to bind as asset', {
+                path: request.path,
+                url,
+            });
+            return null;
+        }
+
+        this.mergeGeneratedImages(
+            [{ path: request.path, url, purpose: request.purpose }],
+            {
+                path: request.path,
+                purpose: request.purpose,
+                prompt: 'User-supplied image (uploaded attachment)',
+                width: null,
+                height: null,
+            },
+        );
+
+        this.broadcast(WebSocketMessageResponses.IMAGE_GENERATION_COMPLETED, {
+            message: `Added your image as app asset: ${request.path}`,
+            images: [{ path: request.path, url, purpose: request.purpose }],
+        });
+
+        await this.queueUserRequest(
+            `The user uploaded an image to use in the app. It is hosted at ${url} ` +
+                `(purpose: ${request.purpose}, intended location "${request.path}"). Update the application to ` +
+                `use this exact image — replace any previous image serving the same purpose/location and ` +
+                `reference it via <img src="${url}"> (or as a CSS background) where appropriate. ` +
+                `Do NOT generate a new image for this; the user supplied it.`,
+        );
+
+        return url;
+    }
+
+    /**
      * Merge generated image URLs back into the blueprint manifest in state.
      * Existing entries (matched by `path`) are updated in place; entries not
      * already in the manifest are appended (with their request metadata when
      * available).
      */
     private mergeGeneratedImages(
-        results: GeneratedImageResult[],
+        results: Array<Pick<GeneratedImageResult, 'path' | 'url' | 'purpose'>>,
         request?: ImageGenerationRequest,
     ): void {
         const blueprint = this.state.blueprint;

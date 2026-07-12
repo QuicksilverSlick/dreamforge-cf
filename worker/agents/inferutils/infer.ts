@@ -73,7 +73,7 @@ export async function executeInference<T extends z.AnyZodObject>(   {
 }: InferenceParamsBase &    {
     schema?: T;
     format?: SchemaFormat;
-}): Promise<InferResponseString | InferResponseObject<T> | null> {
+}): Promise<InferResponseString | InferResponseObject<T>> {
     let conf: ModelConfig | undefined;
     
     if (modelConfig) {
@@ -101,6 +101,7 @@ export async function executeInference<T extends z.AnyZodObject>(   {
     const backoffMs = (attempt: number) => Math.min(500 * Math.pow(2, attempt), 10000);
 
     let useCheaperModel = false;
+    let lastError: unknown;
 
     for (let attempt = 0; attempt < retryLimit; attempt++) {
         try {
@@ -151,6 +152,7 @@ export async function executeInference<T extends z.AnyZodObject>(   {
             if (error instanceof RateLimitExceededError || error instanceof SecurityError) {
                 throw error;
             }
+            lastError = error;
             const isLastAttempt = attempt === retryLimit - 1;
             logger.error(
                 `Error during ${agentActionName} operation (attempt ${attempt + 1}/${retryLimit}):`,
@@ -165,8 +167,10 @@ export async function executeInference<T extends z.AnyZodObject>(   {
                     useCheaperModel = true;
                 }
             } else {
-                // Try using fallback model if available
-                modelName = conf?.fallbackModel || modelName;
+                // Try using fallback model if available. finalConf (not the raw
+                // user conf, which is undefined for default-config users) is
+                // where AGENT_CONFIG's fallbackModel actually lives.
+                modelName = finalConf.fallbackModel || modelName;
             }
 
             if (!isLastAttempt) {
@@ -177,7 +181,12 @@ export async function executeInference<T extends z.AnyZodObject>(   {
             }
         }
     }
-    return null;
+    // All attempts failed — throw the real error. Returning null here would
+    // contradict the public overload types and push a lie downstream (callers
+    // would null-deref inside their own catch-all handlers).
+    throw lastError instanceof Error
+        ? lastError
+        : new Error(`${agentActionName} inference failed after ${retryLimit} attempts: ${String(lastError)}`);
 }
 
 /**

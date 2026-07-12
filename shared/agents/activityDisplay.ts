@@ -85,6 +85,11 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
         role: 'assistant',
         detail: (args) => excerpt(args?.query, 70),
     },
+    use_attached_image: {
+        label: 'Adding your image to the app',
+        role: 'builder',
+        detail: (args) => excerpt(args?.path, 70),
+    },
     submit_feedback: {
         label: 'Noting feedback about the build',
         role: 'assistant',

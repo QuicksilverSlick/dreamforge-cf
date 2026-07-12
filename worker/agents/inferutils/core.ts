@@ -35,7 +35,16 @@ function optimizeInputs(messages: Message[]): Message[] {
 // Streaming tool-call accumulation helpers 
 type ToolCallsArray = NonNullable<NonNullable<ChatCompletionChunk['choices'][number]['delta']>['tool_calls']>;
 type ToolCallDelta = ToolCallsArray[number];
-type ToolAccumulatorEntry = ChatCompletionMessageFunctionToolCall & { index?: number; __order: number };
+/**
+ * Tool call plus opaque provider metadata. Gemini 3.x attaches thought
+ * signatures as `extra_content` on function calls through the compat
+ * endpoint and REJECTS (400) a follow-up request whose echoed assistant
+ * tool_calls message omits them — so the field must survive streaming
+ * accumulation and round-2 reconstruction verbatim.
+ */
+type ProviderToolCall = ChatCompletionMessageFunctionToolCall & { extra_content?: unknown };
+
+type ToolAccumulatorEntry = ProviderToolCall & { index?: number; __order: number };
 
 function synthIdForIndex(i: number): string {
     return `tool_${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`;
@@ -95,6 +104,13 @@ function accumulateToolCallDelta(
         entry.function.name = deltaToolCall.function.name;
     }
 
+    // Preserve opaque provider metadata (Gemini 3 thought signatures ride as
+    // `extra_content`); the continuation request must echo it back.
+    const extraContent = (deltaToolCall as ToolCallDelta & { extra_content?: unknown }).extra_content;
+    if (extraContent !== undefined) {
+        entry.extra_content = extraContent;
+    }
+
     // Append arguments - accumulate string chunks
     if (deltaToolCall.function?.arguments !== undefined) {
         const before = entry.function.arguments;
@@ -135,15 +151,21 @@ function accumulateToolCallDelta(
 function assembleToolCalls(
     byIndex: Map<number, ToolAccumulatorEntry>,
     byId: Map<string, ToolAccumulatorEntry>
-): ChatCompletionMessageFunctionToolCall[] {
+): ProviderToolCall[] {
+    const toProviderToolCall = (e: ToolAccumulatorEntry): ProviderToolCall => ({
+        id: e.id,
+        type: 'function' as const,
+        function: { name: e.function.name, arguments: e.function.arguments },
+        ...(e.extra_content !== undefined ? { extra_content: e.extra_content } : {}),
+    });
     if (byIndex.size > 0) {
         return Array.from(byIndex.values())
             .sort((a, b) => (a.index! - b.index!))
-            .map((e) => ({ id: e.id, type: 'function' as const, function: { name: e.function.name, arguments: e.function.arguments } }));
+            .map(toProviderToolCall);
     }
     return Array.from(byId.values())
         .sort((a, b) => a.__order - b.__order)
-        .map((e) => ({ id: e.id, type: 'function' as const, function: { name: e.function.name, arguments: e.function.arguments } }));
+        .map(toProviderToolCall);
 }
 
 function optimizeMessageContent(content: MessageContent): MessageContent {
@@ -829,10 +851,12 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
 
         if (executedToolCalls.length) {
             console.log(`Tool calls executed:`, JSON.stringify(executedToolCalls, null, 2));
-            // Generate a new response with the tool calls executed
+            // Generate a new response with the tool calls executed.
+            // content must be null (not '') when the model only called tools —
+            // some providers (Gemini via compat) reject an empty text part.
             const newMessages = [
                 ...(toolCallContext?.messages || []),
-                { role: "assistant" as MessageRole, content, tool_calls: toolCalls },
+                { role: "assistant" as MessageRole, content: content.length > 0 ? content : null, tool_calls: toolCalls },
                 ...executedToolCalls
                     .filter(result => result.name && result.name.trim() !== '')
                     .map((result, _) => ({
@@ -879,26 +903,44 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                     }, newToolCallContext);
                     return output;
                 } else {
-                    const output = await infer({
-                        env,
-                        metadata,
-                        messages,
-                        modelName,
-                        maxTokens,
-                        actionKey,
-                        stream,
-                        tools,
-                        reasoning_effort,
-                        temperature,
-                        userApiKeys,
-                        // Tool-call recursion must keep funding the build on the
-                        // user's gateway (review B3) — otherwise follow-up calls bill
-                        // the platform and re-impose the rate limit.
-                        shouldUseUserKey,
-                        userApiToken,
-                        userGateway,
-                    }, newToolCallContext);
-                    return output;
+                    // Tools already EXECUTED this round (side effects are real:
+                    // requests queued, images generated). If the continuation
+                    // round fails, degrade gracefully — return what we have,
+                    // with the tool transcript intact — instead of throwing.
+                    // Propagating would push the error into executeInference's
+                    // retry loop, which replays the WHOLE round and re-fires
+                    // every side-effectful tool per attempt.
+                    try {
+                        const output = await infer({
+                            env,
+                            metadata,
+                            messages,
+                            modelName,
+                            maxTokens,
+                            actionKey,
+                            stream,
+                            tools,
+                            reasoning_effort,
+                            temperature,
+                            userApiKeys,
+                            // Tool-call recursion must keep funding the build on the
+                            // user's gateway (review B3) — otherwise follow-up calls bill
+                            // the platform and re-impose the rate limit.
+                            shouldUseUserKey,
+                            userApiToken,
+                            userGateway,
+                        }, newToolCallContext);
+                        return output;
+                    } catch (continuationError) {
+                        if (continuationError instanceof RateLimitExceededError || continuationError instanceof SecurityError) {
+                            throw continuationError;
+                        }
+                        console.error(
+                            `Tool continuation round failed at depth ${newDepth}; returning executed tool context without a follow-up response`,
+                            continuationError,
+                        );
+                        return { string: content, toolCallContext: newToolCallContext };
+                    }
                 }
             } else {
                 console.log('No tool calls with results');
