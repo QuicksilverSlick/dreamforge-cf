@@ -6,7 +6,14 @@ import { createQueueRequestTool } from './toolkit/queue-request';
 import { createGetLogsTool } from './toolkit/get-logs';
 import { createDeployPreviewTool } from './toolkit/deploy-preview';
 import { createGenerateImageTool } from './toolkit/generate-image';
+import { createUseAttachedImageTool } from './toolkit/use-attached-image';
 import { CodingAgentInterface } from 'worker/agents/services/implementations/CodingAgent';
+import type { ProcessedImageAttachment } from 'worker/types/image-attachment';
+
+/** Per-turn context the tools close over (the current message's attachments). */
+export interface ToolTurnContext {
+    images?: ProcessedImageAttachment[];
+}
 
 export async function executeToolWithDefinition<TArgs, TResult>(
     toolDef: ToolDefinition<TArgs, TResult>,
@@ -36,14 +43,21 @@ export async function executeToolWithDefinition<TArgs, TResult>(
  */
 export function buildTools(
     agent: CodingAgentInterface,
-    logger: StructuredLogger
+    logger: StructuredLogger,
+    turnContext: ToolTurnContext = {}
 ): ToolDefinition<any, any>[] {
+    // use_attached_image is ALWAYS registered (the system prompt and
+    // generate_image's description both reference it — an unregistered tool
+    // the model is primed to call yields an unhelpful "tool not found").
+    // With no images on the current turn its implementation returns an
+    // instructive error that steers the model to ask for a re-attach.
     return [
         toolWebSearchDefinition,
         toolFeedbackDefinition,
-        createQueueRequestTool(agent, logger),
+        createQueueRequestTool(agent, logger, turnContext.images),
         createGetLogsTool(agent, logger),
         createDeployPreviewTool(agent, logger),
         createGenerateImageTool(agent, logger),
+        createUseAttachedImageTool(agent, logger, turnContext.images ?? []),
     ];
 }

@@ -24,4 +24,16 @@ export abstract class ICodingAgent {
      * generation failed.
      */
     abstract queueImageGeneration(request: ImageGenerationRequest): Promise<string | null>;
+
+    /**
+     * Bind an image the user UPLOADED (already hosted at a public URL) into
+     * the app as an asset — the no-generation counterpart to
+     * {@link queueImageGeneration}. Merges the URL into the blueprint manifest
+     * and queues a request so the next phase wires it into the app. Returns
+     * the public URL, or null if the attachment has none.
+     */
+    abstract registerUploadedAsset(
+        request: Pick<ImageGenerationRequest, 'path' | 'purpose'>,
+        image: ProcessedImageAttachment,
+    ): Promise<string | null>;
 }

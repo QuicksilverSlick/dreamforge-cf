@@ -141,9 +141,21 @@ export function getPublicUrlForR2Image(env: Env, r2Key: string): string {
     return url;
 }
 
+/**
+ * Restrict a user-supplied filename to the charset the image-serving route
+ * accepts (its suffix validator allows only `A-Za-z0-9._/%-`).
+ * encodeURIComponent is NOT enough: it leaves `( ) ! ' * ~` literal, so
+ * default names like "Screenshot (2).png" produced keys whose public URL the
+ * server rejects (404) even though the object exists.
+ */
+export function sanitizeImageFilename(filename: string): string {
+    const safe = filename.replace(/[^A-Za-z0-9._-]+/g, '-');
+    return safe.replace(/^[-.]+/, '') || 'image';
+}
+
 export async function uploadImageToR2(env: Env, image: ImageAttachment, type: ImageType, cfImagesUrl?: string, bytes?: Uint8Array): Promise<{ url: string; r2Key: string }> {
     const data = bytes ?? base64ToUint8Array(image.base64Data!);
-    const r2Key = `${type}/${image.id}/${encodeURIComponent(image.filename)}`;
+    const r2Key = `${type}/${image.id}/${sanitizeImageFilename(image.filename)}`;
     await env.TEMPLATES_BUCKET.put(r2Key, data, { httpMetadata: { contentType: image.mimeType }, customMetadata: { "cfImagesUrl": cfImagesUrl || '' } });
 
     return { url: getPublicUrlForR2Image(env, r2Key), r2Key };

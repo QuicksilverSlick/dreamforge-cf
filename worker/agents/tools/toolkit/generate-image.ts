@@ -22,11 +22,13 @@ export function createGenerateImageTool(
 		function: {
 			name: 'generate_image',
 			description:
-				'Generate a real image asset (logo, icon, hero image, background, illustration, avatar, or photo) ' +
-				'with a dedicated image model and add it to the app. Use this when the user asks to add, change, or ' +
-				'replace an image, logo, or other visual asset. The image is generated and hosted automatically, then ' +
-				'wired into the app on the next development phase. To replace an existing asset, reuse its `path`. ' +
-				'Do NOT use this for icons that an icon library (lucide-react etc.), CSS, SVG, or canvas can produce.',
+				'Generate a NEW image asset (logo, icon, hero image, background, illustration, avatar, or photo) ' +
+				'from a text description with a dedicated image model and add it to the app. ONLY for images the ' +
+				'user did NOT supply: if the user attached an image they want used in the app, call ' +
+				'use_attached_image instead — NEVER generate a lookalike of a user-supplied image. The image is ' +
+				'generated and hosted automatically, then wired into the app on the next development phase. To ' +
+				'replace an existing asset, reuse its `path`. Do NOT use this for icons that an icon library ' +
+				'(lucide-react etc.), CSS, SVG, or canvas can produce.',
 			parameters: {
 				type: 'object',
 				additionalProperties: false,

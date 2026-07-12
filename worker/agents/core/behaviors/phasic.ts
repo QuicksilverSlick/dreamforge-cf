@@ -753,13 +753,20 @@ export class PhasicCodingBehavior
 
     /**
      * Execute finalizing state — final review and cleanup (runs once).
-     * Ported verbatim from upstream, including its `setMVPGenerated()`
-     * guard semantics.
      */
     async executeFinalizing(): Promise<CurrentDevState> {
         this.logger.info('Executing FINALIZING state - final review and cleanup');
 
-        if (this.setMVPGenerated()) {
+        // setMVPGenerated() returns true only on the FIRST call (when it flips
+        // mvpGenerated false→true) — so the final pass runs exactly once, on
+        // the initial build's finalize. Every later entry into FINALIZING
+        // (post-MVP edit cycles) short-circuits. The previous inverted check
+        // did the opposite: it skipped the initial final pass and re-ran the
+        // corrective scan on EVERY later finalize, and because the corrective
+        // auto-queue recharges the phase counter (+3), persistent design
+        // tells produced an unbounded finalize→queue→phase loop (observed as
+        // a 50-phase runaway in prod).
+        if (!this.setMVPGenerated()) {
             this.logger.info('Finalizing stage already done');
             return CurrentDevState.REVIEWING;
         }

@@ -39,4 +39,11 @@ export class CodingAgentInterface {
     queueImageGeneration(request: ImageGenerationRequest): Promise<string | null> {
         return this.agentStub.queueImageGeneration(request);
     }
+
+    registerUploadedAsset(
+        request: Pick<ImageGenerationRequest, 'path' | 'purpose'>,
+        image: ProcessedImageAttachment,
+    ): Promise<string | null> {
+        return this.agentStub.registerUploadedAsset(request, image);
+    }
 }

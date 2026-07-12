@@ -454,15 +454,20 @@ export async function handleWebSocketMessage(
 
         switch (parsedMessage.type) {
             case WebSocketMessageRequests.GENERATE_ALL:
-                agent.setState({
-                    ...agent.state,
-                    shouldBeGenerating: true,
-                });
-
+                // Duplicate-check BEFORE touching state: setState broadcasts a
+                // fresh cf_agent_state to every client, and clients re-send
+                // generate_all when they see shouldBeGenerating — setting state
+                // first turned every duplicate request into another broadcast
+                // (a self-sustaining ping-pong for the whole build).
                 if (agent.getBehavior().isCodeGenerating()) {
                     logger.info('Generation already in progress, skipping duplicate request');
                     return;
                 }
+
+                agent.setState({
+                    ...agent.state,
+                    shouldBeGenerating: true,
+                });
 
                 logger.info('Starting code generation process');
                 agent
