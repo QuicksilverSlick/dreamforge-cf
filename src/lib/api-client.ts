@@ -128,6 +128,7 @@ export interface BillingSummary {
 	canManageBilling: boolean;
 }
 import { toast } from 'sonner';
+import type { UploadAttachmentsResult } from '../api-types';
 
 /**
  * Global auth modal trigger for 401 interception
@@ -394,9 +395,18 @@ class ApiClient {
 			credentials: options.credentials || 'include',
 		};
 
+		// FormData bodies (file uploads) must be sent as-is with the browser's
+		// own multipart Content-Type + boundary — drop our JSON default.
+		const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+		if (isFormData) {
+			const headers = config.headers as Record<string, string>;
+			delete headers['Content-Type'];
+		}
+
 		if (options.body) {
-			config.body =
-				typeof options.body === 'string'
+			config.body = isFormData
+				? (options.body as FormData)
+				: typeof options.body === 'string'
 					? options.body
 					: JSON.stringify(options.body);
 		}
@@ -662,6 +672,24 @@ class ApiClient {
 
 		const endpoint = `/api/user/apps${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
 		return this.request<UserAppsData>(endpoint);
+	}
+
+	/**
+	 * Upload build attachments (text-like files) to R2. Returns processed
+	 * refs for the accepted files plus any per-file rejections; the caller
+	 * carries the refs into the build request.
+	 */
+	async uploadAttachments(files: File[]): Promise<UploadAttachmentsResult> {
+		const form = new FormData();
+		for (const file of files) form.append('files', file);
+		const { response, data } = await this.requestRaw<UploadAttachmentsResult>('/api/attachments', {
+			method: 'POST',
+			body: form,
+		});
+		if (!response.ok || !data?.success || !data.data) {
+			throw new Error(data?.error?.message || `Attachment upload failed (${response.status})`);
+		}
+		return data.data;
 	}
 
 	async createAgentSession(args: CodeGenArgs): Promise<AgentStreamingResponse> {

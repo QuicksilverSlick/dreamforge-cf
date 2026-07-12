@@ -200,12 +200,31 @@ export interface StreamingResponse {
 export type AgentStreamingResponse = StreamingResponse;
 
 export {
-	type ImageAttachment, 
-	isSupportedImageType, 
+	type ImageAttachment,
+	isSupportedImageType,
 	MAX_IMAGE_SIZE_BYTES,
 	MAX_IMAGES_PER_MESSAGE,
 	SUPPORTED_IMAGE_MIME_TYPES
 } from 'worker/types/image-attachment';
+
+// Build attachments (any-file ingestion). attachment.ts is a leaf type module
+// (only imports from image-attachment) — safe for the SPA bundle.
+export {
+	type ProcessedAttachment,
+	type AttachmentRef,
+	type AttachmentKind,
+	SUPPORTED_ATTACHMENT_TYPES,
+	MAX_ATTACHMENT_SIZE_BYTES,
+	MAX_ATTACHMENTS_PER_BUILD,
+	extensionOf,
+} from 'worker/types/attachment';
+import type { ProcessedAttachment as _ProcessedAttachment } from 'worker/types/attachment';
+
+/** Result of POST /api/attachments — accepted refs + per-file rejections. */
+export interface UploadAttachmentsResult {
+	attachments: _ProcessedAttachment[];
+	rejected: Array<{ filename: string; reason: string }>;
+}
 
 // Auth types imported from worker
 export type {

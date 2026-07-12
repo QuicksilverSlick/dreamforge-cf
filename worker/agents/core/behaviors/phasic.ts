@@ -189,6 +189,7 @@ export class PhasicCodingBehavior
             images: initArgs.images,
             interviewSpec: initArgs.interviewSpec,
             referenceSite: initArgs.referenceSite,
+            attachedDocuments: initArgs.attachedDocuments,
             stream: {
                 chunk_size: 256,
                 onChunk: (chunk) => {
