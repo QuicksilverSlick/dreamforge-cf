@@ -11,6 +11,7 @@ import { setupCodegenRoutes } from './codegenRoutes';
 import { setupScreenshotRoutes } from './imagesRoutes';
 import { setupSentryRoutes } from './sentryRoutes';
 import { setupBYOPRoutes } from './byopRoutes';
+import { setupAttachmentRoutes } from './attachmentsRoutes';
 import { setupCloudflareAccountRoutes } from './cloudflareAccountRoutes';
 import { setupCloudflareConnectRoutes } from './cloudflareConnectRoutes';
 import { setupLimitsRoutes } from './limitsRoutes';
@@ -72,6 +73,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // BYOP (Bring Your Own Project) routes
     setupBYOPRoutes(app);
+    setupAttachmentRoutes(app);
 
     // Cloudflare account + gateway management (PR 10a)
     setupCloudflareAccountRoutes(app);
