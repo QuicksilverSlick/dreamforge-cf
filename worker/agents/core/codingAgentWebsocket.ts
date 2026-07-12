@@ -22,6 +22,8 @@ import { Connection } from 'agents';
 import { createLogger } from '../../logger';
 import { WebSocketMessageRequests, WebSocketMessageResponses } from '../constants';
 import { MAX_IMAGES_PER_MESSAGE, MAX_IMAGE_SIZE_BYTES, type ImageAttachment } from '../../types/image-attachment';
+import type { AttachmentRef } from '../../types/attachment';
+import { resolveAttachedDocuments } from '../../services/attachments/resolve';
 import { checkUsageAndBalance } from '../../services/rate-limit';
 import { meterSparkAction } from '../../services/billing/metering';
 import { generateId } from '../../utils/idGenerator';
@@ -74,6 +76,8 @@ interface IncomingWebSocketMessage {
     type: string;
     message?: string;
     images?: ImageAttachment[];
+    /** Refs to already-uploaded build attachments (USER_SUGGESTION, mid-build). */
+    attachments?: AttachmentRef[];
     data?: {
         url?: string;
         viewport?: unknown;
@@ -705,13 +709,37 @@ export async function handleWebSocketMessage(
                     return;
                 }
 
-                agent.handleUserInput(parsedMessage.message, parsedMessage.images).catch((error: unknown) => {
-                    logger.error('Error handling user suggestion:', error);
-                    sendError(
-                        connection,
-                        `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}`,
-                    );
-                });
+                // Resolve mid-build document attachments (budget-capped R2 reads)
+                // before handing off. Scoped to the SENDER's identity, not the app
+                // owner: uploads live under the uploader's own R2 prefix, so an org
+                // collaborator driving the build must resolve against their own
+                // keys (owner fallback covers pre-identity sockets). Best-effort:
+                // a failed resolve must not block the suggestion itself.
+                {
+                    let attachedDocuments;
+                    if (parsedMessage.attachments && parsedMessage.attachments.length > 0) {
+                        try {
+                            const senderId =
+                                identityOf(connection)?.userId ?? agent.state.metadata.userId;
+                            attachedDocuments = await resolveAttachedDocuments(
+                                agent.env,
+                                senderId,
+                                parsedMessage.attachments,
+                            );
+                        } catch (error) {
+                            logger.error('Failed to resolve mid-build attachments:', error);
+                        }
+                    }
+                    agent
+                        .handleUserInput(parsedMessage.message, parsedMessage.images, attachedDocuments)
+                        .catch((error: unknown) => {
+                            logger.error('Error handling user suggestion:', error);
+                            sendError(
+                                connection,
+                                `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}`,
+                            );
+                        });
+                }
                 break;
             case WebSocketMessageRequests.GET_MODEL_CONFIGS:
                 logger.info('Fetching model configurations');

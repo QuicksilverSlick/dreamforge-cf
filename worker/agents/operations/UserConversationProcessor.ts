@@ -18,6 +18,8 @@ import { CodeSerializerType } from "../utils/codeSerializers";
 import { ConversationState } from "../inferutils/common";
 import { downloadR2Image, imagesToBase64, imageToBase64 } from "worker/utils/images";
 import { ProcessedImageAttachment } from "worker/types/image-attachment";
+import type { AttachedDocument } from "worker/types/attachment";
+import { formatAttachedDocuments } from "worker/services/attachments/format";
 
 // Constants
 const CHUNK_SIZE = 64;
@@ -74,6 +76,8 @@ export interface UserConversationInputs {
     errors: RuntimeError[];
     projectUpdates: string[];
     images?: ProcessedImageAttachment[];
+    /** Text extracted from files attached to this mid-build message. */
+    attachedDocuments?: AttachedDocument[];
 }
 
 export interface UserConversationOutputs {
@@ -243,13 +247,20 @@ const USER_PROMPT = `
 `;
 
 
-function buildUserMessageWithContext(userMessage: string, errors: RuntimeError[], projectUpdates: string[], forInference: boolean): string {
+function buildUserMessageWithContext(userMessage: string, errors: RuntimeError[], projectUpdates: string[], forInference: boolean, attachedDocuments?: AttachedDocument[]): string {
     let userPrompt = USER_PROMPT.replace("{{timestamp}}", new Date().toISOString()).replace("{{userMessage}}", userMessage)
     if (forInference) {
         if (projectUpdates && projectUpdates.length > 0) {
             userPrompt = userPrompt.replace("{{projectUpdates}}", projectUpdates.join("\n\n"));
         }
-        return userPrompt.replace("{{errors}}", PROMPT_UTILS.serializeErrors(errors));
+        userPrompt = userPrompt.replace("{{errors}}", PROMPT_UTILS.serializeErrors(errors));
+        // Attached-document text is fenced, untrusted source material — appended
+        // only to the inference message; the persisted history keeps it redacted
+        // (ephemeral, like images) to save tokens.
+        if (attachedDocuments && attachedDocuments.length > 0) {
+            userPrompt += `\n\n${formatAttachedDocuments(attachedDocuments)}`;
+        }
+        return userPrompt;
     } else {
         // To save tokens
         return userPrompt.replace("{{projectUpdates}}", "redacted").replace("{{errors}}", "redacted");
@@ -287,18 +298,19 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
 
     async execute(inputs: UserConversationInputs, options: OperationOptions): Promise<UserConversationOutputs> {
         const { env, logger, context, agent } = options;
-        const { userMessage, conversationState, errors, images, projectUpdates } = inputs;
-        logger.info("Processing user message", { 
+        const { userMessage, conversationState, errors, images, projectUpdates, attachedDocuments } = inputs;
+        logger.info("Processing user message", {
             messageLength: inputs.userMessage.length,
             hasImages: !!images && images.length > 0,
-            imageCount: images?.length || 0
+            imageCount: images?.length || 0,
+            documentCount: attachedDocuments?.length || 0
         });
 
         try {
             const systemPromptMessages = getSystemPromptWithProjectContext(SYSTEM_PROMPT, context, CodeSerializerType.SIMPLE);
             
             // Create user message with optional images for inference
-            const userPromptForInference = buildUserMessageWithContext(userMessage, errors, projectUpdates, true);
+            const userPromptForInference = buildUserMessageWithContext(userMessage, errors, projectUpdates, true, attachedDocuments);
             const userMessageForInference = images && images.length > 0
                 ? createMultiModalUserMessage(
                     userPromptForInference,

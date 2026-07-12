@@ -126,6 +126,7 @@ import { ImageType, uploadImage } from '../../../utils/images';
 import { captureAndStoreScreenshot } from '../../../services/screenshots/screenshotCapture';
 import { ScreenshotSecurity } from '../../../utils/screenshot-security';
 import type { ImageAttachment, ProcessedImageAttachment } from '../../../types/image-attachment';
+import type { AttachedDocument } from '../../../types/attachment';
 import type { OperationOptions } from '../../operations/common';
 import { generatePortToken } from '../../../utils/cryptoUtils';
 import { getPreviewDomain, getProtocolForHost } from '../../../utils/urls';
@@ -783,13 +784,18 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
      * when the `deep_debug` tool fires) is dropped here — the deep-
      * debug machinery lands with sub-slice C.
      */
-    async handleUserInput(userMessage: string, images?: ImageAttachment[]): Promise<void> {
+    async handleUserInput(
+        userMessage: string,
+        images?: ImageAttachment[],
+        attachedDocuments?: AttachedDocument[],
+    ): Promise<void> {
         try {
             this.logger.info('Processing user input message', {
                 messageLength: userMessage.length,
                 pendingInputsCount: this.state.pendingUserInputs.length,
                 hasImages: !!images && images.length > 0,
                 imageCount: images?.length ?? 0,
+                documentCount: attachedDocuments?.length ?? 0,
             });
 
             await this.ensureTemplateDetails();
@@ -835,6 +841,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                     errors,
                     projectUpdates,
                     images: uploadedImages,
+                    attachedDocuments,
                 },
                 this.getOperationOptions(),
             );

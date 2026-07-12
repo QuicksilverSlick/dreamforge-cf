@@ -13,8 +13,7 @@ import { AppCard } from '@/components/shared/AppCard';
 import clsx from 'clsx';
 import { useImageUpload } from '@/hooks/use-image-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
-import { ImageUploadButton } from '@/components/image-upload-button';
-import { AttachmentPickerButton, AttachmentChips } from '@/components/attachment-picker';
+import { UnifiedAttachButton, AttachmentChips } from '@/components/attachment-picker';
 import { useAttachmentUpload } from '@/hooks/use-attachment-upload';
 import { ImageAttachmentPreview } from '@/components/image-attachment-preview';
 import { SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
@@ -304,7 +303,12 @@ export default function Home() {
 									/>
 								)}
 							</div>
-							<div className="flex items-center justify-between mt-4 pt-1">
+							<div className="flex items-center gap-3 mt-4 pt-1">
+								<UnifiedAttachButton
+									onImagesSelected={addImages}
+									onFilesSelected={addFiles}
+									busy={isProcessing || isUploading}
+								/>
 								{import.meta.env.VITE_AGENT_MODE_ENABLED ? (
 									<AgentModeToggle
 										value={agentMode}
@@ -312,18 +316,8 @@ export default function Home() {
 										className="flex-1"
 									/>
 								) : (
-									<div></div>
+									<div className="flex-1"></div>
 								)}
-
-								<div className="flex items-center justify-end ml-4 gap-2">
-								<ImageUploadButton
-									onFilesSelected={addImages}
-									disabled={isProcessing}
-								/>
-								<AttachmentPickerButton
-									onFilesSelected={addFiles}
-									disabled={isUploading}
-								/>
 								<button
 									type="submit"
 									disabled={!query.trim()}
@@ -331,7 +325,6 @@ export default function Home() {
 								>
 									<ArrowRight />
 								</button>
-							</div>
 							</div>
 						</form>
 
