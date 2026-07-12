@@ -10,6 +10,7 @@ import { StructuredLogger } from "../../logger";
 import { IdGenerator } from '../utils/idGenerator';
 // import { MAX_LLM_MESSAGES } from '../constants';
 import { RateLimitExceededError, SecurityError } from 'shared/types/errors';
+import type { AgentRole } from 'shared/agents/activityDisplay';
 import { buildTools } from "../tools/customTools";
 import { PROMPT_UTILS } from "../prompts";
 import { RuntimeError } from "worker/services/sandbox/sandboxTypes";
@@ -32,7 +33,16 @@ const COMPACTIFICATION_CONFIG = {
 interface ToolCallStatusArgs {
     name: string;
     status: 'start' | 'success' | 'error';
-    args?: Record<string, unknown>
+    args?: Record<string, unknown>;
+    /**
+     * The agent ROLE running this tool. Today only the conversational
+     * Assistant executes tools, so callers omit it and the client falls back
+     * to the static tool→role map — but the seam matters the moment a second
+     * agent (DeepDebugger) runs the same tools: a stamped actor overrides the
+     * static map client-side, so "who is working" stays truthful when
+     * tool-name→role stops being 1:1.
+     */
+    actor?: AgentRole;
 }
 // `RenderToolCall` and `buildToolCallRenderer` are exported for the
 // ported behaviors that land in later M3 slices — they need to call
@@ -47,9 +57,13 @@ type ConversationResponseCallback = (
     tool?: ToolCallStatusArgs
 ) => void;
 
-export function buildToolCallRenderer(callback: ConversationResponseCallback, conversationId: string): RenderToolCall {
+export function buildToolCallRenderer(
+    callback: ConversationResponseCallback,
+    conversationId: string,
+    actor?: AgentRole,
+): RenderToolCall {
     return (args: ToolCallStatusArgs) => {
-        callback('', conversationId, false, args);
+        callback('', conversationId, false, actor ? { ...args, actor } : args);
     }
 }
 

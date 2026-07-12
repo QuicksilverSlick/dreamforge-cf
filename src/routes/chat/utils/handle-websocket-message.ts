@@ -720,7 +720,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
 
                 if (message.tool) {
                     const tool = message.tool;
-                    setMessages(prev => appendToolEvent(prev, conversationId, { name: tool.name, status: tool.status, args: tool.args }));
+                    setMessages(prev => appendToolEvent(prev, conversationId, { name: tool.name, status: tool.status, args: tool.args, actor: tool.actor }));
                     break;
                 }
 

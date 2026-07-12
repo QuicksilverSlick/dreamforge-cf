@@ -4,6 +4,7 @@ import type { ConversationState } from "../agents/inferutils/common";
 import type { CodeIssue, RuntimeError, StaticAnalysisResponse } from "../services/sandbox/sandboxTypes";
 import type { CodeFixResult } from "../services/code-fixer";
 import { IssueReport } from "../agents/domain/values/IssueReport";
+import type { AgentRole } from "shared/agents/activityDisplay";
 import type { RateLimitExceededError } from 'shared/types/errors';
 import type { UserRole } from '../types/auth-types';
 
@@ -335,6 +336,14 @@ type ConversationResponseMessage = {
 		name: string;
 		status: 'start' | 'success' | 'error';
 		args?: Record<string, unknown>;
+		/**
+		 * Agent role running the tool. Absent for the conversational
+		 * Assistant (the client's static tool-to-role map covers it); stamped
+		 * by future multi-agent tool users (DeepDebugger) so the role badge
+		 * stays truthful when tool-name-to-role stops being 1:1. A stamped
+		 * value overrides the static map client-side.
+		 */
+		actor?: AgentRole;
 	};
 };
 

@@ -71,6 +71,9 @@ export function AIMessage({
 					<div className="mb-1.5 flex flex-col gap-1">
 						{toolEvents.map((ev) => {
 							const display = getToolDisplay(ev.name, ev.args);
+						// A server-stamped actor is ground truth for WHO ran the tool
+						// (multi-agent seam) — it overrides the static map's role.
+						const roleLabel = ev.actor ? ROLE_DISPLAY[ev.actor].label : display.roleLabel;
 							return (
 								<div
 									key={`${ev.name}-${ev.timestamp}`}
@@ -83,7 +86,7 @@ export function AIMessage({
 									</span>
 									<span className="min-w-0">
 										<span className="mr-1 rounded bg-bg-3 px-1 py-px text-[10px] font-medium uppercase tracking-wide text-text-tertiary/80">
-											{display.roleLabel}
+											{roleLabel}
 										</span>
 										<span className={clsx(ev.status === 'error' && 'text-destructive')}>
 											{display.label}

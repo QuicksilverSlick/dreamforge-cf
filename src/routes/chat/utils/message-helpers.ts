@@ -11,6 +11,8 @@ export type ToolEvent = {
     args?: Record<string, unknown>;
     /** Repeat count: N identical consecutive calls collapse into one row (×N). */
     count?: number;
+    /** Server-stamped agent role — overrides the static tool→role map. */
+    actor?: AgentRole;
 };
 
 /**
@@ -219,7 +221,7 @@ export function handleStreamingMessage(
 export function appendToolEvent(
     messages: ChatMessage[],
     conversationId: string,
-    tool: { name: string; status: 'start' | 'success' | 'error'; args?: Record<string, unknown> }
+    tool: { name: string; status: 'start' | 'success' | 'error'; args?: Record<string, unknown>; actor?: AgentRole }
 ): ChatMessage[] {
     const idx = messages.findIndex(m => m.conversationId === conversationId && m.role === 'assistant');
     const timestamp = Date.now();
@@ -230,7 +232,7 @@ export function appendToolEvent(
             role: 'assistant',
             conversationId,
             content: '',
-            ui: { toolEvents: [{ name: tool.name, status: tool.status, timestamp, args: tool.args }] },
+            ui: { toolEvents: [{ name: tool.name, status: tool.status, timestamp, args: tool.args, actor: tool.actor }] },
         };
         return [...messages, newMsg];
     }
@@ -254,7 +256,7 @@ export function appendToolEvent(
                 }
             }
             // If no prior start, just append success as a separate line
-            return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: 'success', timestamp, args: tool.args }] } };
+            return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: 'success', timestamp, args: tool.args, actor: tool.actor }] } };
         }
         // A 'start' identical to the last row (same tool, already running/done)
         // collapses into a ×N counter instead of stacking duplicate lines
@@ -274,6 +276,6 @@ export function appendToolEvent(
             };
         }
         // Default: append event
-        return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: tool.status, timestamp, args: tool.args }] } };
+        return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: tool.status, timestamp, args: tool.args, actor: tool.actor }] } };
     });
 }
