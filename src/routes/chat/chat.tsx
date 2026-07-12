@@ -7,7 +7,7 @@ import {
 	type FormEvent,
 	type ReactElement,
 } from 'react';
-import { ArrowRight, Image as ImageIcon } from 'react-feather';
+import { ArrowRight } from 'react-feather';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router';
 import { MonacoEditor } from '../../components/monaco-editor/monaco-editor';
 import { useAuth } from '@/contexts/auth-context';
@@ -36,8 +36,10 @@ import { GitHubExportModal } from '@/components/github-export-modal';
 import { ModelConfigInfo } from './components/model-config-info';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { useImageUpload } from '@/hooks/use-image-upload';
+import { useAttachmentUpload } from '@/hooks/use-attachment-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ImageAttachmentPreview } from '@/components/image-attachment-preview';
+import { UnifiedAttachButton, AttachmentChips } from '@/components/attachment-picker';
 import { createAIMessage } from './utils/message-helpers';
 import { useLimitsContext } from '@/contexts/limits-context';
 import { useBillingContext } from '@/contexts/billing-context';
@@ -319,7 +321,13 @@ export default function Chat() {
 			console.error('Chat image upload error:', error);
 		},
 	});
-	const imageInputRef = useRef<HTMLInputElement>(null);
+	const {
+		attachments,
+		addFiles,
+		removeAttachment,
+		clearAttachments,
+		isUploading: isUploadingAttachments,
+	} = useAttachmentUpload();
 
 	// Fake stream bootstrap files
 	const { streamedFiles: streamedBootstrapFiles, doneStreaming } =
@@ -634,23 +642,33 @@ export default function Chat() {
 			// The server debits the 30-Spark edit on receipt — nudge the balance
 			// badge shortly after so the drain is visible without a refresh.
 			window.setTimeout(() => window.dispatchEvent(new Event('billing-updated')), 2000);
+			const attachmentRefs: AttachmentRef[] = attachments.map((a) => ({
+				id: a.id,
+				filename: a.filename,
+				kind: a.kind,
+				extractedKey: a.extractedKey,
+			}));
 			websocket?.send(
 				JSON.stringify({
 					type: 'user_suggestion',
 					message: newMessage,
 					images: images.length > 0 ? images : undefined,
+					attachments: attachmentRefs.length > 0 ? attachmentRefs : undefined,
 				}),
 			);
 			sendUserMessage(newMessage);
 			setNewMessage('');
-			// Clear images after sending
+			// Clear images/attachments after sending
 			if (images.length > 0) {
 				clearImages();
+			}
+			if (attachments.length > 0) {
+				clearAttachments();
 			}
 			// Ensure we scroll after sending our own message
 			requestAnimationFrame(() => scrollToBottom());
 		},
-		[newMessage, websocket, sendUserMessage, isChatDisabled, scrollToBottom, images, clearImages, isReadOnlyViewer, currentDriverName, setDrivingBlockedBy, limitsData, limitsLoading, billingData?.meteringEnabled],
+		[newMessage, websocket, sendUserMessage, isChatDisabled, scrollToBottom, images, clearImages, attachments, clearAttachments, isReadOnlyViewer, currentDriverName, setDrivingBlockedBy, limitsData, limitsLoading, billingData?.meteringEnabled],
 	);
 
 	const [progress, total] = useMemo((): [number, number] => {
@@ -956,21 +974,6 @@ export default function Chat() {
                         className="shrink-0 p-4 pb-5 bg-transparent"
                         {...chatDragHandlers}
                     >
-					<input
-						ref={imageInputRef}
-						type="file"
-						accept={SUPPORTED_IMAGE_MIME_TYPES.join(',')}
-						multiple
-						onChange={(e) => {
-							const files = Array.from(e.target.files || []);
-							if (files.length > 0) {
-								addImages(files);
-							}
-							e.target.value = '';
-						}}
-						className="hidden"
-						disabled={isChatDisabled}
-					/>
 					<div className="relative">
 						{isChatDragging && (
 							<div className="absolute inset-0 flex items-center justify-center bg-accent/10 backdrop-blur-sm rounded-xl z-50 pointer-events-none">
@@ -985,6 +988,13 @@ export default function Chat() {
 									compact
 								/>
 							</div>
+						)}
+						{attachments.length > 0 && (
+							<AttachmentChips
+								attachments={attachments}
+								onRemove={removeAttachment}
+								className="mb-2"
+							/>
 						)}
 						<textarea
 							value={newMessage}
@@ -1019,7 +1029,7 @@ export default function Chat() {
 											: 'Ask a follow up...'
 								}
 								rows={1}
-								className="w-full bg-bg-2 border border-text-primary/10 rounded-xl px-3 pr-20 py-2 text-sm outline-none focus:border-white/20 drop-shadow-2xl text-text-primary placeholder:!text-text-primary/50 disabled:opacity-50 disabled:cursor-not-allowed resize-none overflow-y-auto no-scrollbar min-h-[36px] max-h-[120px]"
+								className="w-full bg-bg-2 border border-text-primary/10 rounded-xl pl-11 pr-11 py-2 text-sm outline-none focus:border-white/20 drop-shadow-2xl text-text-primary placeholder:!text-text-primary/50 disabled:opacity-50 disabled:cursor-not-allowed resize-none overflow-y-auto no-scrollbar min-h-[36px] max-h-[120px]"
 								style={{
 									// Auto-resize based on content
 									height: 'auto',
@@ -1033,17 +1043,16 @@ export default function Chat() {
 									}
 								}}
 							/>
-							<div className="absolute right-1.5 bottom-2.5 flex items-center gap-1">
-								<button
-									type="button"
-									onClick={() => imageInputRef.current?.click()}
-									disabled={isChatDisabled || isProcessing}
-									className="p-1.5 rounded-md hover:bg-bg-3 text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-									aria-label="Upload image"
-									title="Upload image"
-								>
-									<ImageIcon className="size-4" strokeWidth={1.5} />
-								</button>
+							<div className="absolute left-1.5 bottom-2 flex items-center">
+								<UnifiedAttachButton
+									onImagesSelected={addImages}
+									onFilesSelected={addFiles}
+									disabled={isChatDisabled}
+									busy={isProcessing || isUploadingAttachments}
+									iconClassName="size-4"
+								/>
+							</div>
+							<div className="absolute right-1.5 bottom-2.5 flex items-center">
 								<button
 									type="submit"
 									disabled={!newMessage.trim() || isChatDisabled}

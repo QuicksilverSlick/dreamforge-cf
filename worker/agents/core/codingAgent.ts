@@ -98,6 +98,7 @@ import { WebSocketMessageResponses } from '../constants';
 import { AppService } from '../../database';
 import { ConversationMessage, ConversationState } from '../inferutils/common';
 import { ImageAttachment } from '../../types/image-attachment';
+import type { AttachedDocument } from '../../types/attachment';
 import { RateLimitExceededError } from 'shared/types/errors';
 import { ProjectObjective } from './objectives/base';
 import { PhasicCodingBehavior } from './behaviors/phasic';
@@ -976,16 +977,21 @@ export class CodeGeneratorAgent
      * Handle user input during conversational code generation.
      * Processes user messages and updates pendingUserInputs state.
      */
-    async handleUserInput(userMessage: string, images?: ImageAttachment[]): Promise<void> {
+    async handleUserInput(
+        userMessage: string,
+        images?: ImageAttachment[],
+        attachedDocuments?: AttachedDocument[],
+    ): Promise<void> {
         try {
             this.logger().info('Processing user input message', {
                 messageLength: userMessage.length,
                 pendingInputsCount: this.state.pendingUserInputs.length,
                 hasImages: !!images && images.length > 0,
                 imageCount: images?.length || 0,
+                documentCount: attachedDocuments?.length || 0,
             });
 
-            await this.behavior.handleUserInput(userMessage, images);
+            await this.behavior.handleUserInput(userMessage, images, attachedDocuments);
             if (!this.behavior.isCodeGenerating()) {
                 this.logger().info(
                     'User input during IDLE state, starting generation',

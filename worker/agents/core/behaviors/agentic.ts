@@ -53,6 +53,8 @@
  */
 
 import type { ImageAttachment, ProcessedImageAttachment } from '../../../types/image-attachment';
+import type { AttachedDocument } from '../../../types/attachment';
+import { formatAttachedDocuments } from '../../../services/attachments/format';
 import { generateNanoId } from '../../../utils/idGenerator';
 import { ImageType, uploadImage } from '../../../utils/images';
 import { WebSocketMessageResponses } from '../../constants';
@@ -226,7 +228,11 @@ export class AgenticCodingBehavior
      * "Message Queued" tool-call rendered in the UI so they know the
      * message landed.
      */
-    async handleUserInput(userMessage: string, images?: ImageAttachment[]): Promise<void> {
+    async handleUserInput(
+        userMessage: string,
+        images?: ImageAttachment[],
+        attachedDocuments?: AttachedDocument[],
+    ): Promise<void> {
         let processedImages: ProcessedImageAttachment[] | undefined;
 
         if (images && images.length > 0) {
@@ -238,7 +244,15 @@ export class AgenticCodingBehavior
             });
         }
 
-        await this.queueUserRequest(userMessage, processedImages);
+        // The agentic loop reads the queued request text directly (no separate
+        // conversation processor), so fold attached-document text into the
+        // queued message as fenced, untrusted source material.
+        const queuedMessage =
+            attachedDocuments && attachedDocuments.length > 0
+                ? `${userMessage}\n\n${formatAttachedDocuments(attachedDocuments)}`
+                : userMessage;
+
+        await this.queueUserRequest(queuedMessage, processedImages);
 
         if (this.isCodeGenerating()) {
             this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {

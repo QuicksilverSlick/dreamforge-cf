@@ -1,16 +1,35 @@
 import { useRef } from 'react';
-import { Paperclip, FileText, X, LoaderCircle } from 'lucide-react';
+import { Plus, FileText, X, LoaderCircle } from 'lucide-react';
 import clsx from 'clsx';
 import type { ProcessedAttachment } from '@/api-types';
+import { SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
 import { TEXT_ATTACHMENT_ACCEPT } from '@/hooks/use-attachment-upload';
+import { partitionAttachmentFiles } from '@/lib/attachment-classify';
 
-/** Paperclip button that opens a file picker for text-like build attachments. */
-export function AttachmentPickerButton({
+/** Accept list covering both lanes: images + text-like documents. */
+const UNIFIED_ATTACH_ACCEPT = [SUPPORTED_IMAGE_MIME_TYPES.join(','), TEXT_ATTACHMENT_ACCEPT].join(',');
+
+/**
+ * Single "+" control that accepts images and documents in one click. Picked
+ * files are split by {@link partitionAttachmentFiles} and handed to the two
+ * upload lanes — images to `onImagesSelected`, everything else to
+ * `onFilesSelected` — so the caller keeps its existing per-lane hooks.
+ */
+export function UnifiedAttachButton({
+	onImagesSelected,
 	onFilesSelected,
 	disabled,
+	busy,
+	className,
+	iconClassName = 'size-5',
 }: {
+	onImagesSelected: (files: File[]) => void;
 	onFilesSelected: (files: File[]) => void;
 	disabled?: boolean;
+	/** Show a spinner while an upload is in flight (control stays clickable). */
+	busy?: boolean;
+	className?: string;
+	iconClassName?: string;
 }) {
 	const inputRef = useRef<HTMLInputElement>(null);
 	return (
@@ -19,11 +38,15 @@ export function AttachmentPickerButton({
 				ref={inputRef}
 				type="file"
 				multiple
-				accept={TEXT_ATTACHMENT_ACCEPT}
+				accept={UNIFIED_ATTACH_ACCEPT}
 				className="hidden"
 				onChange={(e) => {
 					const files = Array.from(e.target.files ?? []);
-					if (files.length > 0) onFilesSelected(files);
+					if (files.length > 0) {
+						const { images, documents } = partitionAttachmentFiles(files);
+						if (images.length > 0) onImagesSelected(images);
+						if (documents.length > 0) onFilesSelected(documents);
+					}
 					// Reset so re-selecting the same file fires change again.
 					e.target.value = '';
 				}}
@@ -32,11 +55,14 @@ export function AttachmentPickerButton({
 				type="button"
 				disabled={disabled}
 				onClick={() => inputRef.current?.click()}
-				title="Attach files (docs, data, notes)"
-				aria-label="Attach files"
-				className="p-1 rounded-md text-text-tertiary transition-colors hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed"
+				title="Attach images or documents"
+				aria-label="Attach images or documents"
+				className={clsx(
+					'p-1 rounded-md text-text-tertiary transition-colors hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed',
+					className,
+				)}
 			>
-				{disabled ? <LoaderCircle className="size-5 animate-spin" /> : <Paperclip className="size-5" />}
+				{busy ? <LoaderCircle className={clsx(iconClassName, 'animate-spin')} /> : <Plus className={iconClassName} />}
 			</button>
 		</>
 	);

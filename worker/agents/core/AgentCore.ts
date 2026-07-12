@@ -39,6 +39,7 @@ import type {
     ModelConfig,
 } from '../inferutils/config.types';
 import type { ImageAttachment } from '../../types/image-attachment';
+import type { AttachedDocument } from '../../types/attachment';
 import type { FileOutputType } from '../schemas';
 import type {
     AgentInitArgs,
@@ -220,14 +221,16 @@ export interface ICodingBehavior<
     }>;
 
     /**
-     * Called from `CodeGeneratorAgent.handleUserInput(message, images?)`.
+     * Called from `CodeGeneratorAgent.handleUserInput(message, images?, docs?)`.
      * Behavior owns the input handling and decides whether to kick off
      * generation. The agent calls `isCodeGenerating()` afterward to
-     * decide whether to fire `generateAllFiles()`.
+     * decide whether to fire `generateAllFiles()`. `attachedDocuments` carries
+     * text extracted from files attached to this mid-build message.
      */
     handleUserInput(
         userMessage: string,
         images?: ImageAttachment[],
+        attachedDocuments?: AttachedDocument[],
     ): Promise<void>;
 
     /**

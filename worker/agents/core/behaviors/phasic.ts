@@ -67,6 +67,7 @@
  */
 
 import type { ImageAttachment, ProcessedImageAttachment } from '../../../types/image-attachment';
+import type { AttachedDocument } from '../../../types/attachment';
 import type { StaticAnalysisResponse } from '../../../services/sandbox/sandboxTypes';
 import { generateNanoId } from '../../../utils/idGenerator';
 import { findDesignTells } from '../../prompts/designSkills';
@@ -441,8 +442,12 @@ export class PhasicCodingBehavior
      * The override exists to mirror upstream's structure; behaviors
      * may grow phasic-specific input handling in later commits.
      */
-    async handleUserInput(userMessage: string, images?: ImageAttachment[]): Promise<void> {
-        await super.handleUserInput(userMessage, images);
+    async handleUserInput(
+        userMessage: string,
+        images?: ImageAttachment[],
+        attachedDocuments?: AttachedDocument[],
+    ): Promise<void> {
+        await super.handleUserInput(userMessage, images, attachedDocuments);
     }
 
     // ==========================================
