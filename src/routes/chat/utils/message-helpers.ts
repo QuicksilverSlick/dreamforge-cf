@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import { generateId } from '@/utils/id-generator';
 import type { RateLimitError, ConversationMessage } from '@/api-types';
+import type { AgentRole } from 'shared/agents/activityDisplay';
 
 export type ToolEvent = {
     name: string;
@@ -10,6 +11,17 @@ export type ToolEvent = {
     args?: Record<string, unknown>;
     /** Repeat count: N identical consecutive calls collapse into one row (×N). */
     count?: number;
+};
+
+/**
+ * One plain-language line in a fix-cycle activity card ("Building the changes…",
+ * "Your update is live — try it again now."). `tone` drives the icon/emphasis.
+ */
+export type ActivityLine = {
+    text: string;
+    role: AgentRole;
+    tone: 'progress' | 'done' | 'attention';
+    timestamp: number;
 };
 
 export interface SuggestionChip {
@@ -36,6 +48,8 @@ export type ChatMessage = Omit<ConversationMessage, 'content'> & {
         suggestions?: SuggestionChip[];
         /** Blueprint-image consent card (images debit Sparks). */
         imageConsent?: ImageConsentCard;
+        /** Rolling plain-language narration of a fix cycle (one card per cycle). */
+        activityLines?: ActivityLine[];
     };
 };
 
@@ -56,8 +70,36 @@ export function isConversationalMessage(messageId: string): boolean {
         'improvement-suggestions',
         'image-consent',
     ];
-    
-    return conversationalIds.includes(messageId) || messageId.startsWith('conv-');
+
+    // `activity-<cycleId>` cards are narration WE deliberately create for a fix
+    // cycle — admit them without widening the fixed list above (which would let
+    // raw phase/deploy chatter through).
+    return conversationalIds.includes(messageId)
+        || messageId.startsWith('conv-')
+        || messageId.startsWith('activity-');
+}
+
+/**
+ * Append a narration line to the fix cycle's single rolling activity card
+ * (conversationId `activity-<cycleId>`), creating the card on the first line.
+ * One card per cycle keeps chat readable instead of one bubble per event.
+ */
+export function appendActivityLine(
+    messages: ChatMessage[],
+    cycleId: string,
+    line: Omit<ActivityLine, 'timestamp'>,
+): ChatMessage[] {
+    const conversationId = `activity-${cycleId}`;
+    const entry: ActivityLine = { ...line, timestamp: Date.now() };
+    const idx = messages.findIndex(m => m.conversationId === conversationId && m.role === 'assistant');
+    if (idx === -1) {
+        return [...messages, { role: 'assistant', conversationId, content: '', ui: { activityLines: [entry] } }];
+    }
+    return messages.map((m, i) =>
+        i === idx
+            ? { ...m, ui: { ...m.ui, activityLines: [...(m.ui?.activityLines ?? []), entry] } }
+            : m,
+    );
 }
 
 /**

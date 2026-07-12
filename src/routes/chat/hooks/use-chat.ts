@@ -116,6 +116,9 @@ export function useChat({
 	// parked awaiting the user's explicit confirmation to start the build.
 	const [awaitingStartConfirmation, setAwaitingStartConfirmation] = useState(false);
 	const startConfirmedRef = useRef(false);
+	// Fix-cycle narration state — persists across WS events so the "planning →
+	// building → live, try again" story attaches to one card and closes cleanly.
+	const fixCycleRef = useRef<{ id: string; active: boolean }>({ id: '', active: false });
 	const [startTrigger, setStartTrigger] = useState(0);
 
 	const confirmStart = useCallback(() => {
@@ -259,6 +262,7 @@ export function useChat({
 			setDrivingBlockedBy,
 			setTakeoverRequest,
 			setTakeoverStatus,
+			fixCycleRef,
 			// Current state
 			isInitialStateRestored,
 			blueprint,

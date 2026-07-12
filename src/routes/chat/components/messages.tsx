@@ -8,8 +8,8 @@ import { LoaderCircle, Check, AlertTriangle, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import type { SuggestionChip, ImageConsentCard } from '../utils/message-helpers';
-import type { ToolEvent } from '../utils/message-helpers';
-import { getToolDisplay } from 'shared/agents/activityDisplay';
+import type { ToolEvent, ActivityLine } from '../utils/message-helpers';
+import { getToolDisplay, ROLE_DISPLAY } from 'shared/agents/activityDisplay';
 
 /**
  * Strip internal system tags that should not be displayed to users
@@ -41,6 +41,7 @@ export function AIMessage({
 	message,
 	isThinking,
 	toolEvents,
+	activityLines,
 	suggestions,
 	imageConsent,
 	onSuggestionAccept,
@@ -49,6 +50,7 @@ export function AIMessage({
 	message: string;
 	isThinking?: boolean;
 	toolEvents?: ToolEvent[];
+	activityLines?: ActivityLine[];
 	suggestions?: SuggestionChip[];
 	imageConsent?: ImageConsentCard;
 	onSuggestionAccept?: (chip: SuggestionChip) => void;
@@ -98,6 +100,25 @@ export function AIMessage({
 								</div>
 							);
 						})}
+					</div>
+				)}
+				{activityLines && activityLines.length > 0 && (
+					<div className="mb-1 flex flex-col gap-2 rounded-lg border border-border-primary bg-bg-3/40 p-3">
+						{activityLines.map((line, i) => (
+							<div key={`${line.timestamp}-${i}`} className="flex items-start gap-2 text-sm">
+								<span className="mt-0.5 shrink-0">
+									{line.tone === 'progress' && <LoaderCircle className="size-3.5 animate-spin text-accent" />}
+									{line.tone === 'done' && <Check className="size-3.5 text-accent" />}
+									{line.tone === 'attention' && <AlertTriangle className="size-3.5 text-amber-500" />}
+								</span>
+								<span className="min-w-0">
+									<span className="mr-1.5 rounded bg-bg-2 px-1 py-px text-[10px] font-medium uppercase tracking-wide text-text-tertiary/80">
+										{ROLE_DISPLAY[line.role].label}
+									</span>
+									<span className="text-text-primary/90">{line.text}</span>
+								</span>
+							</div>
+						))}
 					</div>
 				)}
 				<Markdown className={clsx('a-tag', isThinking ? 'animate-pulse' : '')}>

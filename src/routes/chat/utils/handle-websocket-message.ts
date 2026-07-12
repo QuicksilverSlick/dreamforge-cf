@@ -10,15 +10,17 @@ import {
     setAllFilesCompleted,
     updatePhaseFileStatus,
 } from './file-state-helpers';
-import { 
+import {
     createAIMessage,
     handleRateLimitError,
     handleStreamingMessage,
     appendToolEvent,
+    appendActivityLine,
     type ChatMessage,
 } from './message-helpers';
 import { completeStages } from './project-stage-helpers';
 import { sendWebSocketMessage } from './websocket-helpers';
+import type { AgentRole } from 'shared/agents/activityDisplay';
 import type { FileType, PhaseTimelineItem } from '../hooks/use-chat';
 import type { TakeoverRequest, TakeoverStatus } from './takeover';
 import { toast } from 'sonner';
@@ -60,6 +62,15 @@ export interface HandleMessageDeps {
     // operator's own request status.
     setTakeoverRequest: React.Dispatch<React.SetStateAction<TakeoverRequest | null>>;
     setTakeoverStatus: React.Dispatch<React.SetStateAction<TakeoverStatus | null>>;
+
+    /**
+     * Fix-cycle narration state (persists across events via a ref). A "cycle"
+     * is a round of work triggered by a user request AFTER the initial build —
+     * the case where the owner pasted an error and couldn't tell anything
+     * happened. `active` gates narration so the initial generation (already
+     * covered by the PhaseTimeline) stays quiet.
+     */
+    fixCycleRef: React.MutableRefObject<{ id: string; active: boolean }>;
 
     // Current state
     isInitialStateRestored: boolean;
@@ -133,6 +144,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setDrivingBlockedBy,
             setTakeoverRequest,
             setTakeoverStatus,
+            fixCycleRef,
             isInitialStateRestored,
             blueprint,
             query,
@@ -149,6 +161,17 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             onDebugMessage,
             onTerminalMessage,
         } = deps;
+
+        /**
+         * Emit a plain-language narration line into the CURRENT fix cycle's
+         * rolling card. No-op unless a cycle is active (so initial generation,
+         * covered by the PhaseTimeline, stays quiet). Bypasses the sendMessage
+         * whitelist by writing the `activity-` card directly.
+         */
+        const narrate = (line: { text: string; role: AgentRole; tone: 'progress' | 'done' | 'attention' }) => {
+            if (!fixCycleRef.current.active) return;
+            setMessages(prev => appendActivityLine(prev, fixCycleRef.current.id, line));
+        };
 
         // Log messages except for frequent ones
         if (message.type !== 'file_chunk_generated' && message.type !== 'cf_agent_state' && message.type.length <= 50) {
@@ -368,6 +391,18 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setFiles((prev) => setAllFilesCompleted(prev));
                 setProjectStages((prev) => completeStages(prev, ['code', 'validate', 'fix']));
 
+                // Safety net: if a fix cycle is still open (no deployment_completed
+                // arrived), close it with a gentler "ready" line so later work
+                // never attaches to a stale card.
+                if (fixCycleRef.current.active) {
+                    narrate({
+                        text: 'Your changes are ready in the preview.',
+                        role: 'builder',
+                        tone: 'done',
+                    });
+                    fixCycleRef.current = { ...fixCycleRef.current, active: false };
+                }
+
                 sendMessage(createAIMessage('generation-complete', 'Code generation has been completed.'));
                 setIsPhaseProgressActive(false);
                 break;
@@ -382,6 +417,17 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setIsPreviewDeploying(false);
                 const finalPreviewURL = getPreviewUrl(message.previewURL, message.tunnelURL);
                 setPreviewUrl(finalPreviewURL);
+                // The payoff the owner missed: a redeploy after a fix cycle IS
+                // the "your change is live, try it again" moment (the preview
+                // auto-refreshes ~1s later). Narrate it, then close the cycle.
+                if (fixCycleRef.current.active) {
+                    narrate({
+                        text: 'Done — your update is live in the preview. Try it again now.',
+                        role: 'builder',
+                        tone: 'done',
+                    });
+                    fixCycleRef.current = { ...fixCycleRef.current, active: false };
+                }
                 break;
             }
 
@@ -447,6 +493,20 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             case 'phase_generating': {
                 updateStage('validate', { status: 'completed' });
                 updateStage('fix', { status: 'completed' });
+                // A phase carrying user suggestions is a FIX CYCLE (the user
+                // asked for a change / reported a bug after the initial build).
+                // Open a fresh narration card so the work is visible — the exact
+                // thing that was missing when the owner pasted an error and saw
+                // nothing happen. Initial generation carries no suggestions and
+                // stays quiet (the PhaseTimeline covers it).
+                if (message.userSuggestions && message.userSuggestions.length > 0) {
+                    fixCycleRef.current = { id: `${Date.now()}`, active: true };
+                    narrate({
+                        text: 'On it — planning the changes you asked for.',
+                        role: 'architect',
+                        tone: 'progress',
+                    });
+                }
                 sendMessage(createAIMessage('phase_generating', message.message));
                 setIsThinking(true);
                 setIsPhaseProgressActive(true);
@@ -461,6 +521,13 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'phase_implementing': {
+                narrate({
+                    text: message.phase?.name
+                        ? `Building the changes: ${message.phase.name}.`
+                        : 'Building the changes.',
+                    role: 'builder',
+                    tone: 'progress',
+                });
                 sendMessage(createAIMessage('phase_implementing', message.message));
                 updateStage('code', { status: 'active' });
                 
