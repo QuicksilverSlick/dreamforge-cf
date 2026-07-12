@@ -6,6 +6,10 @@ export type ToolEvent = {
     name: string;
     status: 'start' | 'success' | 'error';
     timestamp: number;
+    /** Tool arguments (already on the wire) — powers the detail line. */
+    args?: Record<string, unknown>;
+    /** Repeat count: N identical consecutive calls collapse into one row (×N). */
+    count?: number;
 };
 
 export interface SuggestionChip {
@@ -173,7 +177,7 @@ export function handleStreamingMessage(
 export function appendToolEvent(
     messages: ChatMessage[],
     conversationId: string,
-    tool: { name: string; status: 'start' | 'success' | 'error' }
+    tool: { name: string; status: 'start' | 'success' | 'error'; args?: Record<string, unknown> }
 ): ChatMessage[] {
     const idx = messages.findIndex(m => m.conversationId === conversationId && m.role === 'assistant');
     const timestamp = Date.now();
@@ -184,7 +188,7 @@ export function appendToolEvent(
             role: 'assistant',
             conversationId,
             content: '',
-            ui: { toolEvents: [{ name: tool.name, status: tool.status, timestamp }] },
+            ui: { toolEvents: [{ name: tool.name, status: tool.status, timestamp, args: tool.args }] },
         };
         return [...messages, newMsg];
     }
@@ -193,7 +197,7 @@ export function appendToolEvent(
         if (i !== idx) return m;
         const current = m.ui?.toolEvents ?? [];
         if (tool.status === 'success') {
-            // Find last 'start' for this tool and flip it to success
+            // Find last event for this tool and flip it to success
             for (let j = current.length - 1; j >= 0; j--) {
                 if (current[j].name === tool.name) {
                     return {
@@ -208,9 +212,26 @@ export function appendToolEvent(
                 }
             }
             // If no prior start, just append success as a separate line
-            return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: 'success', timestamp }] } };
+            return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: 'success', timestamp, args: tool.args }] } };
+        }
+        // A 'start' identical to the last row (same tool, already running/done)
+        // collapses into a ×N counter instead of stacking duplicate lines
+        // (e.g. get_logs called 5 times in a row reads as one "×5" chip).
+        const last = current[current.length - 1];
+        if (last && last.name === tool.name && last.status !== 'error') {
+            return {
+                ...m,
+                ui: {
+                    ...m.ui,
+                    toolEvents: current.map((ev, k) =>
+                        k === current.length - 1
+                            ? { ...ev, status: tool.status, timestamp, count: (ev.count ?? 1) + 1 }
+                            : ev
+                    ),
+                },
+            };
         }
         // Default: append event
-        return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: tool.status, timestamp }] } };
+        return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: tool.status, timestamp, args: tool.args }] } };
     });
 }
