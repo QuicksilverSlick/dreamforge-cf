@@ -1,10 +1,26 @@
 import { toast } from 'sonner';
 import { generateId } from '@/utils/id-generator';
 import type { RateLimitError, ConversationMessage } from '@/api-types';
+import type { AgentRole } from 'shared/agents/activityDisplay';
 
 export type ToolEvent = {
     name: string;
     status: 'start' | 'success' | 'error';
+    timestamp: number;
+    /** Tool arguments (already on the wire) — powers the detail line. */
+    args?: Record<string, unknown>;
+    /** Repeat count: N identical consecutive calls collapse into one row (×N). */
+    count?: number;
+};
+
+/**
+ * One plain-language line in a fix-cycle activity card ("Building the changes…",
+ * "Your update is live — try it again now."). `tone` drives the icon/emphasis.
+ */
+export type ActivityLine = {
+    text: string;
+    role: AgentRole;
+    tone: 'progress' | 'done' | 'attention';
     timestamp: number;
 };
 
@@ -32,6 +48,8 @@ export type ChatMessage = Omit<ConversationMessage, 'content'> & {
         suggestions?: SuggestionChip[];
         /** Blueprint-image consent card (images debit Sparks). */
         imageConsent?: ImageConsentCard;
+        /** Rolling plain-language narration of a fix cycle (one card per cycle). */
+        activityLines?: ActivityLine[];
     };
 };
 
@@ -52,8 +70,36 @@ export function isConversationalMessage(messageId: string): boolean {
         'improvement-suggestions',
         'image-consent',
     ];
-    
-    return conversationalIds.includes(messageId) || messageId.startsWith('conv-');
+
+    // `activity-<cycleId>` cards are narration WE deliberately create for a fix
+    // cycle — admit them without widening the fixed list above (which would let
+    // raw phase/deploy chatter through).
+    return conversationalIds.includes(messageId)
+        || messageId.startsWith('conv-')
+        || messageId.startsWith('activity-');
+}
+
+/**
+ * Append a narration line to the fix cycle's single rolling activity card
+ * (conversationId `activity-<cycleId>`), creating the card on the first line.
+ * One card per cycle keeps chat readable instead of one bubble per event.
+ */
+export function appendActivityLine(
+    messages: ChatMessage[],
+    cycleId: string,
+    line: Omit<ActivityLine, 'timestamp'>,
+): ChatMessage[] {
+    const conversationId = `activity-${cycleId}`;
+    const entry: ActivityLine = { ...line, timestamp: Date.now() };
+    const idx = messages.findIndex(m => m.conversationId === conversationId && m.role === 'assistant');
+    if (idx === -1) {
+        return [...messages, { role: 'assistant', conversationId, content: '', ui: { activityLines: [entry] } }];
+    }
+    return messages.map((m, i) =>
+        i === idx
+            ? { ...m, ui: { ...m.ui, activityLines: [...(m.ui?.activityLines ?? []), entry] } }
+            : m,
+    );
 }
 
 /**
@@ -173,7 +219,7 @@ export function handleStreamingMessage(
 export function appendToolEvent(
     messages: ChatMessage[],
     conversationId: string,
-    tool: { name: string; status: 'start' | 'success' | 'error' }
+    tool: { name: string; status: 'start' | 'success' | 'error'; args?: Record<string, unknown> }
 ): ChatMessage[] {
     const idx = messages.findIndex(m => m.conversationId === conversationId && m.role === 'assistant');
     const timestamp = Date.now();
@@ -184,7 +230,7 @@ export function appendToolEvent(
             role: 'assistant',
             conversationId,
             content: '',
-            ui: { toolEvents: [{ name: tool.name, status: tool.status, timestamp }] },
+            ui: { toolEvents: [{ name: tool.name, status: tool.status, timestamp, args: tool.args }] },
         };
         return [...messages, newMsg];
     }
@@ -193,7 +239,7 @@ export function appendToolEvent(
         if (i !== idx) return m;
         const current = m.ui?.toolEvents ?? [];
         if (tool.status === 'success') {
-            // Find last 'start' for this tool and flip it to success
+            // Find last event for this tool and flip it to success
             for (let j = current.length - 1; j >= 0; j--) {
                 if (current[j].name === tool.name) {
                     return {
@@ -208,9 +254,26 @@ export function appendToolEvent(
                 }
             }
             // If no prior start, just append success as a separate line
-            return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: 'success', timestamp }] } };
+            return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: 'success', timestamp, args: tool.args }] } };
+        }
+        // A 'start' identical to the last row (same tool, already running/done)
+        // collapses into a ×N counter instead of stacking duplicate lines
+        // (e.g. get_logs called 5 times in a row reads as one "×5" chip).
+        const last = current[current.length - 1];
+        if (last && last.name === tool.name && last.status !== 'error') {
+            return {
+                ...m,
+                ui: {
+                    ...m.ui,
+                    toolEvents: current.map((ev, k) =>
+                        k === current.length - 1
+                            ? { ...ev, status: tool.status, timestamp, count: (ev.count ?? 1) + 1 }
+                            : ev
+                    ),
+                },
+            };
         }
         // Default: append event
-        return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: tool.status, timestamp }] } };
+        return { ...m, ui: { ...m.ui, toolEvents: [...current, { name: tool.name, status: tool.status, timestamp, args: tool.args }] } };
     });
 }

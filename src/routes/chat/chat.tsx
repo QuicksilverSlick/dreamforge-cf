@@ -747,6 +747,7 @@ export default function Chat() {
 									message={mainMessage.content}
 									isThinking={mainMessage.ui?.isThinking}
 									toolEvents={mainMessage.ui?.toolEvents}
+									activityLines={mainMessage.ui?.activityLines}
 								/>
 							)}
 
@@ -820,6 +821,7 @@ export default function Chat() {
 											message={message.content}
 											isThinking={message.ui?.isThinking}
 											toolEvents={message.ui?.toolEvents}
+											activityLines={message.ui?.activityLines}
 											suggestions={message.ui?.suggestions}
 											imageConsent={message.ui?.imageConsent}
 											onSuggestionAccept={(chip) => {

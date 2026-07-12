@@ -1,0 +1,13 @@
+Client created
+Important: Copy your client secret now
+
+The client secret cannot be shown again in the future. Make sure to copy it and store it securely. A new secret may be generated from the OAuth clients page.
+
+Your Client Secret
+cfoc_IjHyhjDJI3h3HrZGhXeWcLM2wXkxnvRfO8whPI9ddc61a64f
+
+Your Client ID
+a66304ec9774b1bf6f7dd0a0cbb3a02b
+
+Domain verification DNS TXT record
+cloudflare_oauth_client_publisher=8b40c2f803d895d30f84b4a5651966cd
