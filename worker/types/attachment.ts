@@ -27,6 +27,9 @@ export const MAX_ATTACHMENTS_PER_BUILD = 8;
 /** R2 object key suffix for a file's extracted plain-text sibling. */
 export const EXTRACTED_SUFFIX = 'extracted.md';
 
+/** R2 object key suffix for an oversized extraction's AI summary sibling. */
+export const SUMMARY_SUFFIX = 'summary.md';
+
 interface TypeSpec {
     kind: AttachmentKind;
     /** MIME types a browser may plausibly report for this extension. */
@@ -36,11 +39,10 @@ interface TypeSpec {
 }
 
 /**
- * Allow-list keyed by lowercase extension. v1 (PR1): text-like files + images.
- * Rich documents (pdf/docx/xlsx/ods/odt/html/xml) join here in PR2 with their
- * `env.AI.toMarkdown` extractor — deliberately absent now so an upload of one
- * is rejected with a clear "not yet supported" message rather than stored
- * un-extractable.
+ * Allow-list keyed by lowercase extension. Text-like files decode as UTF-8;
+ * rich documents (kind `document`, textLike false) are converted to markdown
+ * via `env.AI.toMarkdown` at upload. Still deliberately absent: pptx (PR6),
+ * legacy .doc, audio/video.
  */
 export const SUPPORTED_ATTACHMENT_TYPES: Readonly<Record<string, TypeSpec>> = {
     // Images — unchanged multimodal path.
@@ -48,6 +50,12 @@ export const SUPPORTED_ATTACHMENT_TYPES: Readonly<Record<string, TypeSpec>> = {
     jpg: { kind: 'image', mimes: ['image/jpeg'], textLike: false },
     jpeg: { kind: 'image', mimes: ['image/jpeg'], textLike: false },
     webp: { kind: 'image', mimes: ['image/webp'], textLike: false },
+    // Rich documents — extracted to markdown by env.AI.toMarkdown at upload.
+    pdf: { kind: 'document', mimes: ['application/pdf', ''], textLike: false },
+    docx: { kind: 'document', mimes: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', ''], textLike: false },
+    xlsx: { kind: 'document', mimes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ''], textLike: false },
+    odt: { kind: 'document', mimes: ['application/vnd.oasis.opendocument.text', ''], textLike: false },
+    ods: { kind: 'document', mimes: ['application/vnd.oasis.opendocument.spreadsheet', ''], textLike: false },
     // Prose / notes.
     txt: { kind: 'text', mimes: ['text/plain', ''], textLike: true },
     md: { kind: 'text', mimes: ['text/markdown', 'text/plain', ''], textLike: true },
@@ -91,7 +99,9 @@ export interface AttachmentRef {
     id: string;
     filename: string;
     kind: AttachmentKind;
-    /** R2 key of the extracted text sibling (owner-verified server-side). */
+    /** R2 key of the extracted text sibling (owner-verified server-side).
+     * An oversized extraction's AI summary lives at a sibling key DERIVED
+     * from this one server-side — never client-supplied. */
     extractedKey?: string;
 }
 
@@ -140,6 +150,11 @@ const IMAGE_MAGIC: ReadonlyArray<{ mime: string; bytes: readonly number[] }> = [
     // WebP: "RIFF"??"WEBP" — check RIFF prefix + WEBP at offset 8.
     { mime: 'image/webp', bytes: [0x52, 0x49, 0x46, 0x46] },
 ];
+
+/** `%PDF` — every PDF starts with it. */
+const PDF_MAGIC: readonly number[] = [0x25, 0x50, 0x44, 0x46];
+/** `PK\x03\x04` — docx/xlsx/odt/ods are all ZIP containers. */
+const ZIP_MAGIC: readonly number[] = [0x50, 0x4b, 0x03, 0x04];
 
 function matchesMagic(bytes: Uint8Array, magic: readonly number[]): boolean {
     if (bytes.length < magic.length) return false;
@@ -204,6 +219,21 @@ export function classifyUpload(
         }
         // JPEG reports both jpg/jpeg extensions; accept either against the magic.
         return { ok: true, ext, kind: 'image', textLike: false, mimeType: magic.mime };
+    }
+
+    // Rich documents (binary): the container magic is the authoritative gate
+    // — PDF header for .pdf, ZIP header for the Office/OpenDocument formats.
+    // The DECLARED MIME is deliberately not enforced here: real machines
+    // report vendor variants (WPS Office registers application/wps-office.docx,
+    // some environments report application/x-pdf or octet-stream), and
+    // rejecting on those false-rejects byte-valid files the magic check
+    // already validated. The canonical MIME is stored regardless.
+    if (!spec.textLike) {
+        const magic = ext === 'pdf' ? PDF_MAGIC : ZIP_MAGIC;
+        if (!matchesMagic(bytes, magic)) {
+            return { ok: false, reason: `"${filename}" doesn't look like a valid .${ext} file.` };
+        }
+        return { ok: true, ext, kind: spec.kind, textLike: false, mimeType: spec.mimes[0] };
     }
 
     // Text-like: declared MIME (when present) must be plausible AND the content

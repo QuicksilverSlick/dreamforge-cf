@@ -3,11 +3,11 @@ import { Plus, FileText, X, LoaderCircle } from 'lucide-react';
 import clsx from 'clsx';
 import type { ProcessedAttachment } from '@/api-types';
 import { SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
-import { TEXT_ATTACHMENT_ACCEPT } from '@/hooks/use-attachment-upload';
+import { DOCUMENT_ATTACHMENT_ACCEPT } from '@/hooks/use-attachment-upload';
 import { partitionAttachmentFiles } from '@/lib/attachment-classify';
 
 /** Accept list covering both lanes: images + text-like documents. */
-const UNIFIED_ATTACH_ACCEPT = [SUPPORTED_IMAGE_MIME_TYPES.join(','), TEXT_ATTACHMENT_ACCEPT].join(',');
+const UNIFIED_ATTACH_ACCEPT = [SUPPORTED_IMAGE_MIME_TYPES.join(','), DOCUMENT_ATTACHMENT_ACCEPT].join(',');
 
 /**
  * Single "+" control that accepts images and documents in one click. Picked

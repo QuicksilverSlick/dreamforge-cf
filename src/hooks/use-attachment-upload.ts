@@ -17,13 +17,14 @@ export interface UseAttachmentUploadReturn {
 	isUploading: boolean;
 }
 
-/** Extensions this picker offers — text-like files (v1). Images use the image button. */
-export const TEXT_ATTACHMENT_EXTENSIONS = Object.entries(SUPPORTED_ATTACHMENT_TYPES)
-	.filter(([, spec]) => spec.textLike)
+/** Extensions this picker offers — text-like files and rich documents
+ * (pdf/docx/xlsx/odt/ods). Images ride the image lane of the unified button. */
+export const DOCUMENT_ATTACHMENT_EXTENSIONS = Object.entries(SUPPORTED_ATTACHMENT_TYPES)
+	.filter(([, spec]) => spec.kind !== 'image')
 	.map(([ext]) => `.${ext}`);
 
 /** `accept` attribute for the file input. */
-export const TEXT_ATTACHMENT_ACCEPT = TEXT_ATTACHMENT_EXTENSIONS.join(',');
+export const DOCUMENT_ATTACHMENT_ACCEPT = DOCUMENT_ATTACHMENT_EXTENSIONS.join(',');
 
 /**
  * Upload-first attachment handling: files go straight to R2 via
@@ -49,7 +50,7 @@ export function useAttachmentUpload(): UseAttachmentUploadReturn {
 		for (const file of files.slice(0, room)) {
 			const ext = extensionOf(file.name);
 			const spec = ext ? SUPPORTED_ATTACHMENT_TYPES[ext] : undefined;
-			if (!spec || !spec.textLike) {
+			if (!spec || spec.kind === 'image') {
 				toast.error(`${file.name}: that file type isn't supported here.`);
 				continue;
 			}

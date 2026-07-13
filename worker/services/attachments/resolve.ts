@@ -12,6 +12,8 @@
 import {
     ATTACHMENT_INJECTION_BUDGET_CHARS,
     MAX_ATTACHMENTS_PER_BUILD,
+    EXTRACTED_SUFFIX,
+    SUMMARY_SUFFIX,
     type AttachmentRef,
     type AttachedDocument,
 } from '../../types/attachment';
@@ -42,12 +44,19 @@ export function boundAttachmentRefs(refs: AttachmentRef[]): AttachmentRef[] {
     return bounded;
 }
 
+/** True when `key` is safe to read on behalf of `userId`. */
+function isOwnedKey(key: string, prefix: string): boolean {
+    return key.startsWith(prefix) && !key.includes('..');
+}
+
 /**
  * Fetch + budget the extracted text for a build's attachments. Skips refs with
  * no extracted text (e.g. an unextractable upload) and any whose key isn't
  * owned by `userId`. Best-effort per-ref: a missing/unreadable object is
- * dropped, never fatal. Order is preserved; later docs are truncated (or
- * omitted) once the global budget is exhausted.
+ * dropped, never fatal. Order is preserved. When a document's full text
+ * exceeds the remaining global budget, its upload-time AI summary is injected
+ * instead (when present) — falling back to head-truncation only when there is
+ * no summary.
  */
 export async function resolveAttachedDocuments(
     env: Env,
@@ -63,7 +72,7 @@ export async function resolveAttachedDocuments(
         if (remaining <= 0) break;
         const key = ref.extractedKey;
         if (!key) continue;
-        if (!key.startsWith(prefix) || key.includes('..')) {
+        if (!isOwnedKey(key, prefix)) {
             logger.warn('Skipping attachment with non-owned extracted key', { userId, key });
             continue;
         }
@@ -72,8 +81,32 @@ export async function resolveAttachedDocuments(
             if (!obj) continue;
             const full = await obj.text();
             if (full.trim().length === 0) continue;
-            const truncated = full.length > remaining;
-            const text = truncated ? full.slice(0, remaining) : full;
+
+            let text = full;
+            let truncated = false;
+            if (full.length > remaining) {
+                truncated = true;
+                // The summary sibling's key is DERIVED from the (already
+                // owner-verified) extracted key — never client-supplied. Its
+                // fetch is isolated: any summary failure degrades to
+                // head-truncation, never to dropping the document.
+                let summary: string | null = null;
+                if (key.endsWith(`/${EXTRACTED_SUFFIX}`)) {
+                    const summaryKey = key.slice(0, -EXTRACTED_SUFFIX.length) + SUMMARY_SUFFIX;
+                    try {
+                        const summaryObj = await env.TEMPLATES_BUCKET.get(summaryKey);
+                        summary = summaryObj ? (await summaryObj.text()).trim() || null : null;
+                    } catch (error) {
+                        logger.warn('Failed to read attachment summary; falling back to truncation', {
+                            summaryKey,
+                            error: error instanceof Error ? error.message : String(error),
+                        });
+                    }
+                }
+                text = summary && summary.length <= remaining
+                    ? summary
+                    : full.slice(0, remaining);
+            }
             remaining -= text.length;
             docs.push({ filename: ref.filename, kind: ref.kind, text, truncated });
         } catch (error) {

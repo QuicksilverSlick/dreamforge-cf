@@ -7,9 +7,17 @@ import {
     extensionOf,
     MAX_ATTACHMENTS_PER_BUILD,
     EXTRACTED_SUFFIX,
+    SUMMARY_SUFFIX,
     type ProcessedAttachment,
 } from '../../../types/attachment';
-import { extractAttachmentText, excerptOf } from '../../../services/attachments/extract';
+import {
+    extractAttachmentText,
+    extractRichDocumentText,
+    excerptOf,
+    type ExtractResult,
+} from '../../../services/attachments/extract';
+import { summarizeExtractedText, SUMMARIZE_THRESHOLD_CHARS } from '../../../services/attachments/summarize';
+import type { InferenceContext } from '../../../agents/inferutils/config.types';
 import { createObjectLogger } from '../../../logger';
 
 /** R2 root for build attachments — owner-scoped by the userId segment. */
@@ -39,7 +47,7 @@ export class AttachmentsController extends BaseController {
     static async uploadAttachments(
         request: Request,
         env: Env,
-        _ctx: ExecutionContext,
+        ctx: ExecutionContext,
         context: RouteContext,
     ): Promise<ControllerResponse<ApiResponse<UploadAttachmentsResponse>>> {
         const user = context.user;
@@ -84,9 +92,9 @@ export class AttachmentsController extends BaseController {
                     rejected.push({ filename, reason: classified.reason });
                     continue;
                 }
-                // v1: images have their own multimodal path; this endpoint is
-                // for text-like/document context files.
-                if (!classified.textLike) {
+                // Images have their own multimodal path; this endpoint is for
+                // text-like and rich-document context files.
+                if (classified.kind === 'image') {
                     rejected.push({ filename, reason: 'Attach images with the image button.' });
                     continue;
                 }
@@ -108,7 +116,9 @@ export class AttachmentsController extends BaseController {
                     r2Key,
                 };
 
-                const extracted = extractAttachmentText(bytes, { textLike: true, kind: classified.kind });
+                const extracted: ExtractResult = classified.textLike
+                    ? extractAttachmentText(bytes, { textLike: true, kind: classified.kind })
+                    : await extractRichDocumentText(env, filename, classified.mimeType, bytes);
                 if (extracted.ok) {
                     const extractedKey = `${ATTACHMENT_ROOT}/${user.id}/${id}/${EXTRACTED_SUFFIX}`;
                     await env.TEMPLATES_BUCKET.put(extractedKey, extracted.text, {
@@ -117,6 +127,36 @@ export class AttachmentsController extends BaseController {
                     });
                     attachment.extractedKey = extractedKey;
                     attachment.excerpt = excerptOf(extracted.text);
+
+                    // Oversized extractions get ONE summary so the build-time
+                    // resolver has something better than a head truncation when
+                    // the full text exceeds the prompt budget. Generated in the
+                    // BACKGROUND (waitUntil): the upload response never waits on
+                    // an LLM round-trip, and the resolver derives the summary's
+                    // key from the extracted key — finding it if it exists by
+                    // build time, head-truncating if not. Best-effort either way.
+                    if (extracted.text.length > SUMMARIZE_THRESHOLD_CHARS) {
+                        const inferenceContext: InferenceContext = {
+                            agentId: id,
+                            userId: user.id,
+                            enableRealtimeCodeFix: false,
+                            enableFastSmartCodeFix: false,
+                        };
+                        const summaryKey = `${ATTACHMENT_ROOT}/${user.id}/${id}/${SUMMARY_SUFFIX}`;
+                        const fullText = extracted.text;
+                        ctx.waitUntil(
+                            summarizeExtractedText(env, inferenceContext, filename, fullText).then(
+                                async (summary) => {
+                                    if (summary) {
+                                        await env.TEMPLATES_BUCKET.put(summaryKey, summary, {
+                                            httpMetadata: { contentType: 'text/markdown' },
+                                            customMetadata: meta,
+                                        });
+                                    }
+                                },
+                            ),
+                        );
+                    }
                 } else {
                     rejected.push({ filename, reason: extracted.reason });
                     // Keep the original stored; it just carries no extracted text.

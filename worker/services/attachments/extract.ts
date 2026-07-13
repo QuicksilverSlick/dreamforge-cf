@@ -1,9 +1,7 @@
 /**
- * Attachment text extraction. v1 handles text-like files (UTF-8 decode +
- * bounded truncation). Rich documents (pdf/docx/xlsx/…) are dispatched here in
- * a follow-up via `env.AI.toMarkdown` — the seam is `extractAttachmentText`,
- * which returns a discriminated result so callers already handle the
- * "unsupported" and "too large" branches.
+ * Attachment text extraction. Text-like files decode as UTF-8 (bounded
+ * truncation); rich documents (pdf/docx/xlsx/odt/ods) convert to markdown via
+ * Cloudflare's `env.AI.toMarkdown`.
  *
  * NEVER executes content — it only decodes/parses bytes to text.
  */
@@ -22,10 +20,56 @@ export type ExtractResult =
     | { ok: false; reason: string };
 
 /**
- * Extract plain text from an attachment's bytes.
- * - text-like: UTF-8 decode, normalize newlines, truncate to MAX_EXTRACTED_CHARS.
- * - non-text (rich docs): not supported in v1 — returns { ok:false } so the
- *   upload still stores the original but carries no extracted sibling.
+ * Per-file cap for env.AI.toMarkdown conversion — its request envelope tops
+ * out around 4 MB. Larger rich documents are stored but carry no extracted
+ * text (surfaced to the user as a per-file note at upload).
+ */
+export const MAX_TOMARKDOWN_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Convert a rich document (pdf/docx/xlsx/odt/ods) to markdown via
+ * `env.AI.toMarkdown`, truncated to MAX_EXTRACTED_CHARS. Best-effort: any
+ * conversion failure returns { ok:false } and the upload still stores the
+ * original bytes.
+ */
+export async function extractRichDocumentText(
+    env: Env,
+    filename: string,
+    mimeType: string,
+    bytes: Uint8Array,
+): Promise<ExtractResult> {
+    if (bytes.length > MAX_TOMARKDOWN_BYTES) {
+        return {
+            ok: false,
+            reason: `"${filename}" is too large to read (${Math.round(MAX_TOMARKDOWN_BYTES / (1024 * 1024))} MB max for documents) — attached without text.`,
+        };
+    }
+    try {
+        const result = await env.AI.toMarkdown({
+            name: filename,
+            blob: new Blob([bytes], { type: mimeType }),
+        });
+        if (!result || result.format !== 'markdown' || typeof result.data !== 'string') {
+            return { ok: false, reason: `Could not read "${filename}" — attached without text.` };
+        }
+        const truncated = result.data.length > MAX_EXTRACTED_CHARS;
+        const text = truncated ? result.data.slice(0, MAX_EXTRACTED_CHARS) : result.data;
+        if (text.trim().length === 0) {
+            return { ok: false, reason: `"${filename}" contained no readable text.` };
+        }
+        return { ok: true, text, truncated };
+    } catch (error) {
+        return {
+            ok: false,
+            reason: `Could not read "${filename}": ${error instanceof Error ? error.message : 'conversion failed'}`,
+        };
+    }
+}
+
+/**
+ * Extract plain text from a TEXT-LIKE attachment's bytes: UTF-8 decode,
+ * normalize newlines, truncate to MAX_EXTRACTED_CHARS. Rich documents go
+ * through {@link extractRichDocumentText} instead.
  */
 export function extractAttachmentText(
     bytes: Uint8Array,
