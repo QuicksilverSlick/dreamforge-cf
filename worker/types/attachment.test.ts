@@ -79,3 +79,38 @@ describe('classifyUpload', () => {
         expect(fake.ok).toBe(false);
     });
 });
+
+describe('classifyUpload (rich documents)', () => {
+    const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]); // %PDF-1.7
+    const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00]); // PK
+
+    it('accepts a PDF with correct magic and tags it document', () => {
+        const result = classifyUpload('spec.pdf', 'application/pdf', pdfBytes);
+        expect(result).toMatchObject({ ok: true, kind: 'document', textLike: false, mimeType: 'application/pdf' });
+    });
+
+    it('accepts ZIP-container Office/OpenDocument formats', () => {
+        for (const name of ['report.docx', 'data.xlsx', 'notes.odt', 'sheet.ods']) {
+            const result = classifyUpload(name, '', zipBytes);
+            expect(result).toMatchObject({ ok: true, kind: 'document', textLike: false });
+        }
+    });
+
+    it('rejects a document whose magic contradicts its extension', () => {
+        expect(classifyUpload('fake.pdf', 'application/pdf', zipBytes).ok).toBe(false);
+        expect(classifyUpload('fake.docx', '', pdfBytes).ok).toBe(false);
+        const utf8 = new TextEncoder().encode('hello world, plain text');
+        expect(classifyUpload('fake.xlsx', '', utf8).ok).toBe(false);
+    });
+
+    it('accepts vendor/variant MIMEs for documents — container magic is the gate', () => {
+        expect(classifyUpload('report.docx', 'application/wps-office.docx', zipBytes).ok).toBe(true);
+        expect(classifyUpload('spec.pdf', 'application/x-pdf', pdfBytes).ok).toBe(true);
+        expect(classifyUpload('spec.pdf', 'application/octet-stream', pdfBytes).ok).toBe(true);
+    });
+
+    it('defaults the canonical MIME when the browser omits it', () => {
+        const result = classifyUpload('spec.pdf', '', pdfBytes);
+        expect(result.ok && result.mimeType).toBe('application/pdf');
+    });
+});

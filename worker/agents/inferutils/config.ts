@@ -176,6 +176,15 @@ export const AGENT_CONFIG: AgentConfig = {
         temperature: 0.2,
         fallbackModel: AIModels.GEMINI_3_1_FLASH_LITE,
     },
+    // Upload-time condensation of oversized attachment extractions
+    // (services/attachments/summarize.ts) — cheap, factual, once per file.
+    attachmentSummary: {
+        name: AIModels.GEMINI_3_1_FLASH_LITE,
+        reasoning_effort: 'low',
+        max_tokens: 4000,
+        temperature: 0.1,
+        fallbackModel: AIModels.GEMINI_3_5_FLASH,
+    },
     codeReview: {
         name: AIModels.GEMINI_3_5_FLASH,
         reasoning_effort: 'medium',
