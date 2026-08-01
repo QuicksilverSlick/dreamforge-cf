@@ -1,5 +1,5 @@
 import { ConversationalResponseType } from "../schemas";
-import { createAssistantMessage, createUserMessage, createMultiModalUserMessage, MessageRole, mapImagesInMultiModalMessage } from "../inferutils/common";
+import { createAssistantMessage, createUserMessage, createMultiModalUserMessage, MessageRole, mapImagesInMultiModalMessage, type Message } from "../inferutils/common";
 import { executeInference } from "../inferutils/infer";
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources';
 import { WebSocketMessageResponses } from "../constants";
@@ -12,8 +12,8 @@ import { IdGenerator } from '../utils/idGenerator';
 import { RateLimitExceededError, SecurityError } from 'shared/types/errors';
 import type { AgentRole } from 'shared/agents/activityDisplay';
 import { buildTools } from "../tools/customTools";
-import { PROMPT_UTILS } from "../prompts";
 import { RuntimeError } from "worker/services/sandbox/sandboxTypes";
+import { serializeBuildHealth, type BuildHealth } from "../core/buildHealth";
 import { CodeSerializerType } from "../utils/codeSerializers";
 import { ConversationState } from "../inferutils/common";
 import { downloadR2Image, imagesToBase64, imageToBase64 } from "worker/utils/images";
@@ -23,6 +23,9 @@ import { formatAttachedDocuments } from "worker/services/attachments/format";
 
 // Constants
 const CHUNK_SIZE = 64;
+
+/** Name of the tool that relays a change request to the builder. */
+const QUEUE_REQUEST_TOOL_NAME = 'queue_request';
 
 // Compactification thresholds
 const COMPACTIFICATION_CONFIG = {
@@ -74,6 +77,12 @@ export interface UserConversationInputs {
     conversationState: ConversationState;
     conversationResponseCallback: ConversationResponseCallback;
     errors: RuntimeError[];
+    /**
+     * Whether the app currently builds, and — critically — whether we were able
+     * to find that out at all. An `unknown` status must never be reported to the
+     * user as working.
+     */
+    buildHealth: BuildHealth;
     projectUpdates: string[];
     images?: ProcessedImageAttachment[];
     /** Text extracted from files attached to this mid-build message. */
@@ -102,6 +111,18 @@ const SYSTEM_PROMPT = `You are Dreamforge, the conversational AI interface for C
 **INTERNALLY**: You are an interface between the user and the AI development agent. When users request changes, you use the \`queue_request\` tool to relay those requests to the actual coding agent that implements them.
 
 **EXTERNALLY**: You speak to users AS IF you are the developer. Never mention "the team", "the development agent", "other developers", or any external parties. Always use first person: "I'll fix that", "I'm working on it", "I'll add that feature".
+
+## NEVER CLAIM AN OUTCOME YOU HAVE NOT VERIFIED (HIGHEST PRIORITY RULE):
+Speaking as the developer describes your ROLE, not your KNOWLEDGE. You relay work; you do not observe it land. The ONLY evidence you have about whether the app works is the "Build health" block in system_context.
+
+- You may ALWAYS say what you have *done* or *queued*: "I've queued that", "I'm on it".
+- You may say an error is FIXED, or that the app is working/running/building, **only when Build health STATUS is OK**.
+- If STATUS is ERRORS: say so plainly and name the errors. Never describe the app as working while errors are outstanding.
+- If STATUS is UNKNOWN: you do NOT know the state of the app. Say that directly — "I couldn't reach your preview to check" — and do not guess. An unknown status is NOT permission to assume success.
+- NEVER write "fully fixed", "running smoothly", "working perfectly", or similar, unless STATUS is OK.
+- An empty error list is NOT evidence of health when STATUS is UNKNOWN. A build that fails to start produces no runtime errors precisely BECAUSE it never ran.
+
+If the user says a problem is still happening, believe them over your own expectation, and check Build health before responding. Repeating a fix claim the user has already contradicted is the worst possible response.
 
 ## YOUR CAPABILITIES:
 - Answer questions about the project and its current state
@@ -252,8 +273,8 @@ const USER_PROMPT = `
 ## Timestamp:
 {{timestamp}}
 
-## Project runtime errors:
-{{errors}}
+## Build health (authoritative — this is the ONLY evidence you have about whether the app works):
+{{buildHealth}}
 
 ## Project updates since last conversation:
 {{projectUpdates}}
@@ -262,13 +283,13 @@ const USER_PROMPT = `
 `;
 
 
-function buildUserMessageWithContext(userMessage: string, errors: RuntimeError[], projectUpdates: string[], forInference: boolean, attachedDocuments?: AttachedDocument[]): string {
+function buildUserMessageWithContext(userMessage: string, buildHealth: BuildHealth, projectUpdates: string[], forInference: boolean, attachedDocuments?: AttachedDocument[]): string {
     let userPrompt = USER_PROMPT.replace("{{timestamp}}", new Date().toISOString()).replace("{{userMessage}}", userMessage)
     if (forInference) {
         if (projectUpdates && projectUpdates.length > 0) {
             userPrompt = userPrompt.replace("{{projectUpdates}}", projectUpdates.join("\n\n"));
         }
-        userPrompt = userPrompt.replace("{{errors}}", PROMPT_UTILS.serializeErrors(errors));
+        userPrompt = userPrompt.replace("{{buildHealth}}", serializeBuildHealth(buildHealth));
         // Attached-document text is fenced, untrusted source material — appended
         // only to the inference message; the persisted history keeps it redacted
         // (ephemeral, like images) to save tokens.
@@ -278,8 +299,23 @@ function buildUserMessageWithContext(userMessage: string, errors: RuntimeError[]
         return userPrompt;
     } else {
         // To save tokens
-        return userPrompt.replace("{{projectUpdates}}", "redacted").replace("{{errors}}", "redacted");
+        return userPrompt.replace("{{projectUpdates}}", "redacted").replace("{{buildHealth}}", "redacted");
     }
+}
+
+/**
+ * Did this turn actually relay the user's request to the builder?
+ *
+ * A degraded continuation round leaves a transcript that LOOKS busy — searches,
+ * file reads — while `queue_request` was never reached, so nothing will ever be
+ * built. Distinguishing "lost the summary" from "lost the work" depends on this.
+ */
+function didQueueRequest(messages: readonly Message[]): boolean {
+    return messages.some((message) =>
+        message.tool_calls?.some(
+            (call) => 'function' in call && call.function?.name === QUEUE_REQUEST_TOOL_NAME,
+        ),
+    );
 }
 
 /** Drop image parts from a message, keeping text — used when an image can no longer be fetched. */
@@ -331,7 +367,7 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
 
     async execute(inputs: UserConversationInputs, options: OperationOptions): Promise<UserConversationOutputs> {
         const { env, logger, context, agent } = options;
-        const { userMessage, conversationState, errors, images, projectUpdates, attachedDocuments } = inputs;
+        const { userMessage, conversationState, buildHealth, images, projectUpdates, attachedDocuments } = inputs;
         logger.info("Processing user message", {
             messageLength: inputs.userMessage.length,
             hasImages: !!images && images.length > 0,
@@ -345,7 +381,7 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
             // Create user message with optional images for inference. When
             // images are attached, tell the model they are hosted assets it can
             // bind into the app — the pixels alone don't convey that.
-            const basePromptForInference = buildUserMessageWithContext(userMessage, errors, projectUpdates, true, attachedDocuments);
+            const basePromptForInference = buildUserMessageWithContext(userMessage, buildHealth, projectUpdates, true, attachedDocuments);
             const userPromptForInference = images && images.length > 0
                 ? `${basePromptForInference}\n\n[The user attached ${images.length} image(s) to this message. They are already uploaded and hosted. If the user wants one placed into the app as an asset, call use_attached_image — do not generate a replacement.]`
                 : basePromptForInference;
@@ -418,15 +454,45 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
             });
 
             // A tools-only turn whose continuation round degraded produces an
-            // empty final text (the tool transcript is intact). Tell the user
-            // honestly instead of showing an empty bubble / storing an empty
-            // assistant message.
+            // empty final text (the tool transcript is intact). TWO separate
+            // things can be missing, and conflating them is what let a user's
+            // request be charged for and then silently dropped:
+            //   - the REPLY is missing  -> say so; don't show an empty bubble
+            //   - the WORK is missing   -> re-queue it, or nothing is ever built
             let finalResponseText = result.string;
             if (finalResponseText.trim() === '' && extractedUserResponse.trim() === '') {
-                const toolsRan = !!result.toolCallContext?.messages?.some((m) => m.role === 'tool');
-                finalResponseText = toolsRan
-                    ? "I finished the steps above, but my summary didn't come through. Ask me what I found or what happened if you need the details."
-                    : FALLBACK_USER_RESPONSE;
+                const toolMessages = result.toolCallContext?.messages ?? [];
+                const toolsRan = toolMessages.some((m) => m.role === 'tool');
+                const relayedToBuilder = didQueueRequest(toolMessages);
+
+                if (toolsRan && !relayedToBuilder) {
+                    // The model ran tools (searching, reading files) and then
+                    // died before calling queue_request. Left alone, the user
+                    // waits forever for a build that was never requested.
+                    logger.error('Degraded tool round ended without relaying the request to the builder; re-queueing verbatim', {
+                        aiConversationId,
+                        toolMessageCount: toolMessages.length,
+                    });
+                    try {
+                        agent.queueRequest(userMessage, images);
+                        finalResponseText =
+                            "Something went wrong while I was writing back to you, so I've queued your request exactly as you wrote it rather than lose it. You'll see the build steps start below.";
+                    } catch (queueError) {
+                        logger.error('Failed to re-queue user request after a degraded turn', {
+                            aiConversationId,
+                            error: queueError,
+                        });
+                        finalResponseText =
+                            "Something went wrong on my side and I wasn't able to start on that. Nothing has been changed — please send your message again.";
+                    }
+                } else if (toolsRan) {
+                    // The work IS queued; only the summary was lost. Say that
+                    // precisely, so the user knows the build is coming.
+                    finalResponseText =
+                        "I've queued your request and the build steps will update below. My write-up of what I did didn't come through — ask me if you want the details.";
+                } else {
+                    finalResponseText = FALLBACK_USER_RESPONSE;
+                }
                 inputs.conversationResponseCallback(finalResponseText, aiConversationId, false);
             }
 
@@ -436,7 +502,7 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
 
             
             // For conversation history, store only text (images are ephemeral and not persisted)
-            const userPromptForHistory = buildUserMessageWithContext(userMessage, errors, projectUpdates, false);
+            const userPromptForHistory = buildUserMessageWithContext(userMessage, buildHealth, projectUpdates, false);
             const userMessageForHistory = images && images.length > 0
                 ? createMultiModalUserMessage(
                     userPromptForHistory,

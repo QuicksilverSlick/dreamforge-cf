@@ -25,7 +25,7 @@ import { MAX_IMAGES_PER_MESSAGE, MAX_IMAGE_SIZE_BYTES, type ImageAttachment } fr
 import type { AttachmentRef } from '../../types/attachment';
 import { resolveAttachedDocuments } from '../../services/attachments/resolve';
 import { checkUsageAndBalance } from '../../services/rate-limit';
-import { meterSparkAction } from '../../services/billing/metering';
+import { meterSparkAction, refundSparkAction } from '../../services/billing/metering';
 import { generateId } from '../../utils/idGenerator';
 import type { CodeGeneratorAgent } from './codingAgent';
 import { sendToConnection, sendError } from './websocketHelpers';
@@ -619,7 +619,7 @@ export async function handleWebSocketMessage(
                     error: 'Please use the GitHub export button which will redirect you to authorize with GitHub OAuth',
                 });
                 break;
-            case WebSocketMessageRequests.USER_SUGGESTION:
+            case WebSocketMessageRequests.USER_SUGGESTION: {
                 logger.info('Received user suggestion', {
                     messageLength: parsedMessage.message?.length || 0,
                     hasImages: !!parsedMessage.images && parsedMessage.images.length > 0,
@@ -651,6 +651,7 @@ export async function handleWebSocketMessage(
                     }
                 }
 
+                let editCallId: string | null = null;
                 try {
                     const env = agent.env;
                     const userId = agent.state.metadata.userId;
@@ -689,12 +690,15 @@ export async function handleWebSocketMessage(
                     // revision charges exactly once. Fails closed;
                     // BYO/exempt/flag-off cases ride free inside
                     // meterSparkAction.
+                    // Hoisted so a failed turn can refund the SAME callId it
+                    // was charged under (the refund key is derived from it).
+                    editCallId = `edit:${generateId()}`;
                     const editMeter = await meterSparkAction(env, {
                         orgId: agent.state.metadata.orgId,
                         userId,
                         actionType: 'edit',
                         agentId: agent.state.metadata.agentId,
-                        callId: `edit:${generateId()}`,
+                        callId: editCallId,
                         shouldUseUserKey: agent.state.metadata.shouldUseUserKey,
                     });
                     if (!editMeter.ok) {
@@ -735,17 +739,43 @@ export async function handleWebSocketMessage(
                             logger.error('Failed to resolve mid-build attachments:', error);
                         }
                     }
+                    const refundFailedEdit = (reason: string): void => {
+                        if (!editCallId) return;
+                        void refundSparkAction(agent.env, {
+                            orgId: agent.state.metadata.orgId,
+                            userId: agent.state.metadata.userId,
+                            actionType: 'edit',
+                            agentId: agent.state.metadata.agentId,
+                            callId: editCallId,
+                            reason,
+                            shouldUseUserKey: agent.state.metadata.shouldUseUserKey,
+                        });
+                    };
+
                     agent
                         .handleUserInput(parsedMessage.message, parsedMessage.images, attachedDocuments)
+                        .then((outcome) => {
+                            // Sparks were debited before the work as the gate,
+                            // so a failed turn means the user paid for nothing.
+                            if (outcome === 'failed') {
+                                refundFailedEdit('edit failed before any work was done');
+                                sendToConnection(connection, WebSocketMessageResponses.ERROR, {
+                                    error: "That didn't go through, so I've refunded the Sparks for it. Please try again.",
+                                    showAsPopup: false,
+                                });
+                            }
+                        })
                         .catch((error: unknown) => {
                             logger.error('Error handling user suggestion:', error);
+                            refundFailedEdit('edit threw before any work was done');
                             sendError(
                                 connection,
-                                `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}`,
+                                `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}. The Sparks for it have been refunded.`,
                             );
                         });
                 }
                 break;
+            }
             case WebSocketMessageRequests.GET_MODEL_CONFIGS:
                 logger.info('Fetching model configurations');
                 agent
