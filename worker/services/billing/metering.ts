@@ -20,7 +20,7 @@ import { BillingService } from './BillingService';
 import { RateLimitService } from '../rate-limit/rateLimits';
 import { isCloudflareGatewayLimitsEnabled } from '../rate-limit/usageChecker';
 import { createLogger } from '../../logger';
-import type { SparkActionType } from 'shared/constants/sparks';
+import { SPARK_ACTION_COSTS, type SparkActionType } from 'shared/constants/sparks';
 
 const logger = createLogger('SparkMetering');
 
@@ -106,4 +106,67 @@ export async function meterSparkAction(env: Env, args: MeterActionArgs): Promise
 		charged: !result.replayed,
 		balanceAfter: result.balanceAfter,
 	};
+}
+
+export interface RefundActionArgs {
+	orgId?: string | null;
+	userId: string;
+	actionType: Exclude<SparkActionType, 'llm_call'>;
+	agentId: string;
+	/** MUST be the same callId the original debit used. */
+	callId: string;
+	/** Shown in the ledger; keep it specific enough to audit later. */
+	reason: string;
+	shouldUseUserKey?: boolean;
+}
+
+/**
+ * Give back Sparks for an action that was charged but provably did no work.
+ *
+ * The debit happens BEFORE the work (it is the gate — there is no
+ * check-then-spend race to be had), so anything that fails afterwards has
+ * already taken the user's Sparks. Without this, a wedged build charges full
+ * price for every retry: one production session burned 360 Sparks across 12
+ * attempts that produced nothing.
+ *
+ * Mirrors `meterSparkAction`'s skip rules exactly — a path that never charged
+ * must never refund, or the two drift and we mint free Sparks. Idempotent per
+ * callId via BillingService, so a double-call is harmless.
+ */
+export async function refundSparkAction(env: Env, args: RefundActionArgs): Promise<void> {
+	if (!isCloudflareGatewayLimitsEnabled(env)) return;
+	if (args.shouldUseUserKey) return;
+	if (RateLimitService.isExemptUser(env, args.userId)) return;
+	if (!args.orgId) return;
+
+	const amount = SPARK_ACTION_COSTS[args.actionType];
+	if (!amount) return;
+
+	try {
+		const billing = new BillingService(env);
+		await billing.refundFailedAction({
+			orgId: args.orgId,
+			userId: args.userId,
+			agentId: args.agentId,
+			callId: args.callId,
+			amount,
+			reason: args.reason,
+		});
+		logger.info('Refunded Sparks for a failed action', {
+			orgId: args.orgId,
+			actionType: args.actionType,
+			agentId: args.agentId,
+			amount,
+			reason: args.reason,
+		});
+	} catch (error) {
+		// Never let a refund failure surface as a second user-visible error;
+		// the ledger is reconcilable after the fact.
+		logger.error('Failed to refund Sparks for a failed action', {
+			orgId: args.orgId,
+			actionType: args.actionType,
+			agentId: args.agentId,
+			error,
+		});
+	}
 }
