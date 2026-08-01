@@ -8,15 +8,34 @@ import {
 } from 'react-router';
 
 /**
- * Initialize Sentry for frontend error tracking and session replay
+ * Initialize Sentry for frontend error tracking and session replay.
+ *
+ * Both inputs are baked in at BUILD time by Vite, so a deploy that forgets to
+ * pass them produces a silently blind frontend. That is not hypothetical: a
+ * production build ran without a DSN, and a customer's build sat broken for 18
+ * hours because no client error ever reached us. Hence the loud failure below.
  */
 export function initSentry() {
   const dsn = import.meta.env.VITE_SENTRY_DSN;
-  const environment = import.meta.env.VITE_ENVIRONMENT || 'development';
+  // Derive from Vite's own PROD flag rather than defaulting to 'development'.
+  // A production bundle built without VITE_ENVIRONMENT would otherwise fall
+  // through to `enabled: false` below and disable itself while looking fine.
+  const environment =
+    import.meta.env.VITE_ENVIRONMENT || (import.meta.env.PROD ? 'production' : 'development');
   const release = import.meta.env.VITE_RELEASE || 'unknown';
-  
+
   if (!dsn) {
-    console.warn('Sentry DSN not configured, skipping initialization');
+    // In a dev build this is expected and unremarkable. In a production build
+    // it means we are shipping blind, so make it an error rather than a warning
+    // that scrolls past unnoticed.
+    if (import.meta.env.PROD) {
+      console.error(
+        'Sentry DSN missing from a PRODUCTION build — frontend errors are not being reported. ' +
+          'Set the VITE_SENTRY_DSN build variable in the deploy pipeline.',
+      );
+    } else {
+      console.warn('Sentry DSN not configured, skipping initialization');
+    }
     return;
   }
 
@@ -73,7 +92,7 @@ export function clearSentryUser() {
 }
 
 // Helper to capture custom events
-export function captureEvent(message: string, level: Sentry.SeverityLevel = 'info', extra?: Record<string, any>) {
+export function captureEvent(message: string, level: Sentry.SeverityLevel = 'info', extra?: Record<string, unknown>) {
   Sentry.captureMessage(message, {
     level,
     extra,
@@ -85,7 +104,7 @@ export function addBreadcrumb(
   message: string,
   category: string,
   level: Sentry.SeverityLevel = 'info',
-  data?: Record<string, any>
+  data?: Record<string, unknown>
 ) {
   Sentry.addBreadcrumb({
     message,

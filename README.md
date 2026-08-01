@@ -176,7 +176,18 @@ Required in `.dev.vars` (local) and `.prod.vars` (production). The deploy script
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth (sign-in) |
 | `GITHUB_EXPORTER_CLIENT_ID` / `GITHUB_EXPORTER_CLIENT_SECRET` | GitHub OAuth (separate app for "Export to GitHub") |
 | `CLOUDFLARE_AI_GATEWAY_TOKEN` | AI Gateway runtime token (Run permission) |
-| `SENTRY_DSN` | Worker DSN |
+| `SENTRY_DSN` | Worker DSN (runtime secret) |
+
+**Build-time variables (frontend).** Vite inlines `VITE_*` when the bundle is
+built, so these must be present in the *build* environment — adding them as
+Worker secrets has no effect on the client. In CI they are set on the
+"Build frontend + worker bundle" step in `.github/workflows/deploy.yml`.
+
+| Variable | Purpose |
+| --- | --- |
+| `VITE_SENTRY_DSN` | Frontend Sentry DSN. **Without it the client ships with error reporting disabled** — browser errors reach nobody. Configure as a repository secret. |
+| `VITE_ENVIRONMENT` | Sentry environment tag; also gates reporting (disabled when `development`). CI sets `production`. |
+| `VITE_RELEASE` | Release identifier for Sentry. CI sets the commit SHA. |
 
 OAuth callback URLs (configure in the respective provider consoles):
 - Google: `https://app.getdreamforge.com/api/auth/callback/google`

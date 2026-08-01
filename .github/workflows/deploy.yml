@@ -60,6 +60,13 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build frontend + worker bundle
+        # Vite inlines VITE_* at BUILD time, so these must be present here —
+        # setting them as Worker secrets does nothing for the client bundle.
+        # Without VITE_SENTRY_DSN the frontend ships with error reporting off.
+        env:
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_ENVIRONMENT: production
+          VITE_RELEASE: ${{ github.sha }}
         run: bun run build
 
       - name: Capture pre-deploy active version
