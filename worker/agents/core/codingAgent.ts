@@ -221,6 +221,7 @@ export class CodeGeneratorAgent
         conversationMessages: [],
         metadata: {} as InferenceMetadata,
         shouldBeGenerating: false,
+        editsSinceProgress: 0,
         sandboxInstanceId: undefined,
         commandsHistory: [],
         lastPackageJson: '',
