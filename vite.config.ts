@@ -15,15 +15,20 @@ export default defineConfig({
 		force: true,
 	},
 
-	// build: {
-	//     rollupOptions: {
-	//       output: {
-	//             advancedChunks: {
-	//                 groups: [{name: 'vendor', test: /node_modules/}]
-	//             }
-	//         }
-	//     }
-	// },
+	// Do NOT add a `vendor`-style advancedChunks group here. It was measured on
+	// 2026-08-01 and made the critical path substantially WORSE:
+	//
+	//   default chunking + lazy monaco ..... 1.51 MB, 1 preloaded file
+	//   with vendor/monaco/react groups .... 5.12 MB, 8 preloaded files
+	//
+	// A catch-all `test: /node_modules/` group pulls DYNAMICALLY imported
+	// dependencies (monaco, loaded on demand by monaco-editor.lazy.tsx) into a
+	// named chunk that the entry statically depends on. Rolldown then emits a
+	// `<link rel="modulepreload">` for it in index.html, so the browser fetches
+	// the whole thing up front and the code splitting is silently undone.
+	//
+	// Entry size is a code-splitting problem, not a chunking problem: defer the
+	// heavy import instead. See monaco-editor.lazy.tsx.
 	plugins: [
 		react(),
 		svgr(),

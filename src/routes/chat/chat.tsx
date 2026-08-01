@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { ArrowRight } from 'react-feather';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router';
-import { MonacoEditor } from '../../components/monaco-editor/monaco-editor';
+import { MonacoEditor } from '../../components/monaco-editor/monaco-editor.lazy';
 import { useAuth } from '@/contexts/auth-context';
 import { CollaborationBar } from './components/collaboration-bar';
 import { TakeoverConsentModal } from './components/takeover-consent-modal';
