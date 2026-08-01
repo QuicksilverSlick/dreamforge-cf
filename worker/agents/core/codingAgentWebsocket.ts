@@ -26,6 +26,8 @@ import type { AttachmentRef } from '../../types/attachment';
 import { resolveAttachedDocuments } from '../../services/attachments/resolve';
 import { checkUsageAndBalance } from '../../services/rate-limit';
 import { meterSparkAction, refundSparkAction } from '../../services/billing/metering';
+import { captureMessage } from '@sentry/cloudflare';
+import { hasJustStalled, stalledAlertMessage, stalledUserMessage } from './stalledBuild';
 import { generateId } from '../../utils/idGenerator';
 import type { CodeGeneratorAgent } from './codingAgent';
 import { sendToConnection, sendError } from './websocketHelpers';
@@ -708,6 +710,40 @@ export async function handleWebSocketMessage(
                             showAsPopup: true,
                         });
                         return;
+                    }
+
+                    // Count paid edits since the last completed phase. A run of
+                    // these means the user is paying while the build stands
+                    // still — the one failure shape no error channel sees,
+                    // because every individual turn "succeeds".
+                    const editsSinceProgress = (agent.state.editsSinceProgress ?? 0) + 1;
+                    agent.setState({ ...agent.state, editsSinceProgress });
+
+                    if (hasJustStalled(editsSinceProgress)) {
+                        // Only the phasic behavior tracks phases; the agentic
+                        // one has no equivalent, so report it as unknown there.
+                        const lastCompletedPhase =
+                            'generatedPhases' in agent.state
+                                ? ([...agent.state.generatedPhases]
+                                      .reverse()
+                                      .find((phase) => phase.completed)?.name ?? null)
+                                : null;
+                        const alert = {
+                            agentId: agent.state.metadata.agentId,
+                            orgId: agent.state.metadata.orgId ?? null,
+                            userId,
+                            editsSinceProgress,
+                            lastCompletedPhase,
+                        };
+                        logger.error('Build stalled — paid edits with no completed phase', alert);
+                        captureMessage(stalledAlertMessage(alert), 'warning');
+                        // Tell the user too. They are the one paying, and they
+                        // find out first anyway.
+                        sendToConnection(connection, WebSocketMessageResponses.CONVERSATION_RESPONSE, {
+                            message: stalledUserMessage(editsSinceProgress),
+                            conversationId: `stalled-${agent.state.metadata.agentId}`,
+                            isStreaming: false,
+                        });
                     }
                 } catch (error) {
                     logger.error('Failed to check usage:', error);

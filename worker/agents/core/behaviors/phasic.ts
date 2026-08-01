@@ -484,6 +484,8 @@ export class PhasicCodingBehavior
             generatedPhases: phases.map((p) =>
                 p.name === phaseName ? { ...p, completed: true } : p,
             ),
+            // Real progress — clear the stalled-build counter.
+            editsSinceProgress: 0,
         });
 
         this.logger.info('Completed phases:', JSON.stringify(phases, null, 2));

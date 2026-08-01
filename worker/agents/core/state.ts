@@ -143,6 +143,13 @@ export interface BaseProjectState {
     shouldBeGenerating: boolean;
 
     /**
+     * Paid edits since the last completed phase. Resets to 0 whenever a phase
+     * completes, so a non-zero run means the user is being charged without the
+     * build moving. Drives stalled-build detection (see `stalledBuild.ts`).
+     */
+    editsSinceProgress: number;
+
+    /**
      * Blueprint-image consent (spec: images debit Sparks, so they require an
      * explicit user choice). undefined = never asked (legacy agents keep
      * their old behavior); 'pending' = card shown, awaiting the user.
