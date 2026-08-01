@@ -102,6 +102,7 @@ import { SPARK_ACTION_COSTS } from 'shared/constants/sparks';
 import { DeepDebuggerOperation, type DeepDebuggerInputs } from '../../operations/DeepDebugger';
 import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 import { ScreenshotAnalysisOperation } from '../../operations/ScreenshotAnalysis';
+import { allErrors, extractBuildErrors, type BuildHealth } from '../buildHealth';
 import { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import { getSandboxService } from '../../../services/sandbox/factory';
 import { getTemplateImportantFiles } from '../../../services/sandbox/utils';
@@ -800,12 +801,18 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
             await this.ensureTemplateDetails();
 
-            // Fetch (but don't clear) any runtime errors so the
-            // conversation processor can reference them.
-            const errors = await this.fetchRuntimeErrors(false);
+            // Read health (without clearing) so the conversation processor can
+            // reference it. `buildHealth` carries the crucial distinction the
+            // raw error array cannot: whether an empty list means "nothing is
+            // wrong" or "we could not find out".
+            const buildHealth = await this.fetchBuildHealth();
+            const errors = allErrors(buildHealth);
             const projectUpdates = await this.getAndResetProjectUpdates();
             this.logger.info('Passing context to user conversation processor', {
-                errorCount: errors.length,
+                buildHealthStatus: buildHealth.status,
+                buildErrorCount: buildHealth.buildErrors.length,
+                runtimeErrorCount: buildHealth.runtimeErrors.length,
+                healthUnknownReason: buildHealth.reason,
                 projectUpdateCount: projectUpdates.length,
             });
 
@@ -839,6 +846,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                         });
                     },
                     errors,
+                    buildHealth,
                     projectUpdates,
                     images: uploadedImages,
                     attachedDocuments,
@@ -1056,7 +1064,12 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             const sandboxClient = this.getSandboxServiceClient();
             const response = await sandboxClient.getInstanceErrors(sandboxInstanceId);
             if (!response.success) {
-                return [];
+                // Reading the feed FAILED — that is not the same as "no errors".
+                // Returning [] here is what let the agent tell users their build
+                // was fixed while the preview was down. Surface it as unreadable.
+                throw new Error(
+                    response.error ?? `Error feed unreadable for instance ${sandboxInstanceId}`,
+                );
             }
             const errors = response.errors;
             if (clear && errors.length > 0) {
@@ -1086,6 +1099,86 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 },
             ];
         }
+    }
+
+    /**
+     * Read the app's health: outstanding runtime errors plus build failures
+     * scraped from the dev server's stderr.
+     *
+     * Never conflates "could not read" with "nothing wrong". An unreachable
+     * sandbox, a failed error feed, or unreadable logs all yield `unknown`,
+     * which callers must treat as "go and check" rather than as reassurance.
+     * `ok` is only returned on positive evidence from BOTH sources.
+     */
+    async fetchBuildHealth(): Promise<BuildHealth> {
+        const sandboxInstanceId = this.state.sandboxInstanceId;
+        if (!sandboxInstanceId) {
+            return {
+                status: 'unknown',
+                runtimeErrors: [],
+                buildErrors: [],
+                reason: 'no preview sandbox is currently running',
+            };
+        }
+
+        const sandboxClient = this.getSandboxServiceClient();
+
+        let runtimeErrors: RuntimeError[] = [];
+        try {
+            const response = await sandboxClient.getInstanceErrors(sandboxInstanceId);
+            if (!response.success) {
+                return {
+                    status: 'unknown',
+                    runtimeErrors: [],
+                    buildErrors: [],
+                    reason: response.error ?? 'the preview sandbox did not return its error feed',
+                };
+            }
+            runtimeErrors = response.errors;
+        } catch (error) {
+            return {
+                status: 'unknown',
+                runtimeErrors: [],
+                buildErrors: [],
+                reason:
+                    error instanceof Error
+                        ? error.message
+                        : 'the preview sandbox was unreachable',
+            };
+        }
+
+        // Dev-server stderr is the ONLY place a boot-blocking build failure
+        // surfaces: the app never mounts, so it can never report the error
+        // itself, and the runtime feed above stays empty.
+        let buildErrors: RuntimeError[] = [];
+        let logsReadable = false;
+        try {
+            const logs = await sandboxClient.getLogs(sandboxInstanceId);
+            if (logs.success) {
+                logsReadable = true;
+                buildErrors = extractBuildErrors(logs.logs.stderr);
+            }
+        } catch (error) {
+            this.logger.warn('Could not read dev-server logs for build health', { error });
+        }
+
+        if (runtimeErrors.length > 0 || buildErrors.length > 0) {
+            return { status: 'errors', runtimeErrors, buildErrors };
+        }
+
+        if (!logsReadable) {
+            // The runtime feed was clean, but a boot-blocking failure would only
+            // ever appear in the logs we just failed to read. Not enough to
+            // claim health.
+            return {
+                status: 'unknown',
+                runtimeErrors,
+                buildErrors: [],
+                reason: 'the dev-server logs could not be read, so a build failure cannot be ruled out',
+            };
+        }
+
+        return { status: 'ok', runtimeErrors, buildErrors };
     }
 
     // ==========================================

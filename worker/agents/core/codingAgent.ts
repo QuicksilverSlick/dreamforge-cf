@@ -99,6 +99,12 @@ import { AppService } from '../../database';
 import { ConversationMessage, ConversationState } from '../inferutils/common';
 import { ImageAttachment } from '../../types/image-attachment';
 import type { AttachedDocument } from '../../types/attachment';
+
+/**
+ * Whether a user turn was actually handled. Drives the Spark refund: the debit
+ * happens before the work, so `'failed'` means the user paid for nothing.
+ */
+export type UserInputOutcome = 'processed' | 'failed';
 import { RateLimitExceededError } from 'shared/types/errors';
 import { ProjectObjective } from './objectives/base';
 import { PhasicCodingBehavior } from './behaviors/phasic';
@@ -976,12 +982,16 @@ export class CodeGeneratorAgent
     /**
      * Handle user input during conversational code generation.
      * Processes user messages and updates pendingUserInputs state.
+     *
+     * Returns whether the turn was actually handled. The caller charges Sparks
+     * BEFORE calling this (the debit is the gate), so a `'failed'` outcome is
+     * what tells it to refund rather than bill for nothing.
      */
     async handleUserInput(
         userMessage: string,
         images?: ImageAttachment[],
         attachedDocuments?: AttachedDocument[],
-    ): Promise<void> {
+    ): Promise<UserInputOutcome> {
         try {
             this.logger().info('Processing user input message', {
                 messageLength: userMessage.length,
@@ -1003,13 +1013,15 @@ export class CodeGeneratorAgent
                     );
                 });
             }
+            return 'processed';
         } catch (error) {
             if (error instanceof RateLimitExceededError) {
                 this.logger().error('Rate limit exceeded:', error);
                 this.broadcast(WebSocketMessageResponses.RATE_LIMIT_ERROR, { error });
-                return;
+                return 'failed';
             }
             this.broadcastError('Error processing user input', error);
+            return 'failed';
         }
     }
 
