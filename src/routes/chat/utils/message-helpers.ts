@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 import { generateId } from '@/utils/id-generator';
-import type { RateLimitError, ConversationMessage } from '@/api-types';
+import type { RateLimitError, ConversationMessage, ImageAttachment, AttachmentRef } from '@/api-types';
 import type { AgentRole } from 'shared/agents/activityDisplay';
 
 export type ToolEvent = {
@@ -41,6 +41,16 @@ export interface ImageConsentCard {
     totalSparks: number;
 }
 
+/**
+ * What traveled with a sent user message. Session-local echo for the feed —
+ * the base64 previews and refs are already in memory at send time and are
+ * never persisted, so the thumbnails/chips vanish on reload by design.
+ */
+export type UserMessageAttachments = {
+    images?: ImageAttachment[];
+    attachments?: AttachmentRef[];
+};
+
 export type ChatMessage = Omit<ConversationMessage, 'content'> & {
     content: string;
     ui?: {
@@ -52,6 +62,10 @@ export type ChatMessage = Omit<ConversationMessage, 'content'> & {
         imageConsent?: ImageConsentCard;
         /** Rolling plain-language narration of a fix cycle (one card per cycle). */
         activityLines?: ActivityLine[];
+        /** Images sent with a user message (session-local, see UserMessageAttachments). */
+        sentImages?: ImageAttachment[];
+        /** Document attachments sent with a user message (session-local). */
+        sentAttachments?: AttachmentRef[];
     };
 };
 
@@ -123,11 +137,17 @@ export function createAIMessage(
 /**
  * Create a user message
  */
-export function createUserMessage(message: string): ChatMessage {
+export function createUserMessage(
+    message: string,
+    sent?: UserMessageAttachments,
+): ChatMessage {
+    const sentImages = sent?.images?.length ? sent.images : undefined;
+    const sentAttachments = sent?.attachments?.length ? sent.attachments : undefined;
     return {
         role: 'user',
         conversationId: generateId(),
         content: message,
+        ...(sentImages || sentAttachments ? { ui: { sentImages, sentAttachments } } : {}),
     };
 }
 

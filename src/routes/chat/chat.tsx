@@ -658,7 +658,7 @@ export default function Chat() {
 					attachments: attachmentRefs.length > 0 ? attachmentRefs : undefined,
 				}),
 			);
-			sendUserMessage(newMessage);
+			sendUserMessage(newMessage, { images, attachments: attachmentRefs });
 			setNewMessage('');
 			// Clear images/attachments after sending
 			if (images.length > 0) {
@@ -885,6 +885,8 @@ export default function Chat() {
 									<UserMessage
 										key={message.conversationId}
 										message={message.content}
+										images={message.ui?.sentImages}
+										attachments={message.ui?.sentAttachments}
 									/>
 								);
 							})}

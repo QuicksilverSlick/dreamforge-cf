@@ -43,7 +43,7 @@ import { logger } from '@/utils/logger';
 import { apiClient } from '@/lib/api-client';
 import { appEvents } from '@/lib/app-events';
 import { createWebSocketMessageHandler, type HandleMessageDeps, type ImageGenerationState } from '../utils/handle-websocket-message';
-import { isConversationalMessage, addOrUpdateMessage, createUserMessage, handleRateLimitError, createAIMessage, type ChatMessage } from '../utils/message-helpers';
+import { isConversationalMessage, addOrUpdateMessage, createUserMessage, handleRateLimitError, createAIMessage, type ChatMessage, type UserMessageAttachments } from '../utils/message-helpers';
 import { sendWebSocketMessage } from '../utils/websocket-helpers';
 import { initialStages as defaultStages, updateStage as updateStageHelper } from '../utils/project-stage-helpers';
 import type { ProjectStage } from '../utils/project-stage-helpers';
@@ -222,8 +222,8 @@ export function useChat({
 		setMessages((prev: ChatMessage[]) => addOrUpdateMessage(prev, message));
 	}, []);
 
-	const sendUserMessage = useCallback((message: string) => {
-		setMessages(prev => [...prev, createUserMessage(message)]);
+	const sendUserMessage = useCallback((message: string, sent?: UserMessageAttachments) => {
+		setMessages(prev => [...prev, createUserMessage(message, sent)]);
 	}, []);
 
 	const loadBootstrapFiles = (files: FileType[]) => {

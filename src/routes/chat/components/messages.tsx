@@ -10,6 +10,9 @@ import { useState } from 'react';
 import type { SuggestionChip, ImageConsentCard } from '../utils/message-helpers';
 import type { ToolEvent, ActivityLine } from '../utils/message-helpers';
 import { getToolDisplay, ROLE_DISPLAY } from 'shared/agents/activityDisplay';
+import { ImageAttachmentPreview } from '@/components/image-attachment-preview';
+import { AttachmentChips } from '@/components/attachment-picker';
+import type { ImageAttachment, AttachmentRef } from '@/api-types';
 
 /**
  * Strip internal system tags that should not be displayed to users
@@ -19,9 +22,18 @@ function sanitizeMessageForDisplay(message: string): string {
 	return message.replace(/<system_context>[\s\S]*?<\/system_context>\n/gi, '').trim();
 }
 
-export function UserMessage({ message }: { message: string }) {
+export function UserMessage({
+	message,
+	images,
+	attachments,
+}: {
+	message: string;
+	/** Session-local echo of what was sent with the message (gone after reload). */
+	images?: ImageAttachment[];
+	attachments?: AttachmentRef[];
+}) {
 	const sanitizedMessage = sanitizeMessageForDisplay(message);
-	
+
 	return (
 		<div className="flex gap-3">
 			<div className="align-text-top pl-1">
@@ -32,6 +44,12 @@ export function UserMessage({ message }: { message: string }) {
 			<div className="flex flex-col gap-2 min-w-0">
 				<div className="font-medium text-text-50">You</div>
 				<Markdown className="text-text-primary/80">{sanitizedMessage}</Markdown>
+				{images && images.length > 0 && (
+					<ImageAttachmentPreview images={images} compact />
+				)}
+				{attachments && attachments.length > 0 && (
+					<AttachmentChips attachments={attachments} />
+				)}
 			</div>
 		</div>
 	);

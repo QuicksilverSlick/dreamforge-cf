@@ -68,14 +68,17 @@ export function UnifiedAttachButton({
 	);
 }
 
-/** Removable chips for the currently-attached files. */
+/**
+ * Chips for attached files. With `onRemove` they are removable (composer);
+ * without it they render read-only (e.g. the sent-message echo in chat).
+ */
 export function AttachmentChips({
 	attachments,
 	onRemove,
 	className,
 }: {
-	attachments: ProcessedAttachment[];
-	onRemove: (id: string) => void;
+	attachments: Array<Pick<ProcessedAttachment, 'id' | 'filename' | 'extractedKey'>>;
+	onRemove?: (id: string) => void;
 	className?: string;
 }) {
 	if (attachments.length === 0) return null;
@@ -93,14 +96,16 @@ export function AttachmentChips({
 							(no text)
 						</span>
 					)}
-					<button
-						type="button"
-						onClick={() => onRemove(a.id)}
-						aria-label={`Remove ${a.filename}`}
-						className="shrink-0 text-text-tertiary hover:text-text-primary"
-					>
-						<X className="size-3.5" />
-					</button>
+					{onRemove && (
+						<button
+							type="button"
+							onClick={() => onRemove(a.id)}
+							aria-label={`Remove ${a.filename}`}
+							className="shrink-0 text-text-tertiary hover:text-text-primary"
+						>
+							<X className="size-3.5" />
+						</button>
+					)}
 				</span>
 			))}
 		</div>
